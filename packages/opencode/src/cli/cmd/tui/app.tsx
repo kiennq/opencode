@@ -570,6 +570,27 @@ function App() {
         dialog.clear()
       },
     },
+    {
+      title: "Reload configuration",
+      value: "app.reload",
+      keybind: "app_reload",
+      slash: {
+        name: "reload",
+      },
+      onSelect: (dialog) => {
+        sdk.client.config
+          .reload()
+          .then(() =>
+            toast.show({
+              variant: "info",
+              message: "Configuration reloaded",
+            }),
+          )
+          .catch(() => toast.error("Failed to reload configuration"))
+        dialog.clear()
+      },
+      category: "System",
+    },
   ])
 
   createEffect(() => {

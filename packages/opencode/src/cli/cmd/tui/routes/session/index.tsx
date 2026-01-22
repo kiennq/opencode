@@ -28,6 +28,7 @@ import {
 } from "@opentui/core"
 import { Prompt, type PromptRef } from "@tui/component/prompt"
 import type { AssistantMessage, Part, ToolPart, UserMessage, TextPart, ReasoningPart } from "@opencode-ai/sdk/v2"
+import { MessageV2 } from "@/session/message-v2"
 import { useLocal } from "@tui/context/local"
 import { Locale } from "@/util/locale"
 import type { Tool } from "@/tool/tool"
@@ -1304,7 +1305,12 @@ function AssistantMessage(props: { message: AssistantMessage; parts: Part[]; las
                 <span style={{ fg: theme.textMuted }}> · {Locale.duration(duration())}</span>
               </Show>
               <Show when={props.message.error?.name === "MessageAbortedError"}>
-                <span style={{ fg: theme.textMuted }}> · interrupted</span>
+                <span style={{ fg: theme.textMuted }}>
+                  {" · interrupted"}
+                  {MessageV2.AbortedError.isInstance(props.message.error) &&
+                    props.message.error.data.reason === MessageV2.ABORT_REASON.CONFIG_RELOAD &&
+                    " (config reload)"}
+                </span>
               </Show>
             </text>
           </box>

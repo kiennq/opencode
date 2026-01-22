@@ -10,6 +10,10 @@ import { GlobalBus } from "@/bus/global"
 import { createOpencodeClient, type Event } from "@opencode-ai/sdk/v2"
 import type { BunWebSocketData } from "hono/bun"
 import { Flag } from "@/flag/flag"
+import { SessionPrompt } from "@/session/prompt"
+import { SessionStatus } from "@/session/status"
+import { Session } from "@/session"
+import { MessageV2 } from "@/session/message-v2"
 
 await Log.init({
   print: process.argv.includes("--print-logs"),
@@ -131,8 +135,17 @@ export const rpc = {
     })
   },
   async reload() {
+    for (const [sessionID, info] of Object.entries(SessionStatus.list())) {
+      if (info.type !== "idle") {
+        SessionPrompt.cancel(sessionID, MessageV2.ABORT_REASON.CONFIG_RELOAD)
+      }
+    }
+    // Wait for all aborted loops to finish saving their messages
+    await SessionPrompt.flush()
     Config.global.reset()
     await Instance.disposeAll()
+    // Drain incomplete messages AFTER dispose to catch any that arrived during reload
+    await Session.drainIncomplete(MessageV2.ABORT_REASON.CONFIG_RELOAD)
   },
   async shutdown() {
     Log.Default.info("worker shutting down")

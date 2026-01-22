@@ -612,6 +612,18 @@ export class Config extends HeyApiClient {
       ...params,
     })
   }
+
+  /**
+   * Reload configuration
+   *
+   * Reload all configuration files (opencode.jsonc, .opencode/) and restart all instances without restarting the TUI.
+   */
+  public reload<ThrowOnError extends boolean = false>(options?: Options<never, ThrowOnError>) {
+    return (options?.client ?? this.client).post<{ success: boolean }, unknown, ThrowOnError>({
+      url: "/config/reload",
+      ...options,
+    })
+  }
 }
 
 export class Tool extends HeyApiClient {

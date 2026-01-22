@@ -379,7 +379,7 @@ export const SessionRoutes = lazy(() =>
         }),
       ),
       async (c) => {
-        SessionPrompt.cancel(c.req.valid("param").sessionID)
+        SessionPrompt.cancel(c.req.valid("param").sessionID, MessageV2.ABORT_REASON.USER_INTERRUPT)
         return c.json(true)
       },
     )

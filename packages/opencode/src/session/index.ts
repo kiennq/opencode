@@ -478,6 +478,28 @@ export namespace Session {
     }
   }
 
+  /**
+   * Drains any incomplete assistant messages by setting time.completed and an error.
+   * Called during config reload to ensure messages sent after reload don't appear as
+   * "QUEUED" in the TUI (the pending memo finds old assistant messages with time.completed undefined).
+   */
+  export async function drainIncomplete(reason: MessageV2.AbortReason) {
+    for await (const session of list()) {
+      for await (const msg of MessageV2.stream(session.id)) {
+        if (msg.info.role !== "assistant") continue
+        if (msg.info.time.completed) continue
+        const info = msg.info as MessageV2.Assistant
+        info.time.completed = Date.now()
+        info.error = new MessageV2.AbortedError({
+          message: "The operation was aborted",
+          reason,
+        }).toObject()
+        await updateMessage(info)
+        log.info("drained incomplete message", { sessionID: session.id, messageID: info.id, reason })
+      }
+    }
+  }
+
   export const initialize = fn(
     z.object({
       sessionID: Identifier.schema("session"),

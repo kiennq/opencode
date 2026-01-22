@@ -341,7 +341,7 @@ export namespace SessionProcessor {
               error: e,
               stack: JSON.stringify(e.stack),
             })
-            const error = MessageV2.fromError(e, { providerID: input.model.providerID })
+            const error = MessageV2.fromError(e, { providerID: input.model.providerID, abortSignal: input.abort })
             const retry = SessionRetry.retryable(error)
             if (retry !== undefined) {
               attempt++

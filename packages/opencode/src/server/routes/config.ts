@@ -3,10 +3,15 @@ import { describeRoute, validator, resolver } from "hono-openapi"
 import z from "zod"
 import { Config } from "../../config/config"
 import { Provider } from "../../provider/provider"
+import { Instance } from "../../project/instance"
 import { mapValues } from "remeda"
 import { errors } from "../error"
 import { Log } from "../../util/log"
 import { lazy } from "../../util/lazy"
+import { SessionPrompt } from "../../session/prompt"
+import { SessionStatus } from "../../session/status"
+import { Session } from "../../session"
+import { MessageV2 } from "../../session/message-v2"
 
 const log = Log.create({ service: "server" })
 
@@ -87,6 +92,43 @@ export const ConfigRoutes = lazy(() =>
           providers: Object.values(providers),
           default: mapValues(providers, (item) => Provider.sort(Object.values(item.models))[0].id),
         })
+      },
+    )
+    .post(
+      "/reload",
+      describeRoute({
+        summary: "Reload configuration",
+        description:
+          "Reload all configuration files (opencode.jsonc, .opencode/) and plugins, and restart all instances without restarting the TUI.",
+        operationId: "config.reload",
+        responses: {
+          200: {
+            description: "Configuration reloaded successfully",
+            content: {
+              "application/json": {
+                schema: resolver(z.object({ success: z.boolean() })),
+              },
+            },
+          },
+        },
+      }),
+      async (c) => {
+        log.info("reloading configuration")
+        // Cancel active sessions first to abort any in-flight streams
+        for (const [sessionID, info] of Object.entries(SessionStatus.list())) {
+          if (info.type !== "idle") {
+            SessionPrompt.cancel(sessionID, MessageV2.ABORT_REASON.CONFIG_RELOAD)
+          }
+        }
+        // Wait for all aborted loops to finish saving their messages
+        await SessionPrompt.flush()
+        Config.global.reset()
+        await Instance.disposeAll()
+        // Drain incomplete messages AFTER dispose to catch any that arrived during reload.
+        // Without this, messages sent during reload appear as "QUEUED" in the TUI
+        // because the pending memo finds an old assistant message with time.completed undefined.
+        await Session.drainIncomplete(MessageV2.ABORT_REASON.CONFIG_RELOAD)
+        return c.json({ success: true })
       },
     ),
 )

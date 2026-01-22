@@ -486,6 +486,39 @@ export function Prompt(props: PromptProps) {
     },
   ])
 
+  function handleReloadCommand() {
+    sdk.client.config
+      .reload()
+      .then(() => toast.show({ variant: "info", message: "Configuration reloaded" }))
+      .catch(() => toast.error("Failed to reload configuration"))
+  }
+
+  function handleSessionCommand(
+    commandName: string,
+    args: string,
+    sessionID: string,
+    selectedModel: { providerID: string; modelID: string },
+    messageID: string,
+    variant: string | undefined,
+    nonTextParts: typeof store.prompt.parts,
+  ) {
+    sdk.client.session.command({
+      sessionID,
+      command: commandName,
+      arguments: args,
+      agent: local.agent.current().name,
+      model: `${selectedModel.providerID}/${selectedModel.modelID}`,
+      messageID,
+      variant,
+      parts: nonTextParts
+        .filter((x) => x.type === "file")
+        .map((x) => ({
+          id: Identifier.ascending("part"),
+          ...x,
+        })),
+    })
+  }
+
   async function submit() {
     if (props.disabled) return
     if (autocomplete?.visible) return
@@ -557,22 +590,13 @@ export function Prompt(props: PromptProps) {
       const [command, ...firstLineArgs] = firstLine.split(" ")
       const restOfInput = firstLineEnd === -1 ? "" : inputText.slice(firstLineEnd + 1)
       const args = firstLineArgs.join(" ") + (restOfInput ? "\n" + restOfInput : "")
+      const commandName = command.slice(1)
 
-      sdk.client.session.command({
-        sessionID,
-        command: command.slice(1),
-        arguments: args,
-        agent: local.agent.current().name,
-        model: `${selectedModel.providerID}/${selectedModel.modelID}`,
-        messageID,
-        variant,
-        parts: nonTextParts
-          .filter((x) => x.type === "file")
-          .map((x) => ({
-            id: Identifier.ascending("part"),
-            ...x,
-          })),
-      })
+      if (commandName === "reload") {
+        handleReloadCommand()
+      } else {
+        handleSessionCommand(commandName, args, sessionID, selectedModel, messageID, variant, nonTextParts)
+      }
     } else {
       sdk.client.session
         .prompt({
