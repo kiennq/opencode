@@ -2,6 +2,7 @@ import { Bus } from "@/bus"
 import { Config } from "@/config/config"
 import { ulid } from "ulid"
 import { Provider } from "@/provider/provider"
+import { Instance } from "@/project/instance"
 import { Session } from "@/session"
 import { MessageV2 } from "@/session/message-v2"
 import { Storage } from "@/storage/storage"
@@ -17,52 +18,83 @@ export namespace ShareNext {
 
   const disabled = process.env["OPENCODE_DISABLE_SHARE"] === "true" || process.env["OPENCODE_DISABLE_SHARE"] === "1"
 
-  export async function init() {
-    if (disabled) return
-    Bus.subscribe(Session.Event.Updated, async (evt) => {
-      await sync(evt.properties.info.id, [
-        {
-          type: "session",
-          data: evt.properties.info,
-        },
-      ])
-    })
-    Bus.subscribe(MessageV2.Event.Updated, async (evt) => {
-      await sync(evt.properties.info.sessionID, [
-        {
-          type: "message",
-          data: evt.properties.info,
-        },
-      ])
-      if (evt.properties.info.role === "user") {
-        await sync(evt.properties.info.sessionID, [
-          {
-            type: "model",
-            data: [
-              await Provider.getModel(evt.properties.info.model.providerID, evt.properties.info.model.modelID).then(
-                (m) => m,
-              ),
-            ],
-          },
-        ])
+  const state = Instance.state(
+    async () => {
+      if (disabled)
+        return { unsubs: [], queue: new Map<string, { timeout: NodeJS.Timeout; data: Map<string, Data> }>() }
+
+      const unsubs: Array<() => void> = []
+      const queue = new Map<string, { timeout: NodeJS.Timeout; data: Map<string, Data> }>()
+
+      unsubs.push(
+        Bus.subscribe(Session.Event.Updated, async (evt) => {
+          await sync(queue, evt.properties.info.id, [
+            {
+              type: "session",
+              data: evt.properties.info,
+            },
+          ])
+        }),
+      )
+      unsubs.push(
+        Bus.subscribe(MessageV2.Event.Updated, async (evt) => {
+          await sync(queue, evt.properties.info.sessionID, [
+            {
+              type: "message",
+              data: evt.properties.info,
+            },
+          ])
+          if (evt.properties.info.role === "user") {
+            await sync(queue, evt.properties.info.sessionID, [
+              {
+                type: "model",
+                data: [
+                  await Provider.getModel(evt.properties.info.model.providerID, evt.properties.info.model.modelID).then(
+                    (m) => m,
+                  ),
+                ],
+              },
+            ])
+          }
+        }),
+      )
+      unsubs.push(
+        Bus.subscribe(MessageV2.Event.PartUpdated, async (evt) => {
+          await sync(queue, evt.properties.part.sessionID, [
+            {
+              type: "part",
+              data: evt.properties.part,
+            },
+          ])
+        }),
+      )
+      unsubs.push(
+        Bus.subscribe(Session.Event.Diff, async (evt) => {
+          await sync(queue, evt.properties.sessionID, [
+            {
+              type: "session_diff",
+              data: evt.properties.diff,
+            },
+          ])
+        }),
+      )
+
+      return { unsubs, queue }
+    },
+    async (s) => {
+      for (const unsub of s.unsubs) {
+        unsub()
       }
-    })
-    Bus.subscribe(MessageV2.Event.PartUpdated, async (evt) => {
-      await sync(evt.properties.part.sessionID, [
-        {
-          type: "part",
-          data: evt.properties.part,
-        },
-      ])
-    })
-    Bus.subscribe(Session.Event.Diff, async (evt) => {
-      await sync(evt.properties.sessionID, [
-        {
-          type: "session_diff",
-          data: evt.properties.diff,
-        },
-      ])
-    })
+      // Clear any pending timeouts
+      for (const entry of s.queue.values()) {
+        clearTimeout(entry.timeout)
+      }
+      s.queue.clear()
+    },
+  )
+
+  export async function init() {
+    state()
   }
 
   export async function create(sessionID: string) {
@@ -113,9 +145,13 @@ export namespace ShareNext {
       }
 
   const queue = new Map<string, { timeout: NodeJS.Timeout; data: Map<string, Data> }>()
-  async function sync(sessionID: string, data: Data[]) {
+  async function sync(
+    syncQueue: Map<string, { timeout: NodeJS.Timeout; data: Map<string, Data> }>,
+    sessionID: string,
+    data: Data[],
+  ) {
     if (disabled) return
-    const existing = queue.get(sessionID)
+    const existing = syncQueue.get(sessionID)
     if (existing) {
       for (const item of data) {
         existing.data.set("id" in item ? (item.id as string) : ulid(), item)
@@ -129,9 +165,9 @@ export namespace ShareNext {
     }
 
     const timeout = setTimeout(async () => {
-      const queued = queue.get(sessionID)
+      const queued = syncQueue.get(sessionID)
       if (!queued) return
-      queue.delete(sessionID)
+      syncQueue.delete(sessionID)
       const share = await get(sessionID).catch(() => undefined)
       if (!share) return
 
@@ -146,7 +182,7 @@ export namespace ShareNext {
         }),
       })
     }, 1000)
-    queue.set(sessionID, { timeout, data: dataMap })
+    syncQueue.set(sessionID, { timeout, data: dataMap })
   }
 
   export async function remove(sessionID: string) {
@@ -168,6 +204,7 @@ export namespace ShareNext {
 
   async function fullSync(sessionID: string) {
     log.info("full sync", { sessionID })
+    const s = await state()
     const session = await Session.get(sessionID)
     const diffs = await Session.diff(sessionID)
     const messages = await Array.fromAsync(MessageV2.stream(sessionID))
@@ -177,7 +214,7 @@ export namespace ShareNext {
         .map((m) => (m.info as SDK.UserMessage).model)
         .map((m) => Provider.getModel(m.providerID, m.modelID).then((m) => m)),
     )
-    await sync(sessionID, [
+    await sync(s.queue, sessionID, [
       {
         type: "session",
         data: session,
