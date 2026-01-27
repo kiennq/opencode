@@ -135,14 +135,15 @@ export namespace Snapshot {
       for (const file of item.files) {
         if (files.has(file)) continue
         log.info("reverting", { file, hash: item.hash })
-        const result = await $`git --git-dir ${git} --work-tree ${Instance.worktree} checkout ${item.hash} -- ${file}`
-          .quiet()
-          .cwd(Instance.worktree)
-          .nothrow()
+        const result =
+          await $`git -c core.quotepath=false --git-dir ${git} --work-tree ${Instance.worktree} checkout ${item.hash} -- ${file}`
+            .quiet()
+            .cwd(Instance.worktree)
+            .nothrow()
         if (result.exitCode !== 0) {
           const relativePath = path.relative(Instance.worktree, file)
           const checkTree =
-            await $`git --git-dir ${git} --work-tree ${Instance.worktree} ls-tree ${item.hash} -- ${relativePath}`
+            await $`git -c core.quotepath=false --git-dir ${git} --work-tree ${Instance.worktree} ls-tree ${item.hash} -- ${relativePath}`
               .quiet()
               .cwd(Instance.worktree)
               .nothrow()
