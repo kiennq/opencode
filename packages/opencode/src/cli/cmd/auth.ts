@@ -241,7 +241,7 @@ export const AuthLoginCommand = cmd({
             prompts.outro("Done")
             return
           }
-          const token = await new Response(proc.stdout).text()
+          const token = await Bun.readableStreamToText(proc.stdout)
           await Auth.set(args.url, {
             type: "wellknown",
             key: wellknown.auth.env,
