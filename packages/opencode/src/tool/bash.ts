@@ -249,10 +249,6 @@ export const BashTool = Tool.define("bash", async () => {
         })
       })
 
-      let output = Buffer.concat(outputChunks).toString("utf-8")
-      outputChunks.length = 0
-      outputSize = 0
-
       const resultMetadata: string[] = []
 
       if (timedOut) {
@@ -263,6 +259,9 @@ export const BashTool = Tool.define("bash", async () => {
         resultMetadata.push("User aborted the command")
       }
 
+      let output = Buffer.concat(outputChunks).toString("utf-8")
+      outputChunks.length = 0
+      outputSize = 0
       if (resultMetadata.length > 0) {
         output += "\n\n<bash_metadata>\n" + resultMetadata.join("\n") + "\n</bash_metadata>"
       }
