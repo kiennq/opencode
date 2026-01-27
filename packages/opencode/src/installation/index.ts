@@ -1,4 +1,4 @@
-import { BusEvent } from "@/bus/bus-event"
+﻿import { BusEvent } from "@/bus/bus-event"
 import path from "path"
 import { $ } from "bun"
 import z from "zod"
@@ -162,7 +162,7 @@ export namespace Installation {
         cmd = $`echo Y | choco upgrade opencode --version=${target}`
         break
       case "scoop":
-        cmd = $`scoop install kiennq/scoop-misc/opencode-x@${target}`
+        cmd = $`scoop install opencode-x@${target}`
         break
       default:
         throw new Error(`Unknown method: ${method}`)
