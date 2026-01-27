@@ -1,5 +1,5 @@
 import { Tooltip as KobalteTooltip } from "@kobalte/core/tooltip"
-import { children, createSignal, Match, onMount, splitProps, Switch, type JSX } from "solid-js"
+import { children, createSignal, Match, onCleanup, onMount, splitProps, Switch, type JSX } from "solid-js"
 import type { ComponentProps } from "solid-js"
 
 export interface TooltipProps extends ComponentProps<typeof KobalteTooltip> {
@@ -46,17 +46,34 @@ export function Tooltip(props: TooltipProps) {
 
   onMount(() => {
     const childElements = c()
+    const cleanupFns: (() => void)[] = []
+
+    const addListeners = (el: HTMLElement) => {
+      const focusHandler = () => setOpen(true)
+      const blurHandler = () => setOpen(false)
+      el.addEventListener("focusin", focusHandler)
+      el.addEventListener("focusout", blurHandler)
+      cleanupFns.push(() => {
+        el.removeEventListener("focusin", focusHandler)
+        el.removeEventListener("focusout", blurHandler)
+      })
+    }
+
     if (childElements instanceof HTMLElement) {
-      childElements.addEventListener("focusin", () => setOpen(true))
-      childElements.addEventListener("focusout", () => setOpen(false))
+      addListeners(childElements)
     } else if (Array.isArray(childElements)) {
       for (const child of childElements) {
         if (child instanceof HTMLElement) {
-          child.addEventListener("focusin", () => setOpen(true))
-          child.addEventListener("focusout", () => setOpen(false))
+          addListeners(child)
         }
       }
     }
+
+    onCleanup(() => {
+      for (const cleanup of cleanupFns) {
+        cleanup()
+      }
+    })
   })
 
   return (
