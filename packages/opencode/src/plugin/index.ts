@@ -20,80 +20,89 @@ export namespace Plugin {
   // Built-in plugins that are directly imported (not installed from npm)
   const INTERNAL_PLUGINS: PluginInstance[] = [CodexAuthPlugin, CopilotAuthPlugin]
 
-  const state = Instance.state(async () => {
-    const client = createOpencodeClient({
-      baseUrl: "http://localhost:4096",
-      // @ts-ignore - fetch type incompatibility
-      fetch: async (...args) => Server.App().fetch(...args),
-    })
-    const config = await Config.get()
-    const hooks: Hooks[] = []
-    const input: PluginInput = {
-      client,
-      project: Instance.project,
-      worktree: Instance.worktree,
-      directory: Instance.directory,
-      serverUrl: Server.url(),
-      $: Bun.$,
-    }
-
-    for (const plugin of INTERNAL_PLUGINS) {
-      log.info("loading internal plugin", { name: plugin.name })
-      const init = await plugin(input)
-      hooks.push(init)
-    }
-
-    const plugins = [...(config.plugin ?? [])]
-    if (!Flag.OPENCODE_DISABLE_DEFAULT_PLUGINS) {
-      plugins.push(...BUILTIN)
-    }
-
-    for (let plugin of plugins) {
-      // ignore old codex plugin since it is supported first party now
-      if (plugin.includes("opencode-openai-codex-auth") || plugin.includes("opencode-copilot-auth")) continue
-      log.info("loading plugin", { path: plugin })
-      if (!plugin.startsWith("file://")) {
-        const lastAtIndex = plugin.lastIndexOf("@")
-        const pkg = lastAtIndex > 0 ? plugin.substring(0, lastAtIndex) : plugin
-        const version = lastAtIndex > 0 ? plugin.substring(lastAtIndex + 1) : "latest"
-        const builtin = BUILTIN.some((x) => x.startsWith(pkg + "@"))
-        plugin = await BunProc.install(pkg, version).catch((err) => {
-          if (!builtin) throw err
-
-          const message = err instanceof Error ? err.message : String(err)
-          log.error("failed to install builtin plugin", {
-            pkg,
-            version,
-            error: message,
-          })
-          Bus.publish(Session.Event.Error, {
-            error: new NamedError.Unknown({
-              message: `Failed to install built-in plugin ${pkg}@${version}: ${message}`,
-            }).toObject(),
-          })
-
-          return ""
-        })
-        if (!plugin) continue
+  const state = Instance.state(
+    async () => {
+      const client = createOpencodeClient({
+        baseUrl: "http://localhost:4096",
+        // @ts-ignore - fetch type incompatibility
+        fetch: async (...args) => Server.App().fetch(...args),
+      })
+      const config = await Config.get()
+      const hooks: Hooks[] = []
+      const input: PluginInput = {
+        client,
+        project: Instance.project,
+        worktree: Instance.worktree,
+        directory: Instance.directory,
+        serverUrl: Server.url(),
+        $: Bun.$,
       }
-      const mod = await import(plugin)
-      // Prevent duplicate initialization when plugins export the same function
-      // as both a named export and default export (e.g., `export const X` and `export default X`).
-      // Object.entries(mod) would return both entries pointing to the same function reference.
-      const seen = new Set<PluginInstance>()
-      for (const [_name, fn] of Object.entries<PluginInstance>(mod)) {
-        if (seen.has(fn)) continue
-        seen.add(fn)
-        const init = await fn(input)
+
+      for (const plugin of INTERNAL_PLUGINS) {
+        log.info("loading internal plugin", { name: plugin.name })
+        const init = await plugin(input)
         hooks.push(init)
       }
-    }
 
-    return {
-      hooks,
-      input,
-    }
-  })
+      const plugins = [...(config.plugin ?? [])]
+      if (!Flag.OPENCODE_DISABLE_DEFAULT_PLUGINS) {
+        plugins.push(...BUILTIN)
+      }
+
+      for (let plugin of plugins) {
+        // ignore old codex plugin since it is supported first party now
+        if (plugin.includes("opencode-openai-codex-auth") || plugin.includes("opencode-copilot-auth")) continue
+        log.info("loading plugin", { path: plugin })
+        if (!plugin.startsWith("file://")) {
+          const lastAtIndex = plugin.lastIndexOf("@")
+          const pkg = lastAtIndex > 0 ? plugin.substring(0, lastAtIndex) : plugin
+          const version = lastAtIndex > 0 ? plugin.substring(lastAtIndex + 1) : "latest"
+          const builtin = BUILTIN.some((x) => x.startsWith(pkg + "@"))
+          plugin = await BunProc.install(pkg, version).catch((err) => {
+            if (!builtin) throw err
+
+            const message = err instanceof Error ? err.message : String(err)
+            log.error("failed to install builtin plugin", {
+              pkg,
+              version,
+              error: message,
+            })
+            Bus.publish(Session.Event.Error, {
+              error: new NamedError.Unknown({
+                message: `Failed to install built-in plugin ${pkg}@${version}: ${message}`,
+              }).toObject(),
+            })
+
+            return ""
+          })
+          if (!plugin) continue
+        }
+        const mod = await import(plugin)
+        // Prevent duplicate initialization when plugins export the same function
+        // as both a named export and default export (e.g., `export const X` and `export default X`).
+        // Object.entries(mod) would return both entries pointing to the same function reference.
+        const seen = new Set<PluginInstance>()
+        for (const [_name, fn] of Object.entries<PluginInstance>(mod)) {
+          if (seen.has(fn)) continue
+          seen.add(fn)
+          const init = await fn(input)
+          hooks.push(init)
+        }
+      }
+
+      return {
+        hooks,
+        input,
+        unsubscribe: undefined as (() => void) | undefined,
+      }
+    },
+    async (state) => {
+      state.unsubscribe?.()
+      for (const hook of state.hooks) {
+        await hook.dispose?.()
+      }
+    },
+  )
 
   export async function trigger<
     Name extends Exclude<keyof Required<Hooks>, "auth" | "event" | "tool">,
@@ -117,19 +126,23 @@ export namespace Plugin {
   }
 
   export async function init() {
-    const hooks = await state().then((x) => x.hooks)
+    const s = await state()
     const config = await Config.get()
-    for (const hook of hooks) {
+    for (const hook of s.hooks) {
       // @ts-expect-error this is because we haven't moved plugin to sdk v2
       await hook.config?.(config)
     }
-    Bus.subscribeAll(async (input) => {
-      const hooks = await state().then((x) => x.hooks)
-      for (const hook of hooks) {
-        hook["event"]?.({
-          event: input,
-        })
-      }
-    })
+    // Only subscribe if any hooks have an event handler
+    const hasEventHandlers = s.hooks.some((hook) => hook["event"])
+    if (hasEventHandlers) {
+      s.unsubscribe = Bus.subscribeAll(async (input) => {
+        const hooks = await state().then((x) => x.hooks)
+        for (const hook of hooks) {
+          hook["event"]?.({
+            event: input,
+          })
+        }
+      })
+    }
   }
 }
