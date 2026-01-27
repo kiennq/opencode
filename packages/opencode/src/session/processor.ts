@@ -18,6 +18,9 @@ import { Question } from "@/question"
 
 export namespace SessionProcessor {
   const DOOM_LOOP_THRESHOLD = 3
+  // Trigger GC periodically during streaming to mitigate Bun memory issues
+  // See: https://github.com/oven-sh/bun/issues/15020
+  const GC_INTERVAL = 100
   const log = Log.create({ service: "session.processor" })
 
   export type Info = Awaited<ReturnType<typeof create>>
@@ -34,6 +37,15 @@ export namespace SessionProcessor {
     let blocked = false
     let attempt = 0
     let needsCompaction = false
+    let writeCount = 0
+
+    // Helper to trigger periodic GC during streaming
+    const maybeGC = () => {
+      writeCount++
+      if (writeCount % GC_INTERVAL === 0 && global.gc) {
+        global.gc(true) // Force synchronous GC
+      }
+    }
 
     const result = {
       get message() {
@@ -81,7 +93,10 @@ export namespace SessionProcessor {
                     const part = reasoningMap[value.id]
                     part.text += value.text
                     if (value.providerMetadata) part.metadata = value.providerMetadata
-                    if (part.text) await Session.updatePart({ part, delta: value.text })
+                    if (part.text) {
+                      await Session.updatePart({ part, delta: value.text })
+                      maybeGC()
+                    }
                   }
                   break
 
@@ -97,6 +112,8 @@ export namespace SessionProcessor {
                     if (value.providerMetadata) part.metadata = value.providerMetadata
                     await Session.updatePart(part)
                     delete reasoningMap[value.id]
+                    // Force GC after large reasoning blocks to reclaim memory
+                    if (global.gc) global.gc(true)
                   }
                   break
 
@@ -143,6 +160,8 @@ export namespace SessionProcessor {
                     const parts = await MessageV2.parts(input.assistantMessage.id)
                     const lastThree = parts.slice(-DOOM_LOOP_THRESHOLD)
 
+                    // Cache JSON.stringify result to avoid repeated serialization in loop
+                    const inputJson = JSON.stringify(value.input)
                     if (
                       lastThree.length === DOOM_LOOP_THRESHOLD &&
                       lastThree.every(
@@ -150,7 +169,7 @@ export namespace SessionProcessor {
                           p.type === "tool" &&
                           p.tool === value.toolName &&
                           p.state.status !== "pending" &&
-                          JSON.stringify(p.state.input) === JSON.stringify(value.input),
+                          JSON.stringify(p.state.input) === inputJson,
                       )
                     ) {
                       const agent = await Agent.get(input.assistantMessage.agent)
@@ -239,9 +258,27 @@ export namespace SessionProcessor {
                     usage: value.usage,
                     metadata: value.providerMetadata,
                   })
+                  const prev = input.assistantMessage.tokens ?? {
+                    input: 0,
+                    output: 0,
+                    reasoning: 0,
+                    cache: {
+                      read: 0,
+                      write: 0,
+                    },
+                  }
+                  const tokens = {
+                    input: prev.input + usage.tokens.input,
+                    output: prev.output + usage.tokens.output,
+                    reasoning: prev.reasoning + usage.tokens.reasoning,
+                    cache: {
+                      read: prev.cache.read + usage.tokens.cache.read,
+                      write: prev.cache.write + usage.tokens.cache.write,
+                    },
+                  }
                   input.assistantMessage.finish = value.finishReason
                   input.assistantMessage.cost += usage.cost
-                  input.assistantMessage.tokens = usage.tokens
+                  input.assistantMessage.tokens = tokens
                   await Session.updatePart({
                     id: Identifier.ascending("part"),
                     reason: value.finishReason,
@@ -271,7 +308,7 @@ export namespace SessionProcessor {
                     sessionID: input.sessionID,
                     messageID: input.assistantMessage.parentID,
                   })
-                  if (await SessionCompaction.isOverflow({ tokens: usage.tokens, model: input.model })) {
+                  if (await SessionCompaction.isOverflow({ tokens, model: input.model })) {
                     needsCompaction = true
                   }
                   break
@@ -294,11 +331,13 @@ export namespace SessionProcessor {
                   if (currentText) {
                     currentText.text += value.text
                     if (value.providerMetadata) currentText.metadata = value.providerMetadata
-                    if (currentText.text)
+                    if (currentText.text) {
                       await Session.updatePart({
                         part: currentText,
                         delta: value.text,
                       })
+                      maybeGC()
+                    }
                   }
                   break
 
@@ -361,6 +400,7 @@ export namespace SessionProcessor {
               error: input.assistantMessage.error,
             })
           }
+          for (const id in toolcalls) delete toolcalls[id]
           if (snapshot) {
             const patch = await Snapshot.patch(snapshot)
             if (patch.files.length) {
@@ -394,6 +434,8 @@ export namespace SessionProcessor {
           }
           input.assistantMessage.time.completed = Date.now()
           await Session.updateMessage(input.assistantMessage)
+          // Force GC after processing to reclaim memory from streaming
+          if (global.gc) global.gc(true)
           if (needsCompaction) return "compact"
           if (blocked) return "stop"
           if (input.assistantMessage.error) return "stop"
