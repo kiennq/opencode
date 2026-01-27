@@ -32,4 +32,6 @@ export async function InstanceBootstrap() {
       await Project.setInitialized(Instance.project.id)
     }
   })
+
+  Command.initMCPCommands()
 }
