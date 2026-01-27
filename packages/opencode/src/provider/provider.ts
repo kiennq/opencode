@@ -14,6 +14,7 @@ import { Env } from "../env"
 import { Instance } from "../project/instance"
 import { Flag } from "../flag/flag"
 import { iife } from "@/util/iife"
+import { createLruCache } from "@/util/cache"
 
 // Direct imports for bundled providers
 import { createAmazonBedrock, type AmazonBedrockProviderSettings } from "@ai-sdk/amazon-bedrock"
@@ -36,7 +37,18 @@ import { createGateway } from "@ai-sdk/gateway"
 import { createTogetherAI } from "@ai-sdk/togetherai"
 import { createPerplexity } from "@ai-sdk/perplexity"
 import { createVercel } from "@ai-sdk/vercel"
-import { createGitLab, VERSION as GITLAB_PROVIDER_VERSION } from "@gitlab/gitlab-ai-provider"
+import { createGitLab } from "@gitlab/gitlab-ai-provider"
+
+// VERSION export may not be available in all gitlab-ai-provider versions
+// Try to get it from package, fallback to "unknown"
+const GITLAB_PROVIDER_VERSION = (() => {
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    return require("@gitlab/gitlab-ai-provider/package.json").version ?? "unknown"
+  } catch {
+    return "unknown"
+  }
+})()
 import { ProviderTransform } from "./transform"
 import { Installation } from "../installation"
 
@@ -443,7 +455,7 @@ export namespace Provider {
             ...(providerConfig?.options?.featureFlags || {}),
           },
         },
-        async getModel(sdk: ReturnType<typeof createGitLab>, modelID: string) {
+        async getModel(sdk: any, modelID: string) {
           return sdk.agenticChat(modelID, {
             aiGatewayHeaders,
             featureFlags: {
@@ -701,11 +713,12 @@ export namespace Provider {
     }
 
     const providers: { [providerID: string]: Info } = {}
-    const languages = new Map<string, LanguageModelV2>()
+    const languages = createLruCache<string, LanguageModelV2>({
+      maxEntries: 100,
+    })
     const modelLoaders: {
       [providerID: string]: CustomModelLoader
     } = {}
-    const sdk = new Map<number, SDK>()
 
     log.info("init")
 
@@ -960,7 +973,15 @@ export namespace Provider {
     return {
       models: languages,
       providers,
-      sdk,
+      sdk: createLruCache({
+        maxEntries: 50,
+        onEvict: (key, sdk) => {
+          // SDK may have cleanup methods
+          if (sdk && typeof sdk === "object" && "destroy" in sdk) {
+            sdk.destroy?.()
+          }
+        },
+      }),
       modelLoaders,
     }
   })
@@ -1049,7 +1070,7 @@ export namespace Provider {
 
       let installedPath: string
       if (!model.api.npm.startsWith("file://")) {
-        installedPath = await BunProc.install(model.api.npm, "latest")
+        installedPath = await BunProc.install(model.api.npm, "latest", model.providerID)
       } else {
         log.info("loading local provider", { pkg: model.api.npm })
         installedPath = model.api.npm
