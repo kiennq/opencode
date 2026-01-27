@@ -132,9 +132,7 @@ export namespace LSPClient {
       })
     }
 
-    const files: {
-      [path: string]: number
-    } = {}
+    const files = new Map<string, number>()
 
     const result = {
       root: input.root,
@@ -152,7 +150,7 @@ export namespace LSPClient {
           const extension = path.extname(input.path)
           const languageId = LANGUAGE_EXTENSIONS[extension] ?? "plaintext"
 
-          const version = files[input.path]
+          const version = files.get(input.path)
           if (version !== undefined) {
             log.info("workspace/didChangeWatchedFiles", input)
             await connection.sendNotification("workspace/didChangeWatchedFiles", {
@@ -165,7 +163,7 @@ export namespace LSPClient {
             })
 
             const next = version + 1
-            files[input.path] = next
+            files.set(input.path, next)
             log.info("textDocument/didChange", {
               path: input.path,
               version: next,
@@ -200,7 +198,7 @@ export namespace LSPClient {
               text,
             },
           })
-          files[input.path] = 0
+          files.set(input.path, 0)
           return
         },
       },
@@ -238,6 +236,8 @@ export namespace LSPClient {
       },
       async shutdown() {
         l.info("shutting down")
+        diagnostics.clear()
+        files.clear()
         connection.end()
         connection.dispose()
         input.server.process.kill()
