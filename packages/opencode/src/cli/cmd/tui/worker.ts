@@ -33,9 +33,10 @@ process.on("uncaughtException", (e) => {
 })
 
 // Subscribe to global events and forward them via RPC
-GlobalBus.on("event", (event) => {
+const globalBusHandler = (event: { directory?: string; payload: any }) => {
   Rpc.emit("global.event", event)
-})
+}
+GlobalBus.on("event", globalBusHandler)
 
 let server: Bun.Server<BunWebSocketData> | undefined
 
@@ -64,6 +65,10 @@ const startEventStream = (directory: string) => {
   })
 
   ;(async () => {
+    let backoff = 250 // Start with 250ms
+    const maxBackoff = 30000 // Max 30 seconds
+    const backoffMultiplier = 1.5
+
     while (!signal.aborted) {
       const events = await Promise.resolve(
         sdk.event.subscribe(
@@ -75,9 +80,13 @@ const startEventStream = (directory: string) => {
       ).catch(() => undefined)
 
       if (!events) {
-        await Bun.sleep(250)
+        await Bun.sleep(backoff)
+        backoff = Math.min(backoff * backoffMultiplier, maxBackoff)
         continue
       }
+
+      // Reset backoff on successful connection
+      backoff = 250
 
       for await (const event of events.stream) {
         Rpc.emit("event", event as Event)
@@ -136,6 +145,7 @@ export const rpc = {
   },
   async shutdown() {
     Log.Default.info("worker shutting down")
+    GlobalBus.off("event", globalBusHandler)
     if (eventStream.abort) eventStream.abort.abort()
     await Instance.disposeAll()
     if (server) server.stop(true)
