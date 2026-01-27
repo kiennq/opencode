@@ -409,8 +409,7 @@ export const SessionRoutes = lazy(() =>
       ),
       async (c) => {
         const sessionID = c.req.valid("param").sessionID
-        await Session.share(sessionID)
-        const session = await Session.get(sessionID)
+        const { session } = await Session.share(sessionID)
         return c.json(session)
       },
     )
@@ -479,8 +478,7 @@ export const SessionRoutes = lazy(() =>
       ),
       async (c) => {
         const sessionID = c.req.valid("param").sessionID
-        await Session.unshare(sessionID)
-        const session = await Session.get(sessionID)
+        const session = await Session.unshare(sessionID)
         return c.json(session)
       },
     )
@@ -520,8 +518,8 @@ export const SessionRoutes = lazy(() =>
         const sessionID = c.req.valid("param").sessionID
         const body = c.req.valid("json")
         const session = await Session.get(sessionID)
-        await SessionRevert.cleanup(session)
-        const msgs = await Session.messages({ sessionID })
+        const cleanedMsgs = await SessionRevert.cleanup(session)
+        const msgs = cleanedMsgs ?? (await Session.messages({ sessionID }))
         let currentAgent = await Agent.defaultAgent()
         for (let i = msgs.length - 1; i >= 0; i--) {
           const info = msgs[i].info
@@ -570,7 +568,8 @@ export const SessionRoutes = lazy(() =>
       validator(
         "query",
         z.object({
-          limit: z.coerce.number().optional(),
+          limit: z.coerce.number().optional().meta({ description: "Maximum number of messages to return" }),
+          offset: z.coerce.number().optional().meta({ description: "Number of messages to skip from the start (oldest messages)" }),
         }),
       ),
       async (c) => {
@@ -578,6 +577,7 @@ export const SessionRoutes = lazy(() =>
         const messages = await Session.messages({
           sessionID: c.req.valid("param").sessionID,
           limit: query.limit,
+          offset: query.offset,
         })
         const acceptEncoding = c.req.header("accept-encoding") ?? ""
         if (acceptEncoding.includes("gzip")) {
