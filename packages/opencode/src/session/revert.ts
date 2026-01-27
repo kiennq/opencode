@@ -54,7 +54,6 @@ export namespace SessionRevert {
     }
 
     if (revert) {
-      const session = await Session.get(input.sessionID)
       revert.snapshot = session.revert?.snapshot ?? (await Snapshot.track())
       await Snapshot.revert(patches)
       if (revert.snapshot) revert.diff = await Snapshot.diff(revert.snapshot)
@@ -117,5 +116,6 @@ export namespace SessionRevert {
     await Session.update(sessionID, (draft) => {
       draft.revert = undefined
     })
+    return msgs
   }
 }
