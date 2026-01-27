@@ -8,6 +8,7 @@ import PROMPT_INITIALIZE from "./template/initialize.txt"
 import PROMPT_REVIEW from "./template/review.txt"
 import { MCP } from "../mcp"
 import { Log } from "@/util/log"
+import { Skill } from "../skill"
 
 export namespace Command {
   const log = Log.create({ service: "command" })
@@ -68,7 +69,7 @@ export namespace Command {
         for (const [name, prompt] of Object.entries(prompts)) {
           mcpCommands.set(name, {
             name,
-            mcp: true,
+            source: "mcp",
             description: prompt.description,
             get template() {
               if (mcpTemplateCache.has(name)) {
@@ -106,7 +107,7 @@ export namespace Command {
             description: cmd.description,
             agent: cmd.agent,
             model: cmd.model,
-            mcp: cmd.mcp,
+            source: cmd.source,
             template: typeof cmd.template === "string" ? cmd.template : await cmd.template,
             subtask: cmd.subtask,
             hints: cmd.hints,
