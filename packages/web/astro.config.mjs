@@ -173,6 +173,7 @@ export default defineConfig({
       },
       sidebar: [
         "",
+        "get-started",
         "config",
         "providers",
         "network",
