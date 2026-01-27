@@ -1,5 +1,5 @@
 import { Tooltip as KobalteTooltip } from "@kobalte/core/tooltip"
-import { createSignal, Match, splitProps, Switch, type JSX } from "solid-js"
+import { children, createSignal, Match, onCleanup, onMount, splitProps, Switch, type JSX } from "solid-js"
 import type { ComponentProps } from "solid-js"
 
 export interface TooltipProps extends ComponentProps<typeof KobalteTooltip> {
@@ -40,8 +40,41 @@ export function Tooltip(props: TooltipProps) {
     "contentStyle",
     "inactive",
     "forceOpen",
-    "value",
   ])
+
+  const c = children(() => local.children)
+
+  onMount(() => {
+    const childElements = c()
+    const cleanupFns: (() => void)[] = []
+
+    const addListeners = (el: HTMLElement) => {
+      const focusHandler = () => setOpen(true)
+      const blurHandler = () => setOpen(false)
+      el.addEventListener("focusin", focusHandler)
+      el.addEventListener("focusout", blurHandler)
+      cleanupFns.push(() => {
+        el.removeEventListener("focusin", focusHandler)
+        el.removeEventListener("focusout", blurHandler)
+      })
+    }
+
+    if (childElements instanceof HTMLElement) {
+      addListeners(childElements)
+    } else if (Array.isArray(childElements)) {
+      for (const child of childElements) {
+        if (child instanceof HTMLElement) {
+          addListeners(child)
+        }
+      }
+    }
+
+    onCleanup(() => {
+      for (const cleanup of cleanupFns) {
+        cleanup()
+      }
+    })
+  })
 
   return (
     <Switch>
@@ -49,7 +82,7 @@ export function Tooltip(props: TooltipProps) {
       <Match when={true}>
         <KobalteTooltip gutter={4} {...others} open={local.forceOpen || open()} onOpenChange={setOpen}>
           <KobalteTooltip.Trigger as={"div"} data-component="tooltip-trigger" class={local.class}>
-            {local.children}
+            {c()}
           </KobalteTooltip.Trigger>
           <KobalteTooltip.Portal>
             <KobalteTooltip.Content
@@ -59,7 +92,7 @@ export function Tooltip(props: TooltipProps) {
               class={local.contentClass}
               style={local.contentStyle}
             >
-              {local.value}
+              {others.value}
               {/* <KobalteTooltip.Arrow data-slot="tooltip-arrow" /> */}
             </KobalteTooltip.Content>
           </KobalteTooltip.Portal>
