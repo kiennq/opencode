@@ -252,6 +252,7 @@ export namespace MessageV2 {
       status: z.literal("completed"),
       input: z.record(z.string(), z.any()),
       output: z.string(),
+      summary: z.string().optional(),
       title: z.string(),
       metadata: z.record(z.string(), z.any()),
       time: z.object({
@@ -564,7 +565,9 @@ export namespace MessageV2 {
           if (part.type === "tool") {
             toolNames.add(part.tool)
             if (part.state.status === "completed") {
-              const outputText = part.state.time.compacted ? "[Old tool result content cleared]" : part.state.output
+              const outputText = part.state.time.compacted
+                ? (part.state.summary ?? "[Old tool result content cleared]")
+                : part.state.output
               const attachments = part.state.time.compacted ? [] : (part.state.attachments ?? [])
 
               // For providers that don't support media in tool results, extract media files
@@ -671,11 +674,8 @@ export namespace MessageV2 {
   })
 
   export const parts = fn(Identifier.schema("message"), async (messageID) => {
-    const result = [] as MessageV2.Part[]
-    for (const item of await Storage.list(["part", messageID])) {
-      const read = await Storage.read<MessageV2.Part>(item)
-      result.push(read)
-    }
+    const items = await Storage.list(["part", messageID])
+    const result = await Promise.all(items.map((item) => Storage.read<MessageV2.Part>(item)))
     result.sort((a, b) => (a.id > b.id ? 1 : -1))
     return result
   })
