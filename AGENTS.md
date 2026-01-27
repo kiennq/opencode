@@ -1,4 +1,4 @@
-- To regenerate the JavaScript SDK, run `./packages/sdk/js/script/build.ts`.
+﻿- To regenerate the JavaScript SDK, run `./packages/sdk/js/script/build.ts`.
 - ALWAYS USE PARALLEL TOOLS WHEN APPLICABLE.
 - The default branch in this repo is `dev`.
 - Prefer automation: execute requested actions without confirmation unless blocked by missing info or safety/irreversibility.
@@ -80,3 +80,16 @@ const bazFoo = 3
 
 You MUST avoid using `mocks` as much as possible.
 Tests MUST test actual implementation, do not duplicate logic into a test.
+
+Only check typescript compilation after each commit.
+Before push, run a full test.
+
+On Windows run both:
+
+- Linux test, use `podman` (preferred) or `docker`.
+- Windows test, only need to make sure OpenCode can start without issue.
+
+## Sync with upstream
+
+- Fetch the upstream and rebase on top of that, resolving any conflicts and force push to origin.
+- When pulling PR from upstream, always do squash merge.
