@@ -1408,6 +1408,34 @@ export namespace ACP {
         { throwOnError: true },
       )
     }
+
+    /**
+     * Dispose of all session resources including event streams and session map entries.
+     * This should be called when the agent is being destroyed to prevent memory leaks.
+     */
+    async dispose() {
+      log.info("disposing agent")
+
+      // Abort the global event stream
+      this.eventAbort.abort()
+
+      // Clear all sessions from the manager
+      this.sessionManager.clear()
+    }
+
+    /**
+     * Close a specific session and clean up its resources.
+     * This should be called when a session is explicitly closed/ended.
+     */
+    closeSession(sessionId: string) {
+      log.info("closing session", { sessionId })
+
+      // Remove permission queue for this session
+      this.permissionQueues.delete(sessionId)
+
+      // Remove from session manager
+      this.sessionManager.delete(sessionId)
+    }
   }
 
   function toToolKind(toolName: string): ToolKind {
