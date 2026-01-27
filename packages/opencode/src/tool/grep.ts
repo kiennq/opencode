@@ -79,7 +79,7 @@ export const GrepTool = Tool.define("grep", {
 
     // Handle both Unix (\n) and Windows (\r\n) line endings
     const lines = output.trim().split(/\r?\n/)
-    const matches = []
+    const parsed = []
 
     for (const line of lines) {
       if (!line) continue
@@ -87,20 +87,26 @@ export const GrepTool = Tool.define("grep", {
       const [filePath, lineNumStr, ...lineTextParts] = line.split("|")
       if (!filePath || !lineNumStr || lineTextParts.length === 0) continue
 
-      const lineNum = parseInt(lineNumStr, 10)
-      const lineText = lineTextParts.join("|")
-
-      const file = Bun.file(filePath)
-      const stats = await file.stat().catch(() => null)
-      if (!stats) continue
-
-      matches.push({
+      parsed.push({
         path: filePath,
-        modTime: stats.mtime.getTime(),
-        lineNum,
-        lineText,
+        lineNum: parseInt(lineNumStr, 10),
+        lineText: lineTextParts.join("|"),
       })
     }
+
+    const results = await Promise.all(
+      parsed.map(async (item) => {
+        const stats = await Bun.file(item.path)
+          .stat()
+          .catch(() => null)
+        if (!stats) return null
+        return {
+          ...item,
+          modTime: stats.mtime.getTime(),
+        }
+      }),
+    )
+    const matches = results.filter((x): x is NonNullable<typeof x> => x !== null)
 
     matches.sort((a, b) => b.modTime - a.modTime)
 
