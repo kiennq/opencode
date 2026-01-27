@@ -1,7 +1,7 @@
-import { createStore } from "solid-js/store"
-import { createMemo, createSignal, For, Show } from "solid-js"
-import { useKeyboard } from "@opentui/solid"
-import type { TextareaRenderable } from "@opentui/core"
+import { createStore, produce } from "solid-js/store"
+import { createMemo, createSignal, For, onMount, Show } from "solid-js"
+import { useKeyboard, useRenderer } from "@opentui/solid"
+import type { TextareaRenderable, PasteEvent, KeyBinding } from "@opentui/core"
 import { useKeybind } from "../../context/keybind"
 import { selectedForeground, tint, useTheme } from "../../context/theme"
 import type { QuestionAnswer, QuestionRequest } from "@opencode-ai/sdk/v2"
@@ -9,9 +9,76 @@ import { useSDK } from "../../context/sdk"
 import { SplitBorder } from "../../component/border"
 import { useTextareaKeybindings } from "../../component/textarea-keybindings"
 import { useDialog } from "../../ui/dialog"
+import { useSync } from "../../context/sync"
+import { Binary } from "@opencode-ai/util/binary"
+
+type Theme = ReturnType<typeof useTheme>["theme"]
+
+function CustomAnswerTextarea(props: {
+  ref: (val: TextareaRenderable) => void
+  initialValue: string
+  theme: Theme
+  bindings: KeyBinding[]
+}) {
+  let textarea: TextareaRenderable | undefined
+  const renderer = useRenderer()
+
+  onMount(() => {
+    setTimeout(() => {
+      textarea?.focus()
+      textarea?.gotoBufferEnd()
+    }, 1)
+  })
+
+  return (
+    <box paddingLeft={3}>
+      <textarea
+        ref={(val: TextareaRenderable) => {
+          textarea = val
+          props.ref(val)
+        }}
+        initialValue={props.initialValue}
+        placeholder="Type your own answer"
+        minHeight={1}
+        maxHeight={6}
+        scrollMargin={0}
+        textColor={props.theme.text}
+        focusedTextColor={props.theme.text}
+        cursorColor={props.theme.primary}
+        cursorStyle={{ style: "block", blinking: false }}
+        keyBindings={props.bindings}
+        onPaste={(event: PasteEvent) => {
+          event.preventDefault()
+          const text = event.text.replace(/\r\n/g, "\n").replace(/\r/g, "\n").trim()
+          if (!text || !textarea) return
+          textarea.insertText(text)
+          // Use setTimeout to ensure scroll position is stable after text insertion
+          setTimeout(() => {
+            if (!textarea) return
+            const viewport = textarea.editorView.getViewport()
+            const totalLines = textarea.editorView.getTotalVirtualLineCount()
+            // Scroll to show the end of the content
+            if (totalLines > viewport.height) {
+              textarea.editorView.setViewport(
+                viewport.offsetX,
+                totalLines - viewport.height,
+                viewport.width,
+                viewport.height,
+                false,
+              )
+            }
+            textarea.getLayoutNode().markDirty()
+            renderer.requestRender()
+          }, 0)
+        }}
+      />
+    </box>
+  )
+}
 
 export function QuestionPrompt(props: { request: QuestionRequest }) {
   const sdk = useSDK()
+  const sync = useSync()
   const { theme } = useTheme()
   const keybind = useKeybind()
   const bindings = useTextareaKeybindings()
@@ -43,25 +110,44 @@ export function QuestionPrompt(props: { request: QuestionRequest }) {
     return store.answers[store.tab]?.includes(value) ?? false
   })
 
+  // Remove question from store immediately to dismiss the UI
+  function dismiss() {
+    const sessionID = props.request.sessionID
+    const requestID = props.request.id
+    const requests = sync.data.question[sessionID]
+    if (!requests) return
+    const match = Binary.search(requests, requestID, (r) => r.id)
+    if (!match.found) return
+    sync.set(
+      "question",
+      sessionID,
+      produce((draft) => {
+        draft.splice(match.index, 1)
+      }),
+    )
+  }
+
   function submit() {
     const answers = questions().map((_, i) => store.answers[i] ?? [])
     sdk.client.question.reply({
       requestID: props.request.id,
       answers,
     })
+    dismiss()
   }
 
   function reject() {
     sdk.client.question.reject({
       requestID: props.request.id,
     })
+    dismiss()
   }
 
-  function pick(answer: string, custom: boolean = false) {
+  function pick(answer: string, isCustom: boolean = false) {
     const answers = [...store.answers]
     answers[store.tab] = [answer]
     setStore("answers", answers)
-    if (custom) {
+    if (isCustom) {
       const inputs = [...store.custom]
       inputs[store.tab] = answer
       setStore("custom", inputs)
@@ -71,6 +157,7 @@ export function QuestionPrompt(props: { request: QuestionRequest }) {
         requestID: props.request.id,
         answers: [[answer]],
       })
+      dismiss()
       return
     }
     setStore("tab", store.tab + 1)
@@ -376,25 +463,12 @@ export function QuestionPrompt(props: { request: QuestionRequest }) {
                     </Show>
                   </box>
                   <Show when={store.editing}>
-                    <box paddingLeft={3}>
-                      <textarea
-                        ref={(val: TextareaRenderable) => {
-                          textarea = val
-                          queueMicrotask(() => {
-                            val.focus()
-                            val.gotoLineEnd()
-                          })
-                        }}
-                        initialValue={input()}
-                        placeholder="Type your own answer"
-                        minHeight={1}
-                        maxHeight={6}
-                        textColor={theme.text}
-                        focusedTextColor={theme.text}
-                        cursorColor={theme.primary}
-                        keyBindings={bindings()}
-                      />
-                    </box>
+                    <CustomAnswerTextarea
+                      ref={(val) => (textarea = val)}
+                      initialValue={input()}
+                      theme={theme}
+                      bindings={bindings()}
+                    />
                   </Show>
                   <Show when={!store.editing && input()}>
                     <box paddingLeft={3}>
