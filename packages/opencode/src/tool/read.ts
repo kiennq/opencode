@@ -16,171 +16,186 @@ const MAX_BYTES = 50 * 1024
 
 export const ReadTool = Tool.define("read", {
   description: DESCRIPTION,
-  parameters: z.object({
-    filePath: z.string().describe("The path to the file to read"),
-    offset: z.coerce.number().describe("The line number to start reading from (0-based)").optional(),
-    limit: z.coerce.number().describe("The number of lines to read (defaults to 2000)").optional(),
-  }),
+  parameters: z
+    .object({
+      filePath: z.string().describe("The path to the file to read").optional(),
+      filePaths: z.array(z.string()).describe("Paths to files to read").optional(),
+      offset: z.coerce.number().describe("The line number to start reading from (0-based)").optional(),
+      limit: z.coerce.number().describe("The number of lines to read (defaults to 2000)").optional(),
+    })
+    .refine((value) => value.filePath || (value.filePaths && value.filePaths.length > 0), {
+      message: "filePath or filePaths is required",
+    })
+    .refine((value) => !(value.filePath && value.filePaths && value.filePaths.length > 0), {
+      message: "Use filePath or filePaths, not both",
+    }),
   async execute(params, ctx) {
-    let filepath = params.filePath
-    if (!path.isAbsolute(filepath)) {
-      filepath = path.resolve(Instance.directory, filepath)
-    }
-    const title = path.relative(Instance.worktree, filepath)
-
-    await assertExternalDirectory(ctx, filepath, {
-      bypass: Boolean(ctx.extra?.["bypassCwdCheck"]),
-    })
-
-    await ctx.ask({
-      permission: "read",
-      patterns: [filepath],
-      always: ["*"],
-      metadata: {},
-    })
-
-    const file = Bun.file(filepath)
-    if (!(await file.exists())) {
-      const dir = path.dirname(filepath)
-      const base = path.basename(filepath)
-
-      const dirEntries = fs.readdirSync(dir)
-      const suggestions = dirEntries
-        .filter(
-          (entry) =>
-            entry.toLowerCase().includes(base.toLowerCase()) || base.toLowerCase().includes(entry.toLowerCase()),
-        )
-        .map((entry) => path.join(dir, entry))
-        .slice(0, 3)
-
-      if (suggestions.length > 0) {
-        throw new Error(`File not found: ${filepath}\n\nDid you mean one of these?\n${suggestions.join("\n")}`)
-      }
-
-      throw new Error(`File not found: ${filepath}`)
-    }
-
-    const instructions = await InstructionPrompt.resolve(ctx.messages, filepath, ctx.messageID)
-
-    // Check for images by extension first (handles uppercase extensions like .PNG, .JPG)
-    const ext = path.extname(filepath).toLowerCase()
-    const imageExts = new Set([".png", ".jpg", ".jpeg", ".gif", ".bmp", ".webp", ".ico", ".tif", ".tiff"])
-    const isImageByExt = imageExts.has(ext)
-
-    // Get MIME type from extension for images (more reliable than Bun's MIME detection for uppercase)
-    const getImageMime = (e: string) => {
-      if (e === ".png") return "image/png"
-      if (e === ".jpg" || e === ".jpeg") return "image/jpeg"
-      if (e === ".gif") return "image/gif"
-      if (e === ".bmp") return "image/bmp"
-      if (e === ".webp") return "image/webp"
-      if (e === ".ico") return "image/x-icon"
-      if (e === ".tif" || e === ".tiff") return "image/tiff"
-      return "image/" + e.slice(1)
-    }
-
-    // Handle images by extension (including uppercase)
-    if (isImageByExt) {
-      const mime = getImageMime(ext)
-      const msg = `Image read successfully`
-      return {
-        title,
-        output: msg,
-        metadata: {
-          preview: msg,
-          truncated: false,
-          ...(instructions.length > 0 && { loaded: instructions.map((i) => i.filepath) }),
-        },
-        attachments: [
-          {
-            id: Identifier.ascending("part"),
-            sessionID: ctx.sessionID,
-            messageID: ctx.messageID,
-            type: "file",
-            mime,
-            url: `data:${mime};base64,${Buffer.from(await file.bytes()).toString("base64")}`,
-          },
-        ],
-      }
-    }
-
-    // Exclude SVG (XML-based) and vnd.fastbidsheet (.fbs extension, commonly FlatBuffers schema files)
-    const isImage =
-      file.type.startsWith("image/") && file.type !== "image/svg+xml" && file.type !== "image/vnd.fastbidsheet"
-    const isPdf = file.type === "application/pdf"
-    if (isImage || isPdf) {
-      const mime = file.type
-      const msg = `${isImage ? "Image" : "PDF"} read successfully`
-      return {
-        title,
-        output: msg,
-        metadata: {
-          preview: msg,
-          truncated: false,
-          ...(instructions.length > 0 && { loaded: instructions.map((i) => i.filepath) }),
-        },
-        attachments: [
-          {
-            id: Identifier.ascending("part"),
-            sessionID: ctx.sessionID,
-            messageID: ctx.messageID,
-            type: "file",
-            mime,
-            url: `data:${mime};base64,${Buffer.from(await file.bytes()).toString("base64")}`,
-          },
-        ],
-      }
-    }
-
-    const isBinary = await isBinaryFile(filepath, file)
-    if (isBinary) throw new Error(`Cannot read binary file: ${filepath}`)
+    const hasPath = Boolean(params.filePath)
+    const hasPaths = Boolean(params.filePaths?.length)
+    if (hasPath && hasPaths) throw new Error("Use filePath or filePaths, not both")
+    const paths = hasPaths ? params.filePaths! : hasPath ? [params.filePath!] : []
+    if (paths.length === 0) throw new Error("filePath or filePaths is required")
 
     const limit = params.limit ?? DEFAULT_READ_LIMIT
     const offset = params.offset || 0
-    const lines = await file.text().then((text) => text.split("\n"))
 
-    const raw: string[] = []
-    let bytes = 0
-    let truncatedByBytes = false
-    for (let i = offset; i < Math.min(lines.length, offset + limit); i++) {
-      const line = lines[i].length > MAX_LINE_LENGTH ? lines[i].substring(0, MAX_LINE_LENGTH) + "..." : lines[i]
-      const size = Buffer.byteLength(line, "utf-8") + (raw.length > 0 ? 1 : 0)
-      if (bytes + size > MAX_BYTES) {
-        truncatedByBytes = true
-        break
+    const readOne = async (value: string) => {
+      const filepath = path.isAbsolute(value) ? value : path.join(process.cwd(), value)
+      const title = path.relative(Instance.worktree, filepath)
+
+      await assertExternalDirectory(ctx, filepath, {
+        bypass: Boolean(ctx.extra?.["bypassCwdCheck"]),
+      })
+
+      await ctx.ask({
+        permission: "read",
+        patterns: [filepath],
+        always: ["*"],
+        metadata: {},
+      })
+
+      const file = Bun.file(filepath)
+      if (!(await file.exists())) {
+        const dir = path.dirname(filepath)
+        const base = path.basename(filepath)
+
+        const dirEntries = fs.readdirSync(dir)
+        const suggestions = dirEntries
+          .filter(
+            (entry) =>
+              entry.toLowerCase().includes(base.toLowerCase()) || base.toLowerCase().includes(entry.toLowerCase()),
+          )
+          .map((entry) => path.join(dir, entry))
+          .slice(0, 3)
+
+        if (suggestions.length > 0) {
+          throw new Error(`File not found: ${filepath}\n\nDid you mean one of these?\n${suggestions.join("\n")}`)
+        }
+
+        throw new Error(`File not found: ${filepath}`)
       }
-      raw.push(line)
-      bytes += size
+
+      const instructions = await InstructionPrompt.resolve(ctx.messages, filepath, ctx.messageID)
+
+      // Exclude SVG (XML-based) and vnd.fastbidsheet (.fbs extension, commonly FlatBuffers schema files)
+      const isImage =
+        file.type.startsWith("image/") && file.type !== "image/svg+xml" && file.type !== "image/vnd.fastbidsheet"
+      const isPdf = file.type === "application/pdf"
+      if (isImage || isPdf) {
+        const mime = file.type
+        const msg = `${isImage ? "Image" : "PDF"} read successfully`
+        return {
+          title,
+          output: msg,
+          metadata: {
+            preview: msg,
+            truncated: false,
+            ...(instructions.length > 0 && { loaded: instructions.map((i) => i.filepath) }),
+          },
+          attachments: [
+            {
+              id: Identifier.ascending("part"),
+              sessionID: ctx.sessionID,
+              messageID: ctx.messageID,
+              type: "file" as const,
+              mime,
+              url: `data:${mime};base64,${Buffer.from(await file.bytes()).toString("base64")}`,
+            },
+          ],
+          instructions,
+        }
+      }
+
+      const isBinary = await isBinaryFile(filepath, file)
+      if (isBinary) throw new Error(`Cannot read binary file: ${filepath}`)
+
+      const lines = await file.text().then((text) => text.split("\n"))
+
+      const raw: string[] = []
+      let bytes = 0
+      let truncatedByBytes = false
+      for (let i = offset; i < Math.min(lines.length, offset + limit); i++) {
+        const line = lines[i].length > MAX_LINE_LENGTH ? lines[i].substring(0, MAX_LINE_LENGTH) + "..." : lines[i]
+        const size = Buffer.byteLength(line, "utf-8") + (raw.length > 0 ? 1 : 0)
+        if (bytes + size > MAX_BYTES) {
+          truncatedByBytes = true
+          break
+        }
+        raw.push(line)
+        bytes += size
+      }
+
+      const content = raw.map((line, index) => {
+        return `${(index + offset + 1).toString().padStart(5, "0")}| ${line}`
+      })
+      const preview = raw.slice(0, 20).join("\n")
+
+      let output = "<file>\n"
+      output += content.join("\n")
+
+      const totalLines = lines.length
+      const lastReadLine = offset + raw.length
+      const hasMoreLines = totalLines > lastReadLine
+      const truncated = hasMoreLines || truncatedByBytes
+
+      if (truncatedByBytes) {
+        output += `\n\n(Output truncated at ${MAX_BYTES} bytes. Use 'offset' parameter to read beyond line ${lastReadLine})`
+      } else if (hasMoreLines) {
+        output += `\n\n(File has more lines. Use 'offset' parameter to read beyond line ${lastReadLine})`
+      } else {
+        output += `\n\n(End of file - total ${totalLines} lines)`
+      }
+      output += "\n</file>"
+
+      // just warms the lsp client
+      LSP.touchFile(filepath, false)
+      FileTime.read(ctx.sessionID, filepath)
+
+      return {
+        title,
+        output,
+        metadata: {
+          preview,
+          truncated,
+          ...(instructions.length > 0 && { loaded: instructions.map((i) => i.filepath) }),
+        },
+        instructions,
+      }
     }
 
-    const content = raw.map((line, index) => {
-      return `${(index + offset + 1).toString().padStart(5, "0")}| ${line}`
-    })
-    const preview = raw.slice(0, 20).join("\n")
-
-    let output = "<file>\n"
-    output += content.join("\n")
-
-    const totalLines = lines.length
-    const lastReadLine = offset + raw.length
-    const hasMoreLines = totalLines > lastReadLine
-    const truncated = hasMoreLines || truncatedByBytes
-
-    if (truncatedByBytes) {
-      output += `\n\n(Output truncated at ${MAX_BYTES} bytes. Use 'offset' parameter to read beyond line ${lastReadLine})`
-    } else if (hasMoreLines) {
-      output += `\n\n(File has more lines. Use 'offset' parameter to read beyond line ${lastReadLine})`
-    } else {
-      output += `\n\n(End of file - total ${totalLines} lines)`
+    if (paths.length === 1) {
+      const result = await readOne(paths[0])
+      const { instructions, ...rest } = result
+      if (instructions && instructions.length > 0) {
+        rest.output += `\n\n<system-reminder>\n${instructions.map((i) => i.content).join("\n\n")}\n</system-reminder>`
+      }
+      return rest
     }
-    output += "\n</file>"
 
-    // just warms the lsp client
-    LSP.touchFile(filepath, false)
-    FileTime.read(ctx.sessionID, filepath)
+    const results = await Promise.all(paths.map((value) => readOne(value)))
 
-    if (instructions.length > 0) {
-      output += `\n\n<system-reminder>\n${instructions.map((i) => i.content).join("\n\n")}\n</system-reminder>`
+    let output = results.map((result) => result.output).join("\n\n")
+    const preview = results.map((result) => result.metadata.preview).join("\n\n")
+    const truncated = results.some((result) => result.metadata.truncated)
+    const title = results.map((result) => result.title).join(", ")
+    const attachments = results.flatMap((result) => result.attachments ?? [])
+    const allInstructions = results.flatMap((result) => result.instructions ?? [])
+    const allLoaded = results.flatMap((result) => result.metadata.loaded ?? [])
+
+    if (allInstructions.length > 0) {
+      output += `\n\n<system-reminder>\n${allInstructions.map((i) => i.content).join("\n\n")}\n</system-reminder>`
+    }
+
+    if (attachments.length === 0) {
+      return {
+        title,
+        output,
+        metadata: {
+          preview,
+          truncated,
+          ...(allLoaded.length > 0 && { loaded: allLoaded }),
+        },
+      }
     }
 
     return {
@@ -189,8 +204,9 @@ export const ReadTool = Tool.define("read", {
       metadata: {
         preview,
         truncated,
-        ...(instructions.length > 0 && { loaded: instructions.map((i) => i.filepath) }),
+        ...(allLoaded.length > 0 && { loaded: allLoaded }),
       },
+      attachments,
     }
   },
 })
