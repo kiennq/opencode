@@ -269,20 +269,23 @@ export namespace Ripgrep {
     interface Node {
       path: string[]
       children: Node[]
+      childMap: Map<string, Node> // O(1) lookup instead of O(n) find
     }
 
     function getPath(node: Node, parts: string[], create: boolean) {
       if (parts.length === 0) return node
       let current = node
       for (const part of parts) {
-        let existing = current.children.find((x) => x.path.at(-1) === part)
+        let existing = current.childMap.get(part)
         if (!existing) {
           if (!create) return
           existing = {
             path: current.path.concat(part),
             children: [],
+            childMap: new Map(),
           }
           current.children.push(existing)
+          current.childMap.set(part, existing)
         }
         current = existing
       }
@@ -292,6 +295,7 @@ export namespace Ripgrep {
     const root: Node = {
       path: [],
       children: [],
+      childMap: new Map(),
     }
     for (const file of files) {
       if (file.includes(".opencode")) continue
@@ -315,6 +319,7 @@ export namespace Ripgrep {
     const result: Node = {
       path: [],
       children: [],
+      childMap: new Map(),
     }
 
     let processed = 0
@@ -340,10 +345,12 @@ export namespace Ripgrep {
           if (!compare) continue
           if (compare?.children.length !== node.children.length) {
             const diff = node.children.length - compare.children.length
-            compare.children.push({
+            const truncNode: Node = {
               path: compare.path.concat(`[${diff} truncated]`),
               children: [],
-            })
+              childMap: new Map(),
+            }
+            compare.children.push(truncNode)
           }
         }
         break
