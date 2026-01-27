@@ -116,7 +116,7 @@ jobs:
               fi
 
               if gh release create "$TAG" \
-                --title "Monthly Build $VERSION" \
+                --title "$VERSION" \
                 --notes "Monthly Build $VERSION from commit ${{ github.sha }}. Platforms: Linux x64/arm64, Windows x64/arm64." \
                 $DRAFT_FLAG \
                 "$ARCHIVE_PATH"; then
