@@ -2,7 +2,19 @@ import { render, useKeyboard, useRenderer, useTerminalDimensions } from "@opentu
 import { Clipboard } from "@tui/util/clipboard"
 import { TextAttributes } from "@opentui/core"
 import { RouteProvider, useRoute } from "@tui/context/route"
-import { Switch, Match, createEffect, untrack, ErrorBoundary, createSignal, onMount, batch, Show, on } from "solid-js"
+import {
+  Switch,
+  Match,
+  createEffect,
+  untrack,
+  ErrorBoundary,
+  createSignal,
+  onMount,
+  onCleanup,
+  batch,
+  Show,
+  on,
+} from "solid-js"
 import { Installation } from "@/installation"
 import { Flag } from "@/flag/flag"
 import { DialogProvider, useDialog } from "@tui/ui/dialog"
@@ -51,7 +63,7 @@ async function getTerminalBackgroundColor(): Promise<"dark" | "light"> {
     }
 
     const handler = (data: Buffer) => {
-      const str = data.toString()
+      const str = data.toString("utf8")
       const match = str.match(/\x1b]11;([^\x07\x1b]+)/)
       if (match) {
         cleanup()
@@ -195,6 +207,14 @@ function App() {
   const sync = useSync()
   const exit = useExit()
   const promptRef = usePromptRef()
+
+  // Handle SIGINT (Ctrl+C) to properly cleanup renderer on Windows
+  // Without this, the 60 FPS render loop continues outputting ANSI sequences
+  onMount(() => {
+    const handleSigint = () => exit()
+    process.on("SIGINT", handleSigint)
+    onCleanup(() => process.off("SIGINT", handleSigint))
+  })
 
   // Wire up console copy-to-clipboard via opentui's onCopySelection callback
   renderer.console.onCopySelection = async (text: string) => {
@@ -623,66 +643,78 @@ function App() {
     }
   })
 
-  sdk.event.on(TuiEvent.CommandExecute.type, (evt) => {
-    command.trigger(evt.properties.command)
-  })
+  onCleanup(
+    sdk.event.on(TuiEvent.CommandExecute.type, (evt) => {
+      command.trigger(evt.properties.command)
+    }),
+  )
 
-  sdk.event.on(TuiEvent.ToastShow.type, (evt) => {
-    toast.show({
-      title: evt.properties.title,
-      message: evt.properties.message,
-      variant: evt.properties.variant,
-      duration: evt.properties.duration,
-    })
-  })
+  onCleanup(
+    sdk.event.on(TuiEvent.ToastShow.type, (evt) => {
+      toast.show({
+        title: evt.properties.title,
+        message: evt.properties.message,
+        variant: evt.properties.variant,
+        duration: evt.properties.duration,
+      })
+    }),
+  )
 
-  sdk.event.on(TuiEvent.SessionSelect.type, (evt) => {
-    route.navigate({
-      type: "session",
-      sessionID: evt.properties.sessionID,
-    })
-  })
+  onCleanup(
+    sdk.event.on(TuiEvent.SessionSelect.type, (evt) => {
+      route.navigate({
+        type: "session",
+        sessionID: evt.properties.sessionID,
+      })
+    }),
+  )
 
-  sdk.event.on(SessionApi.Event.Deleted.type, (evt) => {
-    if (route.data.type === "session" && route.data.sessionID === evt.properties.info.id) {
-      route.navigate({ type: "home" })
+  onCleanup(
+    sdk.event.on(SessionApi.Event.Deleted.type, (evt) => {
+      if (route.data.type === "session" && route.data.sessionID === evt.properties.info.id) {
+        route.navigate({ type: "home" })
+        toast.show({
+          variant: "info",
+          message: "The current session was deleted",
+        })
+      }
+    }),
+  )
+
+  onCleanup(
+    sdk.event.on(SessionApi.Event.Error.type, (evt) => {
+      const error = evt.properties.error
+      if (error && typeof error === "object" && error.name === "MessageAbortedError") return
+      const message = (() => {
+        if (!error) return "An error occurred"
+
+        if (typeof error === "object") {
+          const data = error.data
+          if ("message" in data && typeof data.message === "string") {
+            return data.message
+          }
+        }
+        return String(error)
+      })()
+
+      toast.show({
+        variant: "error",
+        message,
+        duration: 5000,
+      })
+    }),
+  )
+
+  onCleanup(
+    sdk.event.on(Installation.Event.UpdateAvailable.type, (evt) => {
       toast.show({
         variant: "info",
-        message: "The current session was deleted",
+        title: "Update Available",
+        message: `OpenCode v${evt.properties.version} is available. Run 'opencode upgrade' to update manually.`,
+        duration: 10000,
       })
-    }
-  })
-
-  sdk.event.on(SessionApi.Event.Error.type, (evt) => {
-    const error = evt.properties.error
-    if (error && typeof error === "object" && error.name === "MessageAbortedError") return
-    const message = (() => {
-      if (!error) return "An error occurred"
-
-      if (typeof error === "object") {
-        const data = error.data
-        if ("message" in data && typeof data.message === "string") {
-          return data.message
-        }
-      }
-      return String(error)
-    })()
-
-    toast.show({
-      variant: "error",
-      message,
-      duration: 5000,
-    })
-  })
-
-  sdk.event.on(Installation.Event.UpdateAvailable.type, (evt) => {
-    toast.show({
-      variant: "info",
-      title: "Update Available",
-      message: `OpenCode v${evt.properties.version} is available. Run 'opencode upgrade' to update manually.`,
-      duration: 10000,
-    })
-  })
+    }),
+  )
 
   return (
     <box
