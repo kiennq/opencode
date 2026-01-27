@@ -5,6 +5,7 @@ import z from "zod"
 import { Identifier } from "../id/id"
 import { MessageV2 } from "./message-v2"
 import { Log } from "../util/log"
+import { Config } from "../config/config"
 import { SessionRevert } from "./revert"
 import { Session } from "."
 import { Agent } from "../agent/agent"
@@ -21,7 +22,6 @@ import PROMPT_PLAN from "../session/prompt/plan.txt"
 import BUILD_SWITCH from "../session/prompt/build-switch.txt"
 import MAX_STEPS from "../session/prompt/max-steps.txt"
 import { defer } from "../util/defer"
-import { clone } from "remeda"
 import { ToolRegistry } from "../tool/registry"
 import { MCP } from "../mcp"
 import { LSP } from "../lsp"
@@ -46,6 +46,7 @@ import { LLM } from "./llm"
 import { iife } from "@/util/iife"
 import { Shell } from "@/shell/shell"
 import { Truncate } from "@/tool/truncation"
+import { Question } from "@/question"
 
 // @ts-ignore
 globalThis.AI_SDK_LOG_WARNINGS = false
@@ -256,6 +257,7 @@ export namespace SessionPrompt {
     }
     delete s[sessionID]
     SessionStatus.set(sessionID, { type: "idle" })
+    Question.rejectBySession(sessionID)
     return
   }
 
@@ -273,6 +275,7 @@ export namespace SessionPrompt {
     let step = 0
     const session = await Session.get(sessionID)
     while (true) {
+      const config = await Config.get()
       SessionStatus.set(sessionID, { type: "busy" })
       log.info("loop", { step, sessionID })
       if (abort.aborted) break
@@ -501,9 +504,13 @@ export namespace SessionPrompt {
       }
 
       // context overflow, needs compaction
+      const lastSummaryIndex = msgs.findLastIndex((m) => m.info.role === "assistant" && m.info.summary)
+      const messagesSinceSummary = lastSummaryIndex === -1 ? Infinity : msgs.length - 1 - lastSummaryIndex
+
       if (
         lastFinished &&
         lastFinished.summary !== true &&
+        messagesSinceSummary > (config.compaction?.min_messages ?? 5) &&
         (await SessionCompaction.isOverflow({ tokens: lastFinished.tokens, model }))
       ) {
         await SessionCompaction.create({
@@ -577,26 +584,34 @@ export namespace SessionPrompt {
         })
       }
 
-      const sessionMessages = clone(msgs)
-
       // Ephemerally wrap queued user messages with a reminder to stay on track
-      if (step > 1 && lastFinished) {
-        for (const msg of sessionMessages) {
-          if (msg.info.role !== "user" || msg.info.id <= lastFinished.id) continue
-          for (const part of msg.parts) {
-            if (part.type !== "text" || part.ignored || part.synthetic) continue
-            if (!part.text.trim()) continue
-            part.text = [
-              "<system-reminder>",
-              "The user sent the following message:",
-              part.text,
-              "",
-              "Please address this message and continue with your tasks.",
-              "</system-reminder>",
-            ].join("\n")
-          }
-        }
-      }
+      // Use lazy shallow copying: only copy messages/parts that need modification
+      const sessionMessages =
+        step > 1 && lastFinished
+          ? msgs.map((msg) => {
+              if (msg.info.role !== "user" || msg.info.id <= lastFinished.id) return msg
+
+              let modified = false
+              const newParts = msg.parts.map((part) => {
+                if (part.type !== "text" || part.ignored || part.synthetic) return part
+                if (!part.text.trim()) return part
+                modified = true
+                return {
+                  ...part,
+                  text: [
+                    "<system-reminder>",
+                    "The user sent the following message:",
+                    part.text,
+                    "",
+                    "Please address this message and continue with your tasks.",
+                    "</system-reminder>",
+                  ].join("\n"),
+                }
+              })
+
+              return modified ? { ...msg, parts: newParts } : msg
+            })
+          : msgs
 
       await Plugin.trigger("experimental.chat.messages.transform", {}, { messages: sessionMessages })
 
@@ -622,12 +637,14 @@ export namespace SessionPrompt {
       })
       if (result === "stop") break
       if (result === "compact") {
-        await SessionCompaction.create({
-          sessionID,
-          agent: lastUser.agent,
-          model: lastUser.model,
-          auto: true,
-        })
+        if (messagesSinceSummary > (config.compaction?.min_messages ?? 5)) {
+          await SessionCompaction.create({
+            sessionID,
+            agent: lastUser.agent,
+            model: lastUser.model,
+            auto: true,
+          })
+        }
       }
       continue
     }
@@ -1623,6 +1640,7 @@ NOTE: At any point in time through this workflow you should feel free to ask the
   export async function command(input: CommandInput) {
     log.info("command", input)
     const command = await Command.get(input.command)
+    if (!command) throw new Error(`Command not found: ${input.command}`)
     const agentName = command.agent ?? input.agent ?? (await Agent.defaultAgent())
 
     const raw = input.arguments.match(argsRegex) ?? []
