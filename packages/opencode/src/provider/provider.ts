@@ -13,30 +13,43 @@ import { Env } from "../env"
 import { Instance } from "../project/instance"
 import { Flag } from "../flag/flag"
 import { iife } from "@/util/iife"
+import { createLruCache } from "@/util/cache"
 
-// Direct imports for bundled providers
-import { createAmazonBedrock, type AmazonBedrockProviderSettings } from "@ai-sdk/amazon-bedrock"
-import { createAnthropic } from "@ai-sdk/anthropic"
-import { createAzure } from "@ai-sdk/azure"
-import { createGoogleGenerativeAI } from "@ai-sdk/google"
-import { createVertex } from "@ai-sdk/google-vertex"
-import { createVertexAnthropic } from "@ai-sdk/google-vertex/anthropic"
-import { createOpenAI } from "@ai-sdk/openai"
-import { createOpenAICompatible } from "@ai-sdk/openai-compatible"
-import { createOpenRouter, type LanguageModelV2 } from "@openrouter/ai-sdk-provider"
-import { createOpenaiCompatible as createGitHubCopilotOpenAICompatible } from "./sdk/copilot"
-import { createXai } from "@ai-sdk/xai"
-import { createMistral } from "@ai-sdk/mistral"
-import { createGroq } from "@ai-sdk/groq"
-import { createDeepInfra } from "@ai-sdk/deepinfra"
-import { createCerebras } from "@ai-sdk/cerebras"
-import { createCohere } from "@ai-sdk/cohere"
-import { createGateway } from "@ai-sdk/gateway"
-import { createTogetherAI } from "@ai-sdk/togetherai"
-import { createPerplexity } from "@ai-sdk/perplexity"
-import { createVercel } from "@ai-sdk/vercel"
-import { createGitLab } from "@gitlab/gitlab-ai-provider"
+// Type imports only (no runtime cost)
+import type { AmazonBedrockProviderSettings } from "@ai-sdk/amazon-bedrock"
+import type { LanguageModelV2 } from "@openrouter/ai-sdk-provider"
 import { ProviderTransform } from "./transform"
+
+// Lazy provider loaders - only import when first used
+type ProviderFactory = (options: any) => any
+
+const lazyProviders: Record<string, () => Promise<ProviderFactory>> = {
+  "@ai-sdk/amazon-bedrock": async () => (await import("@ai-sdk/amazon-bedrock")).createAmazonBedrock,
+  "@ai-sdk/anthropic": async () => (await import("@ai-sdk/anthropic")).createAnthropic,
+  "@ai-sdk/azure": async () => (await import("@ai-sdk/azure")).createAzure,
+  "@ai-sdk/google": async () => (await import("@ai-sdk/google")).createGoogleGenerativeAI,
+  "@ai-sdk/google-vertex": async () => (await import("@ai-sdk/google-vertex")).createVertex,
+  "@ai-sdk/google-vertex/anthropic": async () =>
+    (await import("@ai-sdk/google-vertex/anthropic")).createVertexAnthropic,
+  "@ai-sdk/openai": async () => (await import("@ai-sdk/openai")).createOpenAI,
+  "@ai-sdk/openai-compatible": async () => (await import("@ai-sdk/openai-compatible")).createOpenAICompatible,
+  "@openrouter/ai-sdk-provider": async () => (await import("@openrouter/ai-sdk-provider")).createOpenRouter,
+  "@ai-sdk/xai": async () => (await import("@ai-sdk/xai")).createXai,
+  "@ai-sdk/mistral": async () => (await import("@ai-sdk/mistral")).createMistral,
+  "@ai-sdk/groq": async () => (await import("@ai-sdk/groq")).createGroq,
+  "@ai-sdk/deepinfra": async () => (await import("@ai-sdk/deepinfra")).createDeepInfra,
+  "@ai-sdk/cerebras": async () => (await import("@ai-sdk/cerebras")).createCerebras,
+  "@ai-sdk/cohere": async () => (await import("@ai-sdk/cohere")).createCohere,
+  "@ai-sdk/gateway": async () => (await import("@ai-sdk/gateway")).createGateway,
+  "@ai-sdk/togetherai": async () => (await import("@ai-sdk/togetherai")).createTogetherAI,
+  "@ai-sdk/perplexity": async () => (await import("@ai-sdk/perplexity")).createPerplexity,
+  "@ai-sdk/vercel": async () => (await import("@ai-sdk/vercel")).createVercel,
+  "@gitlab/gitlab-ai-provider": async () => (await import("@gitlab/gitlab-ai-provider")).createGitLab,
+  "@ai-sdk/github-copilot": async () => (await import("./sdk/copilot")).createOpenaiCompatible,
+}
+
+// Cache for loaded providers to avoid repeated imports
+const loadedProviders = new Map<string, ProviderFactory>()
 
 export namespace Provider {
   const log = Log.create({ service: "provider" })
@@ -53,29 +66,15 @@ export namespace Provider {
     return isGpt5OrLater(modelID) && !modelID.startsWith("gpt-5-mini")
   }
 
-  const BUNDLED_PROVIDERS: Record<string, (options: any) => SDK> = {
-    "@ai-sdk/amazon-bedrock": createAmazonBedrock,
-    "@ai-sdk/anthropic": createAnthropic,
-    "@ai-sdk/azure": createAzure,
-    "@ai-sdk/google": createGoogleGenerativeAI,
-    "@ai-sdk/google-vertex": createVertex,
-    "@ai-sdk/google-vertex/anthropic": createVertexAnthropic,
-    "@ai-sdk/openai": createOpenAI,
-    "@ai-sdk/openai-compatible": createOpenAICompatible,
-    "@openrouter/ai-sdk-provider": createOpenRouter,
-    "@ai-sdk/xai": createXai,
-    "@ai-sdk/mistral": createMistral,
-    "@ai-sdk/groq": createGroq,
-    "@ai-sdk/deepinfra": createDeepInfra,
-    "@ai-sdk/cerebras": createCerebras,
-    "@ai-sdk/cohere": createCohere,
-    "@ai-sdk/gateway": createGateway,
-    "@ai-sdk/togetherai": createTogetherAI,
-    "@ai-sdk/perplexity": createPerplexity,
-    "@ai-sdk/vercel": createVercel,
-    "@gitlab/gitlab-ai-provider": createGitLab,
-    // @ts-ignore (TODO: kill this code so we dont have to maintain it)
-    "@ai-sdk/github-copilot": createGitHubCopilotOpenAICompatible,
+  // Helper to get or load a bundled provider
+  async function getBundledProvider(key: string): Promise<ProviderFactory | undefined> {
+    const cached = loadedProviders.get(key)
+    if (cached) return cached
+    const loader = lazyProviders[key]
+    if (!loader) return undefined
+    const factory = await loader()
+    loadedProviders.set(key, factory)
+    return factory
   }
 
   type CustomModelLoader = (sdk: any, modelID: string, options?: Record<string, any>) => Promise<any>
@@ -435,7 +434,7 @@ export namespace Provider {
             ...(providerConfig?.options?.featureFlags || {}),
           },
         },
-        async getModel(sdk: ReturnType<typeof createGitLab>, modelID: string) {
+        async getModel(sdk: any, modelID: string) {
           return sdk.agenticChat(modelID, {
             featureFlags: {
               duo_agent_platform_agentic_chat: true,
@@ -692,11 +691,12 @@ export namespace Provider {
     }
 
     const providers: { [providerID: string]: Info } = {}
-    const languages = new Map<string, LanguageModelV2>()
+    const languages = createLruCache<string, LanguageModelV2>({
+      maxEntries: 100,
+    })
     const modelLoaders: {
       [providerID: string]: CustomModelLoader
     } = {}
-    const sdk = new Map<number, SDK>()
 
     log.info("init")
 
@@ -951,7 +951,15 @@ export namespace Provider {
     return {
       models: languages,
       providers,
-      sdk,
+      sdk: createLruCache({
+        maxEntries: 50,
+        onEvict: (key, sdk) => {
+          // SDK may have cleanup methods
+          if (sdk && typeof sdk === "object" && "destroy" in sdk) {
+            sdk.destroy?.()
+          }
+        },
+      }),
       modelLoaders,
     }
   })
@@ -1027,7 +1035,7 @@ export namespace Provider {
         })
       }
 
-      const bundledFn = BUNDLED_PROVIDERS[model.api.npm]
+      const bundledFn = await getBundledProvider(model.api.npm)
       if (bundledFn) {
         log.info("using bundled provider", { providerID: model.providerID, pkg: model.api.npm })
         const loaded = bundledFn({
@@ -1040,7 +1048,7 @@ export namespace Provider {
 
       let installedPath: string
       if (!model.api.npm.startsWith("file://")) {
-        installedPath = await BunProc.install(model.api.npm, "latest")
+        installedPath = await BunProc.install(model.api.npm, "latest", model.providerID)
       } else {
         log.info("loading local provider", { pkg: model.api.npm })
         installedPath = model.api.npm
