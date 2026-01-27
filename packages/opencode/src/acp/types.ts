@@ -11,6 +11,7 @@ export interface ACPSessionState {
     modelID: string
   }
   modeId?: string
+  abortController?: AbortController
 }
 
 export interface ACPConfig {
