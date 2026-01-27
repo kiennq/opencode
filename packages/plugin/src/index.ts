@@ -224,4 +224,8 @@ export interface Hooks {
     input: { sessionID: string; messageID: string; partID: string },
     output: { text: string },
   ) => Promise<void>
+  /**
+   * Called when the plugin is being disposed/cleaned up
+   */
+  dispose?: () => Promise<void>
 }
