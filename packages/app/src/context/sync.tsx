@@ -86,6 +86,70 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
         })
     }
 
+    const loadMoreMessagesWithOffset = async (input: {
+      directory: string
+      client: typeof sdk.client
+      setStore: Setter
+      sessionID: string
+      count: number
+    }) => {
+      const key = keyFor(input.directory, input.sessionID)
+      if (meta.loading[key]) return
+      if (meta.complete[key]) return
+
+      const store = globalSync.child(input.directory)[0]
+      const currentMessages = store.message[input.sessionID] ?? []
+      const offset = currentMessages.length
+
+      setMeta("loading", key, true)
+      await retry(() => input.client.session.messages({ sessionID: input.sessionID, limit: input.count, offset }))
+        .then((messages) => {
+          const items = (messages.data ?? []).filter((x) => !!x?.info?.id)
+          const newMessages = items.map((x) => x.info).filter((m) => !!m?.id)
+
+          if (newMessages.length === 0) {
+            setMeta("complete", key, true)
+            return
+          }
+
+          batch(() => {
+            input.setStore(
+              "message",
+              input.sessionID,
+              produce((draft) => {
+                for (const msg of newMessages) {
+                  const result = Binary.search(draft, msg.id, (m) => m.id)
+                  if (!result.found) {
+                    draft.splice(result.index, 0, msg)
+                  }
+                }
+              }),
+            )
+
+            for (const message of items) {
+              input.setStore(
+                "part",
+                message.info.id,
+                reconcile(
+                  message.parts
+                    .filter((p) => !!p?.id)
+                    .slice()
+                    .sort((a, b) => a.id.localeCompare(b.id)),
+                  { key: "id" },
+                ),
+              )
+            }
+
+            const newLimit = (meta.limit[key] ?? chunk) + input.count
+            setMeta("limit", key, newLimit)
+            setMeta("complete", key, newMessages.length < input.count)
+          })
+        })
+        .finally(() => {
+          setMeta("loading", key, false)
+        })
+    }
+
     return {
       get data() {
         return current()[0]
@@ -251,17 +315,12 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
             const directory = sdk.directory
             const client = sdk.client
             const [, setStore] = globalSync.child(directory)
-            const key = keyFor(directory, sessionID)
-            if (meta.loading[key]) return
-            if (meta.complete[key]) return
-
-            const currentLimit = meta.limit[key] ?? chunk
-            await loadMessages({
+            await loadMoreMessagesWithOffset({
               directory,
               client,
               setStore,
               sessionID,
-              limit: currentLimit + count,
+              count,
             })
           },
         },
