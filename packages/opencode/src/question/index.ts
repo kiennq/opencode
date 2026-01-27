@@ -111,6 +111,22 @@ export namespace Question {
         questions: input.questions,
         tool: input.tool,
       }
+
+      const timeout = setTimeout(
+        () => {
+          if (s.pending[id]) {
+            delete s.pending[id]
+            log.info("timed out", { requestID: id })
+            Bus.publish(Event.Rejected, {
+              sessionID: input.sessionID,
+              requestID: id,
+            })
+            reject(new Error("Question timed out"))
+          }
+        },
+        5 * 60 * 1000,
+      )
+
       s.pending[id] = {
         info,
         resolve,

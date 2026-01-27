@@ -252,10 +252,16 @@ async function isBinaryFile(filepath: string, file: Bun.BunFile): Promise<boolea
   const fileSize = stat.size
   if (fileSize === 0) return false
 
+  // Only read the first 4KB to check for binary content, not the entire file
   const bufferSize = Math.min(4096, fileSize)
-  const buffer = await file.arrayBuffer()
-  if (buffer.byteLength === 0) return false
-  const bytes = new Uint8Array(buffer.slice(0, bufferSize))
+  const bytes = new Uint8Array(bufferSize)
+  const fd = fs.openSync(filepath, "r")
+  try {
+    fs.readSync(fd, bytes, 0, bufferSize, 0)
+  } finally {
+    fs.closeSync(fd)
+  }
+  if (bytes.length === 0) return false
 
   let nonPrintableCount = 0
   for (let i = 0; i < bytes.length; i++) {
