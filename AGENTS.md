@@ -1,4 +1,4 @@
-- To regenerate the JavaScript SDK, run `./packages/sdk/js/script/build.ts`.
+﻿- To regenerate the JavaScript SDK, run `./packages/sdk/js/script/build.ts`.
 - ALWAYS USE PARALLEL TOOLS WHEN APPLICABLE.
 - The default branch in this repo is `dev`.
 - Prefer automation: execute requested actions without confirmation unless blocked by missing info or safety/irreversibility.
@@ -122,4 +122,3 @@ On Windows run both:
 
 - Fetch the upstream and rebase on top of that, resolving any conflicts and force push to origin.
 - When pulling PR from upstream, always do squash merge.
-- Always, disable new workflows from upstream
