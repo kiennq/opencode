@@ -1,5 +1,6 @@
 import { Bus } from "../bus"
 import { Installation } from "../installation"
+import { Instance } from "../project/instance"
 import { Session } from "../session"
 import { MessageV2 } from "../session/message-v2"
 import { Log } from "../util/log"
@@ -46,24 +47,49 @@ export namespace Share {
       })
   }
 
-  export function init() {
-    Bus.subscribe(Session.Event.Updated, async (evt) => {
-      await sync("session/info/" + evt.properties.info.id, evt.properties.info)
-    })
-    Bus.subscribe(MessageV2.Event.Updated, async (evt) => {
-      await sync("session/message/" + evt.properties.info.sessionID + "/" + evt.properties.info.id, evt.properties.info)
-    })
-    Bus.subscribe(MessageV2.Event.PartUpdated, async (evt) => {
-      await sync(
-        "session/part/" +
-          evt.properties.part.sessionID +
-          "/" +
-          evt.properties.part.messageID +
-          "/" +
-          evt.properties.part.id,
-        evt.properties.part,
+  const state = Instance.state(
+    async () => {
+      const unsubs: Array<() => void> = []
+
+      unsubs.push(
+        Bus.subscribe(Session.Event.Updated, async (evt) => {
+          await sync("session/info/" + evt.properties.info.id, evt.properties.info)
+        }),
       )
-    })
+      unsubs.push(
+        Bus.subscribe(MessageV2.Event.Updated, async (evt) => {
+          await sync(
+            "session/message/" + evt.properties.info.sessionID + "/" + evt.properties.info.id,
+            evt.properties.info,
+          )
+        }),
+      )
+      unsubs.push(
+        Bus.subscribe(MessageV2.Event.PartUpdated, async (evt) => {
+          await sync(
+            "session/part/" +
+              evt.properties.part.sessionID +
+              "/" +
+              evt.properties.part.messageID +
+              "/" +
+              evt.properties.part.id,
+            evt.properties.part,
+          )
+        }),
+      )
+
+      return { unsubs }
+    },
+    async (s) => {
+      for (const unsub of s.unsubs) {
+        unsub()
+      }
+      pending.clear()
+    },
+  )
+
+  export function init() {
+    state()
   }
 
   export const URL =
