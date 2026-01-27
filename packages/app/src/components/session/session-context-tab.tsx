@@ -126,7 +126,11 @@ export function SessionContextTab(props: SessionContextTabProps) {
               if (part.type === "tool") {
                 out.tool += Object.keys(part.state.input).length * 16
                 if (part.state.status === "pending") out.tool += part.state.raw.length
-                if (part.state.status === "completed") out.tool += part.state.output.length
+                if (part.state.status === "completed") {
+                  // Use summary length for compacted parts since output is cleared
+                  const text = part.state.time.compacted ? (part.state.summary ?? "") : part.state.output
+                  out.tool += text.length
+                }
                 if (part.state.status === "error") out.tool += part.state.error.length
               }
             }

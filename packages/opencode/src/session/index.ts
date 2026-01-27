@@ -21,24 +21,27 @@ import { Snapshot } from "@/snapshot"
 
 import type { Provider } from "@/provider/provider"
 import { PermissionNext } from "@/permission/next"
+import { Question } from "@/question"
 import { Global } from "@/global"
 import type { LanguageModelV2Usage } from "@ai-sdk/provider"
 import { iife } from "@/util/iife"
+import { FileTime } from "@/file/time"
 
 export namespace Session {
   const log = Log.create({ service: "session" })
 
   const parentTitlePrefix = "New session - "
   const childTitlePrefix = "Child session - "
+  const defaultTitleRegex = new RegExp(
+    `^(${parentTitlePrefix}|${childTitlePrefix})\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}\\.\\d{3}Z$`,
+  )
 
   function createDefaultTitle(isChild = false) {
     return (isChild ? childTitlePrefix : parentTitlePrefix) + new Date().toISOString()
   }
 
   export function isDefaultTitle(title: string) {
-    return new RegExp(
-      `^(${parentTitlePrefix}|${childTitlePrefix})\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}\\.\\d{3}Z$`,
-    ).test(title)
+    return defaultTitleRegex.test(title)
   }
 
   function getForkedTitle(title: string): string {
@@ -186,14 +189,16 @@ export namespace Session {
           ...(parentID && { parentID }),
         })
 
-        for (const part of msg.parts) {
-          await updatePart({
-            ...part,
-            id: Identifier.ascending("part"),
-            messageID: cloned.id,
-            sessionID: session.id,
-          })
-        }
+        await Promise.all(
+          msg.parts.map((part) =>
+            updatePart({
+              ...part,
+              id: Identifier.ascending("part"),
+              messageID: cloned.id,
+              sessionID: session.id,
+            }),
+          ),
+        )
       }
       return session
     },
@@ -233,15 +238,9 @@ export namespace Session {
     })
     const cfg = await Config.get()
     if (!result.parentID && (Flag.OPENCODE_AUTO_SHARE || cfg.share === "auto"))
-      share(result.id)
-        .then((share) => {
-          update(result.id, (draft) => {
-            draft.share = share
-          })
-        })
-        .catch(() => {
-          // Silently ignore sharing errors during session creation
-        })
+      share(result.id).catch(() => {
+        // Silently ignore sharing errors during session creation
+      })
     Bus.publish(Event.Updated, {
       info: result,
     })
@@ -271,7 +270,7 @@ export namespace Session {
     }
     const { ShareNext } = await import("@/share/share-next")
     const share = await ShareNext.create(id)
-    await update(
+    const session = await update(
       id,
       (draft) => {
         draft.share = {
@@ -280,14 +279,14 @@ export namespace Session {
       },
       { touch: false },
     )
-    return share
+    return { share, session }
   })
 
   export const unshare = fn(Identifier.schema("session"), async (id) => {
     // Use ShareNext to remove the share (same as share function uses ShareNext to create)
     const { ShareNext } = await import("@/share/share-next")
     await ShareNext.remove(id)
-    await update(
+    return update(
       id,
       (draft) => {
         draft.share = undefined
@@ -319,10 +318,18 @@ export namespace Session {
     z.object({
       sessionID: Identifier.schema("session"),
       limit: z.number().optional(),
+      offset: z.number().optional(),
     }),
     async (input) => {
       const result = [] as MessageV2.WithParts[]
+      let skipped = 0
+      const offset = input.offset ?? 0
       for await (const msg of MessageV2.stream(input.sessionID)) {
+        // Skip messages until we reach the offset
+        if (skipped < offset) {
+          skipped++
+          continue
+        }
         if (input.limit && result.length >= input.limit) break
         result.push(msg)
       }
@@ -360,16 +367,25 @@ export namespace Session {
         await remove(child.id)
       }
       await unshare(sessionID).catch(() => {})
-      for (const msg of await Storage.list(["message", sessionID])) {
-        for (const part of await Storage.list(["part", msg.at(-1)!])) {
-          await Storage.remove(part)
-        }
-        await Storage.remove(msg)
-      }
+
+      FileTime.clearSession(sessionID)
+      await PermissionNext.clearSession(sessionID)
+      await Question.clearSession(sessionID)
+
+      const msgs = await Storage.list(["message", sessionID])
+      await Promise.all(
+        msgs.map(async (msg) => {
+          const parts = await Storage.list(["part", msg.at(-1)!])
+          await Promise.all(parts.map((part) => Storage.remove(part)))
+          await Storage.remove(msg)
+        }),
+      )
       await Storage.remove(["session", project.id, sessionID])
       Bus.publish(Event.Deleted, {
         info: session,
       })
+      // Force GC after session deletion to reclaim memory
+      if (global.gc) global.gc(true)
     } catch (e) {
       log.error(e)
     }
