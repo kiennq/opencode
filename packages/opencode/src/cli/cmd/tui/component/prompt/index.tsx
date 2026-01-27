@@ -92,14 +92,16 @@ export function Prompt(props: PromptProps) {
   const pasteStyleId = syntax().getStyleId("extmark.paste")!
   let promptPartTypeId = 0
 
-  sdk.event.on(TuiEvent.PromptAppend.type, (evt) => {
-    input.insertText(evt.properties.text)
-    setTimeout(() => {
-      input.getLayoutNode().markDirty()
-      input.gotoBufferEnd()
-      renderer.requestRender()
-    }, 0)
-  })
+  onCleanup(
+    sdk.event.on(TuiEvent.PromptAppend.type, (evt) => {
+      input.insertText(evt.properties.text)
+      setTimeout(() => {
+        input.getLayoutNode().markDirty()
+        input.gotoBufferEnd()
+        renderer.requestRender()
+      }, 0)
+    }),
+  )
 
   createEffect(() => {
     if (props.disabled) input.cursorColor = theme.backgroundElement
@@ -130,16 +132,16 @@ export function Prompt(props: PromptProps) {
     interrupt: 0,
   })
 
-  // Initialize agent/model/variant from last user message when session changes
-  let syncedSessionID: string | undefined
+  // Initialize agent/model/variant from last user message when it changes.
+  // This handles both initial session load AND compaction (where a new user
+  // message is created with the current agent state).
+  let syncedMessageID: string | undefined
   createEffect(() => {
-    const sessionID = props.sessionID
     const msg = lastUserMessage()
+    if (!msg) return
 
-    if (sessionID !== syncedSessionID) {
-      if (!sessionID || !msg) return
-
-      syncedSessionID = sessionID
+    if (msg.id !== syncedMessageID) {
+      syncedMessageID = msg.id
 
       // Only set agent if it's a primary agent (not a subagent)
       const isPrimaryAgent = local.agent.list().some((x) => x.name === msg.agent)
@@ -781,6 +783,10 @@ export function Prompt(props: PromptProps) {
                 setStore("prompt", "input", value)
                 autocomplete.onInput(value)
                 syncExtmarksWithPromptParts()
+                // Force layout update and render to keep cursor visible when typing
+                // beyond the visible area (matches pattern in onPaste handler)
+                input.getLayoutNode().markDirty()
+                renderer.requestRender()
               }}
               keyBindings={textareaKeybindings()}
               onKeyDown={async (e) => {
