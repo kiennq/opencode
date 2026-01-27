@@ -1087,8 +1087,47 @@ export namespace Config {
         .object({
           auto: z.boolean().optional().describe("Enable automatic compaction when context is full (default: true)"),
           prune: z.boolean().optional().describe("Enable pruning of old tool outputs (default: true)"),
+          token_threshold: z.number().int().positive().optional().describe("Trigger compaction when total token count exceeds this absolute number"),
+          context_threshold: z.number().gt(0).lte(1).optional().describe("Trigger compaction when token usage exceeds this fraction of the model context window (e.g. 0.8 = 80%)"),
+          min_messages: z.number().int().positive().optional().describe("Minimum number of messages to wait before next compaction (default: 5)"),
         })
         .optional(),
+      pruning: z
+        .object({
+          enabled: z.boolean().optional().describe("Enable smart pruning (default: true)"),
+          budgets: z
+            .object({
+              content: z
+                .number()
+                .optional()
+                .describe("Token budget for content tools like read/webfetch (default: 60000)"),
+              navigation: z
+                .number()
+                .optional()
+                .describe("Token budget for navigation tools like grep/glob (default: 15000)"),
+            })
+            .optional(),
+          summarization: z
+            .object({
+              enabled: z.boolean().optional().describe("Enable LLM summarization for content tools (default: true)"),
+              model: z
+                .string()
+                .optional()
+                .describe("Model to use for summarization (default: uses small_model or provider's small model)"),
+            })
+            .optional(),
+          contentTools: z
+            .array(z.string())
+            .optional()
+            .describe("Additional tools to treat as content tools (high priority)"),
+          navigationTools: z
+            .array(z.string())
+            .optional()
+            .describe("Additional tools to treat as navigation tools (low priority)"),
+          protectedTools: z.array(z.string()).optional().describe("Tools that should never be pruned"),
+        })
+        .optional()
+        .describe("Smart pruning configuration for tiered tool output management"),
       experimental: z
         .object({
           disable_paste_summary: z.boolean().optional(),
@@ -1149,12 +1188,14 @@ export namespace Config {
 
   async function loadFile(filepath: string): Promise<Info> {
     log.info("loading", { path: filepath })
-    let text = await Bun.file(filepath)
-      .text()
-      .catch((err) => {
-        if (err.code === "ENOENT") return
-        throw new JsonError({ path: filepath }, { cause: err })
-      })
+    const file = Bun.file(filepath)
+    // Check exists() first to work around Bun bug on Windows where text() on
+    // non-existent files can hang when called inside AsyncLocalStorage.run()
+    // with non-awaited promise chains (main().then().catch() pattern)
+    if (!(await file.exists())) return {}
+    const text = await file.text().catch((err) => {
+      throw new JsonError({ path: filepath }, { cause: err })
+    })
     if (!text) return {}
     return load(text, filepath)
   }
