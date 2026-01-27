@@ -52,10 +52,13 @@ export const AcpCommand = cmd({
       })
 
       const stream = ndJsonStream(input, output)
-      const agent = await ACP.init({ sdk })
+      const factory = await ACP.init({ sdk })
 
+      const agents: ACP.Agent[] = []
       new AgentSideConnection((conn) => {
-        return agent.create(conn, { sdk })
+        const instance = factory.create(conn, { sdk })
+        agents.push(instance)
+        return instance
       }, stream)
 
       log.info("setup connection")
@@ -64,6 +67,8 @@ export const AcpCommand = cmd({
         process.stdin.on("end", resolve)
         process.stdin.on("error", reject)
       })
+
+      await Promise.all(agents.map((a) => a.dispose()))
     })
   },
 })
