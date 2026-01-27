@@ -1,6 +1,12 @@
 import { Ripgrep } from "../file/ripgrep"
+import { Global } from "../global"
+import { Filesystem } from "../util/filesystem"
+import { Config } from "../config/config"
+import { Log } from "../util/log"
 
 import { Instance } from "../project/instance"
+import path from "path"
+import os from "os"
 
 import PROMPT_ANTHROPIC from "./prompt/anthropic.txt"
 import PROMPT_ANTHROPIC_WITHOUT_TODO from "./prompt/qwen.txt"
@@ -9,6 +15,22 @@ import PROMPT_GEMINI from "./prompt/gemini.txt"
 
 import PROMPT_CODEX from "./prompt/codex_header.txt"
 import type { Provider } from "@/provider/provider"
+import { Flag } from "@/flag/flag"
+
+const log = Log.create({ service: "system-prompt" })
+
+async function resolveRelativeInstruction(instruction: string): Promise<string[]> {
+  if (!Flag.OPENCODE_DISABLE_PROJECT_CONFIG) {
+    return Filesystem.globUp(instruction, Instance.directory, Instance.worktree).catch(() => [])
+  }
+  if (!Flag.OPENCODE_CONFIG_DIR) {
+    log.warn(
+      `Skipping relative instruction "${instruction}" - no OPENCODE_CONFIG_DIR set while project config is disabled`,
+    )
+    return []
+  }
+  return Filesystem.globUp(instruction, Flag.OPENCODE_CONFIG_DIR, Flag.OPENCODE_CONFIG_DIR).catch(() => [])
+}
 
 export namespace SystemPrompt {
   export function instructions() {
@@ -48,5 +70,92 @@ export namespace SystemPrompt {
         `</directories>`,
       ].join("\n"),
     ]
+  }
+
+  const LOCAL_RULE_FILES = [
+    "AGENTS.md",
+    "CLAUDE.md",
+    "CONTEXT.md", // deprecated
+  ]
+  const GLOBAL_RULE_FILES = [path.join(Global.Path.config, "AGENTS.md")]
+  if (!Flag.OPENCODE_DISABLE_CLAUDE_CODE_PROMPT) {
+    GLOBAL_RULE_FILES.push(path.join(os.homedir(), ".claude", "CLAUDE.md"))
+  }
+
+  if (Flag.OPENCODE_CONFIG_DIR) {
+    GLOBAL_RULE_FILES.push(path.join(Flag.OPENCODE_CONFIG_DIR, "AGENTS.md"))
+  }
+
+  // TTL cache for custom instructions (30 seconds)
+  const CUSTOM_CACHE_TTL = 30_000
+  let customCache: { value: string[]; expiry: number; directory: string } | undefined
+
+  export async function custom() {
+    const now = Date.now()
+    if (customCache && customCache.directory === Instance.directory && now < customCache.expiry) {
+      return customCache.value
+    }
+    const config = await Config.get()
+    const paths = new Set<string>()
+
+    // Only scan local rule files when project discovery is enabled
+    if (!Flag.OPENCODE_DISABLE_PROJECT_CONFIG) {
+      for (const localRuleFile of LOCAL_RULE_FILES) {
+        const matches = await Filesystem.findUp(localRuleFile, Instance.directory, Instance.worktree)
+        if (matches.length > 0) {
+          matches.forEach((path) => paths.add(path))
+          break
+        }
+      }
+    }
+
+    for (const globalRuleFile of GLOBAL_RULE_FILES) {
+      if (await Bun.file(globalRuleFile).exists()) {
+        paths.add(globalRuleFile)
+        break
+      }
+    }
+
+    const urls: string[] = []
+    if (config.instructions) {
+      for (let instruction of config.instructions) {
+        if (instruction.startsWith("https://") || instruction.startsWith("http://")) {
+          urls.push(instruction)
+          continue
+        }
+        if (instruction.startsWith("~/")) {
+          instruction = path.join(os.homedir(), instruction.slice(2))
+        }
+        let matches: string[] = []
+        if (path.isAbsolute(instruction)) {
+          matches = await Array.fromAsync(
+            new Bun.Glob(path.basename(instruction)).scan({
+              cwd: path.dirname(instruction),
+              absolute: true,
+              onlyFiles: true,
+            }),
+          ).catch(() => [])
+        } else {
+          matches = await resolveRelativeInstruction(instruction)
+        }
+        matches.forEach((path) => paths.add(path))
+      }
+    }
+
+    const foundFiles = Array.from(paths).map((p) =>
+      Bun.file(p)
+        .text()
+        .catch(() => "")
+        .then((x) => "Instructions from: " + p + "\n" + x),
+    )
+    const foundUrls = urls.map((url) =>
+      fetch(url, { signal: AbortSignal.timeout(5000) })
+        .then((res) => (res.ok ? res.text() : ""))
+        .catch(() => "")
+        .then((x) => (x ? "Instructions from: " + url + "\n" + x : "")),
+    )
+    const result = (await Promise.all([...foundFiles, ...foundUrls])).filter(Boolean)
+    customCache = { value: result, expiry: Date.now() + CUSTOM_CACHE_TTL, directory: Instance.directory }
+    return result
   }
 }
