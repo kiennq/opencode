@@ -7,6 +7,7 @@ import {
   For,
   Match,
   on,
+  onCleanup,
   Show,
   Switch,
   useContext,
@@ -120,14 +121,32 @@ export function Session() {
       .filter((x) => x.parentID === parentID || x.id === parentID)
       .toSorted((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0))
   })
+
+  // Recursively collect all descendant session IDs
+  const descendants = createMemo(() => {
+    const collect = (id: string, visited: Set<string>): string[] => {
+      if (visited.has(id)) return []
+      visited.add(id)
+
+      const directChildren = sync.data.session.filter((x) => x.parentID === id).map((x) => x.id)
+
+      return [id, ...directChildren.flatMap((childID) => collect(childID, visited))]
+    }
+
+    const root = session()?.parentID ?? session()?.id
+    return root ? collect(root, new Set()) : []
+  })
+
   const messages = createMemo(() => sync.data.message[route.sessionID] ?? [])
+
   const permissions = createMemo(() => {
     if (session()?.parentID) return []
-    return children().flatMap((x) => sync.data.permission[x.id] ?? [])
+    return descendants().flatMap((x) => sync.data.permission[x] ?? [])
   })
+
   const questions = createMemo(() => {
     if (session()?.parentID) return []
-    return children().flatMap((x) => sync.data.question[x.id] ?? [])
+    return descendants().flatMap((x) => sync.data.question[x] ?? [])
   })
 
   const pending = createMemo(() => {
@@ -199,21 +218,23 @@ export function Session() {
   })
 
   let lastSwitch: string | undefined = undefined
-  sdk.event.on("message.part.updated", (evt) => {
-    const part = evt.properties.part
-    if (part.type !== "tool") return
-    if (part.sessionID !== route.sessionID) return
-    if (part.state.status !== "completed") return
-    if (part.id === lastSwitch) return
+  onCleanup(
+    sdk.event.on("message.part.updated", (evt) => {
+      const part = evt.properties.part
+      if (part.type !== "tool") return
+      if (part.sessionID !== route.sessionID) return
+      if (part.state.status !== "completed") return
+      if (part.id === lastSwitch) return
 
-    if (part.tool === "plan_exit") {
-      local.agent.set("build")
-      lastSwitch = part.id
-    } else if (part.tool === "plan_enter") {
-      local.agent.set("plan")
-      lastSwitch = part.id
-    }
-  })
+      if (part.tool === "plan_exit") {
+        local.agent.set("build")
+        lastSwitch = part.id
+      } else if (part.tool === "plan_enter") {
+        local.agent.set("plan")
+        lastSwitch = part.id
+      }
+    }),
+  )
 
   let scroll: ScrollBoxRenderable
   let prompt: PromptRef
