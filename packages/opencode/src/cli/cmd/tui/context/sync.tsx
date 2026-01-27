@@ -25,7 +25,7 @@ import { createSimpleContext } from "./helper"
 import type { Snapshot } from "@/snapshot"
 import { useExit } from "./exit"
 import { useArgs } from "./args"
-import { batch, onMount } from "solid-js"
+import { batch, onCleanup, onMount } from "solid-js"
 import { Log } from "@/util/log"
 import type { Path } from "@opencode-ai/sdk"
 
@@ -104,7 +104,9 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
 
     const sdk = useSDK()
 
-    sdk.event.listen((e) => {
+    const fullSyncedSessions = new Set<string>()
+
+    const unsubscribe = sdk.event.listen((e) => {
       const event = e.details
       switch (event.type) {
         case "server.instance.disposed":
@@ -194,7 +196,9 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
           break
 
         case "session.deleted": {
-          const result = Binary.search(store.session, event.properties.info.id, (s) => s.id)
+          const sessionID = event.properties.info.id
+          fullSyncedSessions.delete(sessionID)
+          const result = Binary.search(store.session, sessionID, (s) => s.id)
           if (result.found) {
             setStore(
               "session",
@@ -322,8 +326,16 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
           setStore("vcs", { branch: event.properties.branch })
           break
         }
+
+        case "command.updated": {
+          setStore("command", reconcile(event.properties))
+          break
+        }
       }
     })
+
+    // Clean up event listener on unmount to prevent memory leak
+    onCleanup(unsubscribe)
 
     const exit = useExit()
     const args = useArgs()
@@ -383,7 +395,15 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
           if (store.status !== "complete") setStore("status", "partial")
           // non-blocking
           Promise.all([
-            ...(args.continue ? [] : [sessionListPromise.then((sessions) => setStore("session", reconcile(sessions)))]),
+            ...(args.continue
+              ? []
+              : [
+                  sessionListPromise.then((sessions) => {
+                    // Merge with existing sessions to prevent race condition on creation
+                    const merged = new Map([...store.session, ...sessions].map((s) => [s.id, s]))
+                    setStore("session", reconcile([...merged.values()].toSorted((a, b) => a.id.localeCompare(b.id))))
+                  }),
+                ]),
             sdk.client.command.list().then((x) => setStore("command", reconcile(x.data ?? []))),
             sdk.client.lsp.status().then((x) => setStore("lsp", reconcile(x.data!))),
             sdk.client.mcp.status().then((x) => setStore("mcp", reconcile(x.data!))),
@@ -413,7 +433,6 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
       bootstrap()
     })
 
-    const fullSyncedSessions = new Set<string>()
     const result = {
       data: store,
       set: setStore,
