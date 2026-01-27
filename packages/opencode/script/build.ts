@@ -1,6 +1,6 @@
 #!/usr/bin/env bun
 
-import solidPlugin from "../../../node_modules/@opentui/solid/scripts/solid-plugin"
+import solidPlugin from "@opentui/solid/bun-plugin"
 import path from "path"
 import fs from "fs"
 import { $ } from "bun"
@@ -85,6 +85,10 @@ const allTargets: {
     os: "win32",
     arch: "x64",
     avx2: false,
+  },
+  {
+    os: "win32",
+    arch: "arm64",
   },
 ]
 
