@@ -2257,7 +2257,16 @@
             "name": "limit",
             "schema": {
               "type": "number"
-            }
+            },
+            "description": "Maximum number of messages to return"
+          },
+          {
+            "in": "query",
+            "name": "offset",
+            "schema": {
+              "type": "number"
+            },
+            "description": "Number of messages to skip from the start (oldest messages)"
           }
         ],
         "summary": "Get session messages",
@@ -6817,6 +6826,9 @@
           "output": {
             "type": "string"
           },
+          "summary": {
+            "type": "string"
+          },
           "title": {
             "type": "string"
           },
@@ -7339,6 +7351,121 @@
         },
         "required": ["type", "properties"]
       },
+      "Event.tui.prompt.append": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": "string",
+            "const": "tui.prompt.append"
+          },
+          "properties": {
+            "type": "object",
+            "properties": {
+              "text": {
+                "type": "string"
+              }
+            },
+            "required": ["text"]
+          }
+        },
+        "required": ["type", "properties"]
+      },
+      "Event.tui.command.execute": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": "string",
+            "const": "tui.command.execute"
+          },
+          "properties": {
+            "type": "object",
+            "properties": {
+              "command": {
+                "anyOf": [
+                  {
+                    "type": "string",
+                    "enum": [
+                      "session.list",
+                      "session.new",
+                      "session.share",
+                      "session.interrupt",
+                      "session.compact",
+                      "session.page.up",
+                      "session.page.down",
+                      "session.line.up",
+                      "session.line.down",
+                      "session.half.page.up",
+                      "session.half.page.down",
+                      "session.first",
+                      "session.last",
+                      "prompt.clear",
+                      "prompt.submit",
+                      "agent.cycle"
+                    ]
+                  },
+                  {
+                    "type": "string"
+                  }
+                ]
+              }
+            },
+            "required": ["command"]
+          }
+        },
+        "required": ["type", "properties"]
+      },
+      "Event.tui.toast.show": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": "string",
+            "const": "tui.toast.show"
+          },
+          "properties": {
+            "type": "object",
+            "properties": {
+              "title": {
+                "type": "string"
+              },
+              "message": {
+                "type": "string"
+              },
+              "variant": {
+                "type": "string",
+                "enum": ["info", "success", "warning", "error"]
+              },
+              "duration": {
+                "description": "Duration in milliseconds",
+                "default": 5000,
+                "type": "number"
+              }
+            },
+            "required": ["message", "variant"]
+          }
+        },
+        "required": ["type", "properties"]
+      },
+      "Event.tui.session.select": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": "string",
+            "const": "tui.session.select"
+          },
+          "properties": {
+            "type": "object",
+            "properties": {
+              "sessionID": {
+                "description": "Session ID to navigate to",
+                "type": "string",
+                "pattern": "^ses"
+              }
+            },
+            "required": ["sessionID"]
+          }
+        },
+        "required": ["type", "properties"]
+      },
       "SessionStatus": {
         "anyOf": [
           {
@@ -7669,121 +7796,6 @@
         },
         "required": ["type", "properties"]
       },
-      "Event.tui.prompt.append": {
-        "type": "object",
-        "properties": {
-          "type": {
-            "type": "string",
-            "const": "tui.prompt.append"
-          },
-          "properties": {
-            "type": "object",
-            "properties": {
-              "text": {
-                "type": "string"
-              }
-            },
-            "required": ["text"]
-          }
-        },
-        "required": ["type", "properties"]
-      },
-      "Event.tui.command.execute": {
-        "type": "object",
-        "properties": {
-          "type": {
-            "type": "string",
-            "const": "tui.command.execute"
-          },
-          "properties": {
-            "type": "object",
-            "properties": {
-              "command": {
-                "anyOf": [
-                  {
-                    "type": "string",
-                    "enum": [
-                      "session.list",
-                      "session.new",
-                      "session.share",
-                      "session.interrupt",
-                      "session.compact",
-                      "session.page.up",
-                      "session.page.down",
-                      "session.line.up",
-                      "session.line.down",
-                      "session.half.page.up",
-                      "session.half.page.down",
-                      "session.first",
-                      "session.last",
-                      "prompt.clear",
-                      "prompt.submit",
-                      "agent.cycle"
-                    ]
-                  },
-                  {
-                    "type": "string"
-                  }
-                ]
-              }
-            },
-            "required": ["command"]
-          }
-        },
-        "required": ["type", "properties"]
-      },
-      "Event.tui.toast.show": {
-        "type": "object",
-        "properties": {
-          "type": {
-            "type": "string",
-            "const": "tui.toast.show"
-          },
-          "properties": {
-            "type": "object",
-            "properties": {
-              "title": {
-                "type": "string"
-              },
-              "message": {
-                "type": "string"
-              },
-              "variant": {
-                "type": "string",
-                "enum": ["info", "success", "warning", "error"]
-              },
-              "duration": {
-                "description": "Duration in milliseconds",
-                "default": 5000,
-                "type": "number"
-              }
-            },
-            "required": ["message", "variant"]
-          }
-        },
-        "required": ["type", "properties"]
-      },
-      "Event.tui.session.select": {
-        "type": "object",
-        "properties": {
-          "type": {
-            "type": "string",
-            "const": "tui.session.select"
-          },
-          "properties": {
-            "type": "object",
-            "properties": {
-              "sessionID": {
-                "description": "Session ID to navigate to",
-                "type": "string",
-                "pattern": "^ses"
-              }
-            },
-            "required": ["sessionID"]
-          }
-        },
-        "required": ["type", "properties"]
-      },
       "Event.mcp.tools.changed": {
         "type": "object",
         "properties": {
@@ -7851,6 +7863,52 @@
               }
             },
             "required": ["name", "sessionID", "arguments", "messageID"]
+          }
+        },
+        "required": ["type", "properties"]
+      },
+      "Event.command.updated": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": "string",
+            "const": "command.updated"
+          },
+          "properties": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "name": {
+                  "type": "string"
+                },
+                "description": {
+                  "type": "string"
+                },
+                "agent": {
+                  "type": "string"
+                },
+                "model": {
+                  "type": "string"
+                },
+                "mcp": {
+                  "type": "boolean"
+                },
+                "template": {
+                  "type": "string"
+                },
+                "subtask": {
+                  "type": "boolean"
+                },
+                "hints": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                }
+              },
+              "required": ["name", "template", "hints"]
+            }
           }
         },
         "required": ["type", "properties"]
@@ -8317,6 +8375,18 @@
             "$ref": "#/components/schemas/Event.permission.replied"
           },
           {
+            "$ref": "#/components/schemas/Event.tui.prompt.append"
+          },
+          {
+            "$ref": "#/components/schemas/Event.tui.command.execute"
+          },
+          {
+            "$ref": "#/components/schemas/Event.tui.toast.show"
+          },
+          {
+            "$ref": "#/components/schemas/Event.tui.session.select"
+          },
+          {
             "$ref": "#/components/schemas/Event.session.status"
           },
           {
@@ -8341,18 +8411,6 @@
             "$ref": "#/components/schemas/Event.todo.updated"
           },
           {
-            "$ref": "#/components/schemas/Event.tui.prompt.append"
-          },
-          {
-            "$ref": "#/components/schemas/Event.tui.command.execute"
-          },
-          {
-            "$ref": "#/components/schemas/Event.tui.toast.show"
-          },
-          {
-            "$ref": "#/components/schemas/Event.tui.session.select"
-          },
-          {
             "$ref": "#/components/schemas/Event.mcp.tools.changed"
           },
           {
@@ -8360,6 +8418,9 @@
           },
           {
             "$ref": "#/components/schemas/Event.command.executed"
+          },
+          {
+            "$ref": "#/components/schemas/Event.command.updated"
           },
           {
             "$ref": "#/components/schemas/Event.session.created"
@@ -9831,6 +9892,81 @@
               "prune": {
                 "description": "Enable pruning of old tool outputs (default: true)",
                 "type": "boolean"
+              },
+              "token_threshold": {
+                "description": "Trigger compaction when total token count exceeds this absolute number",
+                "type": "integer",
+                "exclusiveMinimum": 0,
+                "maximum": 9007199254740991
+              },
+              "context_threshold": {
+                "description": "Trigger compaction when token usage exceeds this fraction of the model context window (e.g. 0.8 = 80%)",
+                "type": "number",
+                "exclusiveMinimum": 0,
+                "maximum": 1
+              },
+              "min_messages": {
+                "description": "Minimum number of messages to wait before next compaction (default: 5)",
+                "type": "integer",
+                "exclusiveMinimum": 0,
+                "maximum": 9007199254740991
+              }
+            }
+          },
+          "pruning": {
+            "description": "Smart pruning configuration for tiered tool output management",
+            "type": "object",
+            "properties": {
+              "enabled": {
+                "description": "Enable smart pruning (default: true)",
+                "type": "boolean"
+              },
+              "budgets": {
+                "type": "object",
+                "properties": {
+                  "content": {
+                    "description": "Token budget for content tools like read/webfetch (default: 60000)",
+                    "type": "number"
+                  },
+                  "navigation": {
+                    "description": "Token budget for navigation tools like grep/glob (default: 15000)",
+                    "type": "number"
+                  }
+                }
+              },
+              "summarization": {
+                "type": "object",
+                "properties": {
+                  "enabled": {
+                    "description": "Enable LLM summarization for content tools (default: true)",
+                    "type": "boolean"
+                  },
+                  "model": {
+                    "description": "Model to use for summarization (default: uses small_model or provider's small model)",
+                    "type": "string"
+                  }
+                }
+              },
+              "contentTools": {
+                "description": "Additional tools to treat as content tools (high priority)",
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "navigationTools": {
+                "description": "Additional tools to treat as navigation tools (low priority)",
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "protectedTools": {
+                "description": "Tools that should never be pruned",
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
               }
             }
           },
