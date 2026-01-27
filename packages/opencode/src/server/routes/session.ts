@@ -569,7 +569,10 @@ export const SessionRoutes = lazy(() =>
         "query",
         z.object({
           limit: z.coerce.number().optional().meta({ description: "Maximum number of messages to return" }),
-          offset: z.coerce.number().optional().meta({ description: "Number of messages to skip from the start (oldest messages)" }),
+          offset: z.coerce
+            .number()
+            .optional()
+            .meta({ description: "Number of messages to skip from the start (oldest messages)" }),
         }),
       ),
       async (c) => {
