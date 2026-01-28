@@ -117,6 +117,11 @@ export namespace Question {
         () => {
           if (s.pending[id]) {
             delete s.pending[id]
+            log.info("timed out", { requestID: id })
+            Bus.publish(Event.Rejected, {
+              sessionID: input.sessionID,
+              requestID: id,
+            })
             reject(new Error("Question timed out"))
           }
         },
