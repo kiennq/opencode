@@ -29,6 +29,26 @@ import { batch, onCleanup, onMount } from "solid-js"
 import { Log } from "@/util/log"
 import type { Path } from "@opencode-ai/sdk"
 
+// Strip large before/after content from message summary diffs to save memory
+// The full content is available in session_diff if needed
+function stripLargeDiffs(message: Message): Message {
+  if (message.role !== "user") return message
+  const summary = message.summary
+  if (!summary?.diffs) return message
+  return {
+    ...message,
+    summary: {
+      title: summary.title,
+      body: summary.body,
+      diffs: summary.diffs.map((d) => ({
+        ...d,
+        before: "",
+        after: "",
+      })),
+    },
+  }
+}
+
 export const { use: useSync, provider: SyncProvider } = createSimpleContext({
   name: "Sync",
   init: () => {
@@ -207,6 +227,23 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
               }),
             )
           }
+          setStore(
+            produce((draft) => {
+              delete draft.session_diff[sessionID]
+              delete draft.session_status[sessionID]
+              delete draft.todo[sessionID]
+              delete draft.question[sessionID]
+              delete draft.permission[sessionID]
+              // Clean up messages and parts
+              const messages = draft.message[sessionID]
+              if (messages) {
+                for (const msg of messages) {
+                  delete draft.part[msg.id]
+                }
+              }
+              delete draft.message[sessionID]
+            }),
+          )
           break
         }
         case "session.updated": {
@@ -230,30 +267,31 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
         }
 
         case "message.updated": {
-          const messages = store.message[event.properties.info.sessionID]
+          const info = stripLargeDiffs(event.properties.info)
+          const messages = store.message[info.sessionID]
           if (!messages) {
-            setStore("message", event.properties.info.sessionID, [event.properties.info])
+            setStore("message", info.sessionID, [info])
             break
           }
-          const result = Binary.search(messages, event.properties.info.id, (m) => m.id)
+          const result = Binary.search(messages, info.id, (m) => m.id)
           if (result.found) {
-            setStore("message", event.properties.info.sessionID, result.index, reconcile(event.properties.info))
+            setStore("message", info.sessionID, result.index, reconcile(info))
             break
           }
           setStore(
             "message",
-            event.properties.info.sessionID,
+            info.sessionID,
             produce((draft) => {
-              draft.splice(result.index, 0, event.properties.info)
+              draft.splice(result.index, 0, info)
             }),
           )
-          const updated = store.message[event.properties.info.sessionID]
+          const updated = store.message[info.sessionID]
           if (updated.length > 100) {
             const oldest = updated[0]
             batch(() => {
               setStore(
                 "message",
-                event.properties.info.sessionID,
+                info.sessionID,
                 produce((draft) => {
                   draft.shift()
                 }),
@@ -474,7 +512,7 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
               if (match.found) draft.session[match.index] = session.data!
               if (!match.found) draft.session.splice(match.index, 0, session.data!)
               draft.todo[sessionID] = todo.data ?? []
-              draft.message[sessionID] = messages.data!.map((x) => x.info)
+              draft.message[sessionID] = messages.data!.map((x) => stripLargeDiffs(x.info))
               for (const message of messages.data!) {
                 draft.part[message.info.id] = message.parts
               }
