@@ -16,11 +16,42 @@ declare global {
 
 type RpcClient = ReturnType<typeof Rpc.client<typeof rpc>>
 
-function createWorkerFetch(client: RpcClient): typeof fetch {
+// Memory check interval (60 seconds)
+const MEMORY_CHECK_INTERVAL = 60_000
+
+interface WorkerManager {
+  client: RpcClient
+  worker: Worker
+  shutdown: () => Promise<void>
+}
+
+function createWorkerManager(workerPath: string | URL, env: Record<string, string>): WorkerManager {
+  const log = Log.create({ service: "worker" })
+
+  const worker = new Worker(workerPath, { env })
+  worker.onerror = (e) => log.error("worker error", { error: e })
+  const client = Rpc.client<typeof rpc>(worker)
+
+  return {
+    client,
+    worker,
+    async shutdown() {
+      try {
+        await client.call("shutdown", undefined)
+      } catch {
+        // Ignore
+      }
+      client.invalidate()
+      worker.terminate()
+    },
+  }
+}
+
+function createWorkerFetch(pool: WorkerManager): typeof fetch {
   const fn = async (input: RequestInfo | URL, init?: RequestInit): Promise<Response> => {
     const request = new Request(input, init)
     const body = request.body ? await request.text() : undefined
-    const result = await client.call("fetch", {
+    const result = await pool.client.call("fetch", {
       url: request.url,
       method: request.method,
       headers: Object.fromEntries(request.headers.entries()),
@@ -34,9 +65,14 @@ function createWorkerFetch(client: RpcClient): typeof fetch {
   return fn as typeof fetch
 }
 
-function createEventSource(client: RpcClient): EventSource {
+function createEventSource(pool: WorkerManager): EventSource {
   return {
-    on: (handler) => client.on<Event>("event", handler),
+    on: (handler) => {
+      const unsub = pool.client.on<Event>("event", handler)
+      return () => {
+        unsub()
+      }
+    },
   }
 }
 
@@ -95,20 +131,16 @@ export const TuiThreadCommand = cmd({
     })
     try {
       process.chdir(cwd)
-    } catch (e) {
+    } catch {
       UI.error("Failed to change directory to " + cwd)
       return
     }
 
-    const worker = new Worker(workerPath, {
-      env: Object.fromEntries(
-        Object.entries(process.env).filter((entry): entry is [string, string] => entry[1] !== undefined),
-      ),
-    })
-    worker.onerror = (e) => {
-      Log.Default.error(e)
-    }
-    const client = Rpc.client<typeof rpc>(worker)
+    const env = Object.fromEntries(
+      Object.entries(process.env).filter((entry): entry is [string, string] => entry[1] !== undefined),
+    )
+    const pool = createWorkerManager(workerPath, env)
+
     process.on("uncaughtException", (e) => {
       Log.Default.error(e)
     })
@@ -116,7 +148,7 @@ export const TuiThreadCommand = cmd({
       Log.Default.error(e)
     })
     process.on("SIGUSR2", async () => {
-      await client.call("reload", undefined)
+      await pool.client.call("reload", undefined)
     })
 
     const prompt = await iife(async () => {
@@ -141,14 +173,27 @@ export const TuiThreadCommand = cmd({
 
     if (shouldStartServer) {
       // Start HTTP server for external access
-      const server = await client.call("server", networkOpts)
+      const server = await pool.client.call("server", networkOpts)
       url = server.url
     } else {
       // Use direct RPC communication (no HTTP)
       url = "http://opencode.internal"
-      customFetch = createWorkerFetch(client)
-      events = createEventSource(client)
+      customFetch = createWorkerFetch(pool)
+      events = createEventSource(pool)
     }
+
+    // Memory monitoring for diagnostics (logging only, no restart)
+    // This helps track Bun's native memory leak (see: https://github.com/oven-sh/bun/issues/15020)
+    const memoryMonitorInterval = setInterval(async () => {
+      try {
+        const mem = await pool.client.call("memory", undefined)
+        const rssMB = (mem.rss / 1024 / 1024).toFixed(0)
+        const heapMB = (mem.heapUsed / 1024 / 1024).toFixed(0)
+        Log.Default.info("worker memory", { rss: rssMB + " MB", heap: heapMB + " MB" })
+      } catch {
+        // Ignore errors during memory check
+      }
+    }, MEMORY_CHECK_INTERVAL)
 
     const tuiPromise = tui({
       url,
@@ -163,12 +208,13 @@ export const TuiThreadCommand = cmd({
         fork: args.forkSession,
       },
       onExit: async () => {
-        await client.call("shutdown", undefined)
+        clearInterval(memoryMonitorInterval)
+        await pool.shutdown()
       },
     })
 
     setTimeout(() => {
-      client.call("checkUpgrade", { directory: cwd }).catch(() => {})
+      pool.client.call("checkUpgrade", { directory: cwd }).catch(() => {})
     }, 1000)
 
     await tuiPromise
