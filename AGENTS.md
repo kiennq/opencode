@@ -109,3 +109,17 @@ const table = sqliteTable("session", {
 
 - Avoid mocks as much as possible
 - Test actual implementation, do not duplicate logic into tests
+
+Only check typescript compilation after each commit.
+Before push, run a full test.
+
+On Windows run both:
+
+- Linux test, use `podman` (preferred) or `docker`.
+- Windows test, only need to make sure OpenCode can start without issue.
+
+## Sync with upstream
+
+- Fetch the upstream and rebase on top of that, resolving any conflicts and force push to origin.
+- When pulling PR from upstream, always do squash merge.
+- Always, disable new workflows from upstream
