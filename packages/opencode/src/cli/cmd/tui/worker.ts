@@ -150,6 +150,10 @@ export const rpc = {
     await Instance.disposeAll()
     if (server) server.stop(true)
   },
+  async memory() {
+    const mem = process.memoryUsage()
+    return { rss: mem.rss, heapUsed: mem.heapUsed, heapTotal: mem.heapTotal }
+  },
 }
 
 Rpc.listen(rpc)
