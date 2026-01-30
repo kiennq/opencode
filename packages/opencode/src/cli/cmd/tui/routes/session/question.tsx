@@ -1,4 +1,4 @@
-import { createStore } from "solid-js/store"
+import { createStore, produce } from "solid-js/store"
 import { createMemo, createSignal, For, onMount, Show } from "solid-js"
 import { useKeyboard, useRenderer } from "@opentui/solid"
 import type { TextareaRenderable, PasteEvent, KeyBinding } from "@opentui/core"
@@ -9,6 +9,8 @@ import { useSDK } from "../../context/sdk"
 import { SplitBorder } from "../../component/border"
 import { useTextareaKeybindings } from "../../component/textarea-keybindings"
 import { useDialog } from "../../ui/dialog"
+import { useSync } from "../../context/sync"
+import { Binary } from "@opencode-ai/util/binary"
 
 type Theme = ReturnType<typeof useTheme>["theme"]
 
@@ -76,6 +78,7 @@ function CustomAnswerTextarea(props: {
 
 export function QuestionPrompt(props: { request: QuestionRequest }) {
   const sdk = useSDK()
+  const sync = useSync()
   const { theme } = useTheme()
   const keybind = useKeybind()
   const bindings = useTextareaKeybindings()
@@ -107,25 +110,44 @@ export function QuestionPrompt(props: { request: QuestionRequest }) {
     return store.answers[store.tab]?.includes(value) ?? false
   })
 
+  // Remove question from store immediately to dismiss the UI
+  function dismiss() {
+    const sessionID = props.request.sessionID
+    const requestID = props.request.id
+    const requests = sync.data.question[sessionID]
+    if (!requests) return
+    const match = Binary.search(requests, requestID, (r) => r.id)
+    if (!match.found) return
+    sync.set(
+      "question",
+      sessionID,
+      produce((draft) => {
+        draft.splice(match.index, 1)
+      }),
+    )
+  }
+
   function submit() {
     const answers = questions().map((_, i) => store.answers[i] ?? [])
     sdk.client.question.reply({
       requestID: props.request.id,
       answers,
     })
+    dismiss()
   }
 
   function reject() {
     sdk.client.question.reject({
       requestID: props.request.id,
     })
+    dismiss()
   }
 
-  function pick(answer: string, custom: boolean = false) {
+  function pick(answer: string, isCustom: boolean = false) {
     const answers = [...store.answers]
     answers[store.tab] = [answer]
     setStore("answers", answers)
-    if (custom) {
+    if (isCustom) {
       const inputs = [...store.custom]
       inputs[store.tab] = answer
       setStore("custom", inputs)
@@ -135,6 +157,7 @@ export function QuestionPrompt(props: { request: QuestionRequest }) {
         requestID: props.request.id,
         answers: [[answer]],
       })
+      dismiss()
       return
     }
     setStore("tab", store.tab + 1)
