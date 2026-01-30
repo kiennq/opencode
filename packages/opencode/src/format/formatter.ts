@@ -3,9 +3,11 @@ import { BunProc } from "../bun"
 import { Instance } from "../project/instance"
 import { Filesystem } from "../util/filesystem"
 import { Flag } from "@/flag/flag"
+import { createLruCache } from "../util/cache"
 
-// Cache for package.json reads to avoid duplicate file I/O
-const packageJsonCache = new Map<string, any>()
+// LRU cache for package.json reads to avoid duplicate file I/O
+// Limit to 100 entries to prevent unbounded memory growth
+const packageJsonCache = createLruCache<string, any>({ maxEntries: 100 })
 
 async function readPackageJson(filepath: string) {
   const cached = packageJsonCache.get(filepath)
