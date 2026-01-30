@@ -195,6 +195,13 @@ export namespace Snapshot {
       ref: "FileDiff",
     })
   export type FileDiff = z.infer<typeof FileDiff>
+
+  // Max file size to store full content (1MB) - larger files only store metadata
+  const MAX_DIFF_CONTENT_SIZE = 1024 * 1024
+
+  // File patterns to exclude from full content storage
+  const EXCLUDE_PATTERNS = [/\.heapsnapshot$/, /\.min\.js$/, /\.min\.css$/, /\.map$/]
+
   export async function diffFull(from: string, to: string): Promise<FileDiff[]> {
     const git = gitdir()
     const result: FileDiff[] = []
@@ -223,24 +230,29 @@ export namespace Snapshot {
       if (!line) continue
       const [additions, deletions, file] = line.split("\t")
       const isBinaryFile = additions === "-" && deletions === "-"
-      const before = isBinaryFile
-        ? ""
-        : await $`git -c core.autocrlf=false --git-dir ${git} --work-tree ${Instance.worktree} show ${from}:${file}`
-            .quiet()
-            .nothrow()
-            .text()
-      const after = isBinaryFile
-        ? ""
-        : await $`git -c core.autocrlf=false --git-dir ${git} --work-tree ${Instance.worktree} show ${to}:${file}`
-            .quiet()
-            .nothrow()
-            .text()
+      const isExcluded = EXCLUDE_PATTERNS.some((p) => p.test(file))
+      const before =
+        isBinaryFile || isExcluded
+          ? ""
+          : await $`git -c core.autocrlf=false --git-dir ${git} --work-tree ${Instance.worktree} show ${from}:${file}`
+              .quiet()
+              .nothrow()
+              .text()
+      const after =
+        isBinaryFile || isExcluded
+          ? ""
+          : await $`git -c core.autocrlf=false --git-dir ${git} --work-tree ${Instance.worktree} show ${to}:${file}`
+              .quiet()
+              .nothrow()
+              .text()
       const added = isBinaryFile ? 0 : parseInt(additions)
       const deleted = isBinaryFile ? 0 : parseInt(deletions)
+      // Skip full content for very large files
+      const skipContent = before.length > MAX_DIFF_CONTENT_SIZE || after.length > MAX_DIFF_CONTENT_SIZE
       result.push({
         file,
-        before,
-        after,
+        before: skipContent ? "" : before,
+        after: skipContent ? "" : after,
         additions: Number.isFinite(added) ? added : 0,
         deletions: Number.isFinite(deleted) ? deleted : 0,
         status: status.get(file) ?? "modified",
