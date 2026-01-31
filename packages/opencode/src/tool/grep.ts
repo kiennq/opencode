@@ -57,8 +57,10 @@ export const GrepTool = Tool.define("grep", {
       signal: ctx.abort,
     })
 
-    const output = await new Response(proc.stdout).text()
-    const errorOutput = await new Response(proc.stderr).text()
+    const [output, errorOutput] = await Promise.all([
+      Bun.readableStreamToText(proc.stdout),
+      Bun.readableStreamToText(proc.stderr),
+    ])
     const exitCode = await proc.exited
 
     // Exit codes: 0 = matches found, 1 = no matches, 2 = errors (but may still have matches)
