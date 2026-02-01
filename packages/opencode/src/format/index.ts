@@ -3,6 +3,7 @@ import { File } from "../file"
 import { Log } from "../util/log"
 import path from "path"
 import z from "zod"
+import { Process } from "@opencode-ai/runtime"
 
 import * as Formatter from "./formatter"
 import { Config } from "../config/config"
@@ -73,13 +74,15 @@ export namespace Format {
         for (const item of await getFormatterFromState({ enabled, formatters }, ext)) {
           log.info("running", { command: item.command })
           try {
-            const proc = Bun.spawn({
-              cmd: item.command.map((x) => x.replace("$FILE", file)),
-              cwd: Instance.directory,
-              env: { ...process.env, ...item.environment },
-              stdout: "ignore",
-              stderr: "ignore",
-            })
+            const proc = Process.spawn(
+              item.command.map((x) => x.replace("$FILE", file)),
+              {
+                cwd: Instance.directory,
+                env: { ...process.env, ...item.environment },
+                stdout: "ignore",
+                stderr: "ignore",
+              },
+            )
             const exit = await proc.exited
             if (exit !== 0)
               log.error("failed", {

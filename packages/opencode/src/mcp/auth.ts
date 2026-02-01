@@ -1,5 +1,6 @@
 import path from "path"
 import z from "zod"
+import { File } from "@opencode-ai/runtime"
 import { Global } from "../global"
 
 export namespace McpAuth {
@@ -53,25 +54,27 @@ export namespace McpAuth {
   }
 
   export async function all(): Promise<Record<string, Entry>> {
-    const file = Bun.file(filepath)
-    return file.json().catch(() => ({}))
+    const content = await File.read(filepath).catch(() => "{}")
+    try {
+      return JSON.parse(content)
+    } catch {
+      return {}
+    }
   }
 
   export async function set(mcpName: string, entry: Entry, serverUrl?: string): Promise<void> {
-    const file = Bun.file(filepath)
     const data = await all()
     // Always update serverUrl if provided
     if (serverUrl) {
       entry.serverUrl = serverUrl
     }
-    await Bun.write(file, JSON.stringify({ ...data, [mcpName]: entry }, null, 2), { mode: 0o600 })
+    await File.write(filepath, JSON.stringify({ ...data, [mcpName]: entry }, null, 2), { mode: 0o600 })
   }
 
   export async function remove(mcpName: string): Promise<void> {
-    const file = Bun.file(filepath)
     const data = await all()
     delete data[mcpName]
-    await Bun.write(file, JSON.stringify(data, null, 2), { mode: 0o600 })
+    await File.write(filepath, JSON.stringify(data, null, 2), { mode: 0o600 })
   }
 
   export async function updateTokens(mcpName: string, tokens: Tokens, serverUrl?: string): Promise<void> {

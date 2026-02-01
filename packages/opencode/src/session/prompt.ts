@@ -32,7 +32,8 @@ import { Flag } from "../flag/flag"
 import { ulid } from "ulid"
 import { spawn } from "child_process"
 import { Command } from "../command"
-import { $, fileURLToPath } from "bun"
+import { fileURLToPath } from "bun"
+import { File, Process } from "@opencode-ai/runtime"
 import { ConfigMarkdown } from "../config/markdown"
 import { SessionSummary } from "./summary"
 import { NamedError } from "@opencode-ai/util/error"
@@ -988,9 +989,9 @@ export namespace SessionPrompt {
               // have to normalize, symbol search returns absolute paths
               // Decode the pathname since URL constructor doesn't automatically decode it
               const filepath = fileURLToPath(part.url)
-              const stat = await Bun.file(filepath).stat()
+              const stat = await File.stat(filepath)
 
-              if (stat.isDirectory()) {
+              if (stat.isDirectory) {
                 part.mime = "application/x-directory"
               }
 
@@ -1145,7 +1146,7 @@ export namespace SessionPrompt {
                 ]
               }
 
-              const file = Bun.file(filepath)
+              const fileBytes = await File.readBytes(filepath)
               FileTime.read(input.sessionID, filepath)
               return [
                 {
@@ -1161,7 +1162,7 @@ export namespace SessionPrompt {
                   messageID: info.id,
                   sessionID: input.sessionID,
                   type: "file",
-                  url: `data:${part.mime};base64,` + Buffer.from(await file.bytes()).toString("base64"),
+                  url: `data:${part.mime};base64,` + Buffer.from(fileBytes).toString("base64"),
                   mime: part.mime,
                   filename: part.filename!,
                   source: part.source,
@@ -1281,7 +1282,7 @@ export namespace SessionPrompt {
     // Switching from plan mode to build mode
     if (input.agent.name !== "plan" && assistantMessage?.info.agent === "plan") {
       const plan = Session.plan(input.session)
-      const exists = await Bun.file(plan).exists()
+      const exists = await File.exists(plan)
       if (exists) {
         const part = await Session.updatePart({
           id: Identifier.ascending("part"),
@@ -1300,7 +1301,7 @@ export namespace SessionPrompt {
     // Entering plan mode
     if (input.agent.name === "plan" && assistantMessage?.info.agent !== "plan") {
       const plan = Session.plan(input.session)
-      const exists = await Bun.file(plan).exists()
+      const exists = await File.exists(plan)
       if (!exists) await fs.mkdir(path.dirname(plan), { recursive: true })
       const part = await Session.updatePart({
         id: Identifier.ascending("part"),
@@ -1477,7 +1478,7 @@ NOTE: At any point in time through this workflow you should feel free to ask the
       },
     }
     await Session.updatePart(part)
-    const shell = Shell.preferred()
+    const shell = await Shell.preferred()
     const shellName = (
       process.platform === "win32" ? path.win32.basename(shell, ".exe") : path.basename(shell)
     ).toLowerCase()
@@ -1689,7 +1690,8 @@ NOTE: At any point in time through this workflow you should feel free to ask the
       const results = await Promise.all(
         shell.map(async ([, cmd]) => {
           try {
-            return await $`${{ raw: cmd }}`.quiet().nothrow().text()
+            const result = await Process.exec(cmd, { quiet: true, nothrow: true })
+            return result.stdout
           } catch (error) {
             return `Error executing command: ${error instanceof Error ? error.message : String(error)}`
           }

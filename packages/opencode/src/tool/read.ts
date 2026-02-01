@@ -8,6 +8,7 @@ import DESCRIPTION from "./read.txt"
 import { Instance } from "../project/instance"
 import { assertExternalDirectory } from "./external-directory"
 import { InstructionPrompt } from "../session/instruction"
+import { File } from "@opencode-ai/runtime"
 
 const DEFAULT_READ_LIMIT = 2000
 const MAX_LINE_LENGTH = 2000
@@ -53,8 +54,7 @@ export const ReadTool = Tool.define("read", {
         metadata: {},
       })
 
-      const file = Bun.file(filepath)
-      if (!(await file.exists())) {
+      if (!(await File.exists(filepath))) {
         const dir = path.dirname(filepath)
         const base = path.basename(filepath)
 
@@ -76,13 +76,18 @@ export const ReadTool = Tool.define("read", {
 
       const instructions = await InstructionPrompt.resolve(ctx.messages, filepath, ctx.messageID)
 
+      // Get file stat and mime type
+      const stat = await File.stat(filepath)
+      const mimeType = getMimeType(filepath)
+
       // Exclude SVG (XML-based) and vnd.fastbidsheet (.fbs extension, commonly FlatBuffers schema files)
       const isImage =
-        file.type.startsWith("image/") && file.type !== "image/svg+xml" && file.type !== "image/vnd.fastbidsheet"
-      const isPdf = file.type === "application/pdf"
+        mimeType.startsWith("image/") && mimeType !== "image/svg+xml" && mimeType !== "image/vnd.fastbidsheet"
+      const isPdf = mimeType === "application/pdf"
       if (isImage || isPdf) {
-        const mime = file.type
+        const mime = mimeType
         const msg = `${isImage ? "Image" : "PDF"} read successfully`
+        const fileBytes = await File.readBytes(filepath)
         return {
           title,
           output: msg,
@@ -95,17 +100,17 @@ export const ReadTool = Tool.define("read", {
             {
               type: "file" as const,
               mime,
-              url: `data:${mime};base64,${Buffer.from(await file.bytes()).toString("base64")}`,
+              url: `data:${mime};base64,${Buffer.from(fileBytes).toString("base64")}`,
             },
           ],
           instructions,
         }
       }
 
-      const isBinary = await isBinaryFile(filepath, file)
+      const isBinary = await isBinaryFile(filepath, stat)
       if (isBinary) throw new Error(`Cannot read binary file: ${filepath}`)
 
-      const lines = await file.text().then((text) => text.split("\n"))
+      const lines = await File.read(filepath).then((text) => text.split("\n"))
 
       const raw: string[] = []
       let bytes = 0
@@ -207,7 +212,7 @@ export const ReadTool = Tool.define("read", {
   },
 })
 
-async function isBinaryFile(filepath: string, file: Bun.BunFile): Promise<boolean> {
+async function isBinaryFile(filepath: string, stat: import("@opencode-ai/runtime").FileStat): Promise<boolean> {
   const ext = path.extname(filepath).toLowerCase()
   // binary check for common non-text extensions
   switch (ext) {
@@ -244,7 +249,6 @@ async function isBinaryFile(filepath: string, file: Bun.BunFile): Promise<boolea
       break
   }
 
-  const stat = await file.stat()
   const fileSize = stat.size
   if (fileSize === 0) return false
 
@@ -268,4 +272,41 @@ async function isBinaryFile(filepath: string, file: Bun.BunFile): Promise<boolea
   }
   // If >30% non-printable characters, consider it binary
   return nonPrintableCount / bytes.length > 0.3
+}
+
+function getMimeType(filepath: string): string {
+  const ext = path.extname(filepath).toLowerCase()
+  const mimeTypes: Record<string, string> = {
+    // Images
+    ".png": "image/png",
+    ".jpg": "image/jpeg",
+    ".jpeg": "image/jpeg",
+    ".gif": "image/gif",
+    ".webp": "image/webp",
+    ".svg": "image/svg+xml",
+    ".ico": "image/x-icon",
+    ".bmp": "image/bmp",
+    ".tiff": "image/tiff",
+    ".tif": "image/tiff",
+    ".fbs": "image/vnd.fastbidsheet",
+    // Documents
+    ".pdf": "application/pdf",
+    ".doc": "application/msword",
+    ".docx": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+    ".xls": "application/vnd.ms-excel",
+    ".xlsx": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    // Text
+    ".txt": "text/plain",
+    ".html": "text/html",
+    ".htm": "text/html",
+    ".css": "text/css",
+    ".js": "text/javascript",
+    ".ts": "text/typescript",
+    ".json": "application/json",
+    ".xml": "application/xml",
+    ".md": "text/markdown",
+    ".yaml": "text/yaml",
+    ".yml": "text/yaml",
+  }
+  return mimeTypes[ext] || "application/octet-stream"
 }

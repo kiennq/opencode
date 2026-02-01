@@ -1,5 +1,6 @@
 import yargs from "yargs"
 import { hideBin } from "yargs/helpers"
+import { Runtime } from "@opencode-ai/runtime"
 import { RunCommand } from "./cli/cmd/run"
 import { GenerateCommand } from "./cli/cmd/generate"
 import { Log } from "./util/log"
@@ -27,6 +28,9 @@ import { WebCommand } from "./cli/cmd/web"
 import { PrCommand } from "./cli/cmd/pr"
 import { SessionCommand } from "./cli/cmd/session"
 import { Instance } from "./project/instance"
+
+// Initialize the runtime adapter (auto-detects Bun or Deno)
+await Runtime.init()
 
 // Track whether cleanup has been performed to avoid duplicate cleanup
 let cleanupPerformed = false

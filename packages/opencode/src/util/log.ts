@@ -1,5 +1,6 @@
 import path from "path"
 import fs from "fs/promises"
+import { Glob } from "@opencode-ai/runtime"
 import { Global } from "../global"
 import z from "zod"
 
@@ -63,24 +64,20 @@ export namespace Log {
       Global.Path.log,
       options.dev ? "dev.log" : new Date().toISOString().split(".")[0].replace(/:/g, "") + ".log",
     )
-    const logfile = Bun.file(logpath)
     await fs.truncate(logpath).catch(() => {})
-    const writer = logfile.writer()
+    const fileHandle = await fs.open(logpath, "a")
     write = async (msg: any) => {
-      const num = writer.write(msg)
-      writer.flush()
-      return num
+      const buffer = Buffer.from(msg)
+      await fileHandle.write(buffer)
+      return buffer.length
     }
   }
 
   async function cleanup(dir: string) {
-    const glob = new Bun.Glob("????-??-??T??????.log")
-    const files = await Array.fromAsync(
-      glob.scan({
-        cwd: dir,
-        absolute: true,
-      }),
-    )
+    const files: string[] = []
+    for await (const file of Glob.scan("????-??-??T??????.log", { cwd: dir, absolute: true })) {
+      files.push(file)
+    }
     if (files.length <= 5) return
 
     const filesToDelete = files.slice(0, -10)

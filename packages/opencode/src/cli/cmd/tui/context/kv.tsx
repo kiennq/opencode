@@ -1,3 +1,4 @@
+import { File } from "@opencode-ai/runtime"
 import { Global } from "@/global"
 import { createSignal, type Setter } from "solid-js"
 import { createStore } from "solid-js/store"
@@ -9,10 +10,10 @@ export const { use: useKV, provider: KVProvider } = createSimpleContext({
   init: () => {
     const [ready, setReady] = createSignal(false)
     const [store, setStore] = createStore<Record<string, any>>()
-    const file = Bun.file(path.join(Global.Path.state, "kv.json"))
+    const filePath = path.join(Global.Path.state, "kv.json")
 
-    file
-      .json()
+    File.read(filePath)
+      .then((content) => JSON.parse(content))
       .then((x) => {
         setStore(x)
       })
@@ -44,7 +45,7 @@ export const { use: useKV, provider: KVProvider } = createSimpleContext({
       },
       set(key: string, value: any) {
         setStore(key, value)
-        Bun.write(file, JSON.stringify(store, null, 2))
+        File.write(filePath, JSON.stringify(store, null, 2))
       },
     }
     return result

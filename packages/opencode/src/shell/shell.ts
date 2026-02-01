@@ -2,6 +2,7 @@ import { Flag } from "@/flag/flag"
 import { lazy } from "@/util/lazy"
 import path from "path"
 import { spawn, type ChildProcess } from "child_process"
+import { File, Process, Util } from "@opencode-ai/runtime"
 
 const SIGKILL_TIMEOUT_MS = 200
 
@@ -21,13 +22,13 @@ export namespace Shell {
 
     try {
       process.kill(-pid, "SIGTERM")
-      await Bun.sleep(SIGKILL_TIMEOUT_MS)
+      await Util.sleep(SIGKILL_TIMEOUT_MS)
       if (!opts?.exited?.()) {
         process.kill(-pid, "SIGKILL")
       }
     } catch (_e) {
       proc.kill("SIGTERM")
-      await Bun.sleep(SIGKILL_TIMEOUT_MS)
+      await Util.sleep(SIGKILL_TIMEOUT_MS)
       if (!opts?.exited?.()) {
         proc.kill("SIGKILL")
       }
@@ -35,31 +36,32 @@ export namespace Shell {
   }
   const BLACKLIST = new Set(["fish", "nu"])
 
-  function fallback() {
+  async function fallback() {
     if (process.platform === "win32") {
       if (Flag.OPENCODE_GIT_BASH_PATH) return Flag.OPENCODE_GIT_BASH_PATH
-      const git = Bun.which("git")
+      const git = Process.which("git")
       if (git) {
         // git.exe is typically at: C:\Program Files\Git\cmd\git.exe
         // bash.exe is at: C:\Program Files\Git\bin\bash.exe
         const bash = path.join(git, "..", "..", "bin", "bash.exe")
-        if (Bun.file(bash).size) return bash
+        const stat = await File.stat(bash).catch(() => null)
+        if (stat && stat.size > 0) return bash
       }
       return process.env.COMSPEC || "cmd.exe"
     }
     if (process.platform === "darwin") return "/bin/zsh"
-    const bash = Bun.which("bash")
+    const bash = Process.which("bash")
     if (bash) return bash
     return "/bin/sh"
   }
 
-  export const preferred = lazy(() => {
+  export const preferred = lazy(async () => {
     const s = process.env.SHELL
     if (s) return s
     return fallback()
   })
 
-  export const acceptable = lazy(() => {
+  export const acceptable = lazy(async () => {
     const s = process.env.SHELL
     if (s && !BLACKLIST.has(process.platform === "win32" ? path.win32.basename(s) : path.basename(s))) return s
     return fallback()

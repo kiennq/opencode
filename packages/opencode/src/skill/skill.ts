@@ -1,6 +1,7 @@
 import z from "zod"
 import path from "path"
 import os from "os"
+import { Glob } from "@opencode-ai/runtime"
 import { Config } from "../config/config"
 import { Instance } from "../project/instance"
 import { NamedError } from "@opencode-ai/util/error"
@@ -40,9 +41,9 @@ export namespace Skill {
     }),
   )
 
-  const OPENCODE_SKILL_GLOB = new Bun.Glob("{skill,skills}/**/SKILL.md")
-  const CLAUDE_SKILL_GLOB = new Bun.Glob("skills/**/SKILL.md")
-  const SKILL_GLOB = new Bun.Glob("**/SKILL.md")
+  const OPENCODE_SKILL_GLOB = "{skill,skills}/**/SKILL.md"
+  const CLAUDE_SKILL_GLOB = "skills/**/SKILL.md"
+  const SKILL_GLOB = "**/SKILL.md"
 
   export const state = Instance.state(async () => {
     const skills: Record<string, Info> = {}
@@ -96,7 +97,7 @@ export namespace Skill {
     if (!Flag.OPENCODE_DISABLE_CLAUDE_CODE_SKILLS) {
       for (const dir of claudeDirs) {
         const matches = await Array.fromAsync(
-          CLAUDE_SKILL_GLOB.scan({
+          Glob.scan(CLAUDE_SKILL_GLOB, {
             cwd: dir,
             absolute: true,
             onlyFiles: true,
@@ -116,7 +117,7 @@ export namespace Skill {
 
     // Scan .opencode/skill/ directories
     for (const dir of await Config.directories()) {
-      for await (const match of OPENCODE_SKILL_GLOB.scan({
+      for await (const match of Glob.scan(OPENCODE_SKILL_GLOB, {
         cwd: dir,
         absolute: true,
         onlyFiles: true,
@@ -135,7 +136,7 @@ export namespace Skill {
         log.warn("skill path not found", { path: resolved })
         continue
       }
-      for await (const match of SKILL_GLOB.scan({
+      for await (const match of Glob.scan(SKILL_GLOB, {
         cwd: resolved,
         absolute: true,
         onlyFiles: true,

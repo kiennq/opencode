@@ -1,4 +1,5 @@
 import { dynamicTool, type Tool, jsonSchema, type JSONSchema7 } from "ai"
+import { Util } from "@opencode-ai/runtime"
 import { Client } from "@modelcontextprotocol/sdk/client/index.js"
 import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js"
 import { SSEClientTransport } from "@modelcontextprotocol/sdk/client/sse.js"
@@ -135,7 +136,7 @@ export namespace MCP {
         }
 
         tryKill("SIGTERM")
-        await Bun.sleep(SIGKILL_DELAY_MS)
+        await Util.sleep(SIGKILL_DELAY_MS)
 
         // If still alive, escalate to SIGKILL
         if (isProcessAlive(pid)) {

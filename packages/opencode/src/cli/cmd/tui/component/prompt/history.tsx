@@ -5,6 +5,7 @@ import { createStore, produce } from "solid-js/store"
 import { clone } from "remeda"
 import { createSimpleContext } from "../../context/helper"
 import { appendFile, writeFile } from "fs/promises"
+import { File } from "@opencode-ai/runtime"
 import type { AgentPart, FilePart, TextPart } from "@opencode-ai/sdk/v2"
 
 export type PromptInfo = {
@@ -30,9 +31,9 @@ const MAX_HISTORY_ENTRIES = 50
 export const { use: usePromptHistory, provider: PromptHistoryProvider } = createSimpleContext({
   name: "PromptHistory",
   init: () => {
-    const historyFile = Bun.file(path.join(Global.Path.state, "prompt-history.jsonl"))
+    const historyFilePath = path.join(Global.Path.state, "prompt-history.jsonl")
     onMount(async () => {
-      const text = await historyFile.text().catch(() => "")
+      const text = await File.read(historyFilePath).catch(() => "")
       const lines = text
         .split("\n")
         .filter(Boolean)
@@ -51,7 +52,7 @@ export const { use: usePromptHistory, provider: PromptHistoryProvider } = create
       // Rewrite file with only valid entries to self-heal corruption
       if (lines.length > 0) {
         const content = lines.map((line) => JSON.stringify(line)).join("\n") + "\n"
-        writeFile(historyFile.name!, content).catch(() => {})
+        writeFile(historyFilePath, content).catch(() => {})
       }
     })
 
@@ -97,11 +98,11 @@ export const { use: usePromptHistory, provider: PromptHistoryProvider } = create
 
         if (trimmed) {
           const content = store.history.map((line) => JSON.stringify(line)).join("\n") + "\n"
-          writeFile(historyFile.name!, content).catch(() => {})
+          writeFile(historyFilePath, content).catch(() => {})
           return
         }
 
-        appendFile(historyFile.name!, JSON.stringify(entry) + "\n").catch(() => {})
+        appendFile(historyFilePath, JSON.stringify(entry) + "\n").catch(() => {})
       },
     }
   },

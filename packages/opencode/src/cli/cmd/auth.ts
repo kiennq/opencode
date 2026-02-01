@@ -1,3 +1,4 @@
+import { File, Process, Util } from "@opencode-ai/runtime"
 import { Auth } from "../../auth"
 import { cmd } from "./cmd"
 import * as prompts from "@clack/prompts"
@@ -36,7 +37,7 @@ async function handlePluginAuth(plugin: { auth: PluginAuth }, provider: string):
   const method = plugin.auth.methods[index]
 
   // Handle prompts for all auth types
-  await Bun.sleep(10)
+  await Util.sleep(10)
   const inputs: Record<string, string> = {}
   if (method.prompts) {
     for (const prompt of method.prompts) {
@@ -231,8 +232,7 @@ export const AuthLoginCommand = cmd({
         if (args.url) {
           const wellknown = await fetch(`${args.url}/.well-known/opencode`).then((x) => x.json() as any)
           prompts.log.info(`Running \`${wellknown.auth.command.join(" ")}\``)
-          const proc = Bun.spawn({
-            cmd: wellknown.auth.command,
+          const proc = Process.spawn(wellknown.auth.command, {
             stdout: "pipe",
           })
           const exit = await proc.exited
@@ -241,7 +241,7 @@ export const AuthLoginCommand = cmd({
             prompts.outro("Done")
             return
           }
-          const token = await Bun.readableStreamToText(proc.stdout)
+          const token = proc.stdout ? await Util.streamToText(proc.stdout) : ""
           await Auth.set(args.url, {
             type: "wellknown",
             key: wellknown.auth.env,

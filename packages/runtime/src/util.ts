@@ -53,4 +53,11 @@ export namespace Util {
   export function streamToBytes(stream: ReadableStream<Uint8Array>): Promise<Uint8Array> {
     return getAdapter().streamToBytes(stream)
   }
+
+  /**
+   * Read all stdin as text
+   */
+  export function stdinText(): Promise<string> {
+    return getAdapter().stdinText()
+  }
 }

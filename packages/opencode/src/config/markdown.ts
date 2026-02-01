@@ -1,4 +1,5 @@
 import { NamedError } from "@opencode-ai/util/error"
+import { File } from "@opencode-ai/runtime"
 import matter from "gray-matter"
 import { z } from "zod"
 
@@ -68,7 +69,7 @@ export namespace ConfigMarkdown {
   }
 
   export async function parse(filePath: string) {
-    const template = await Bun.file(filePath).text()
+    const template = await File.read(filePath)
 
     try {
       const md = matter(template)

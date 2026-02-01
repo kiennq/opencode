@@ -5,7 +5,7 @@ import path from "path"
 import fs from "fs/promises"
 import { Filesystem } from "../util/filesystem"
 import { NamedError } from "@opencode-ai/util/error"
-import { readableStreamToText } from "bun"
+import { File, Process, Util } from "@opencode-ai/runtime"
 import { Lock } from "../util/lock"
 
 export namespace BunProc {
@@ -18,12 +18,12 @@ export namespace BunProc {
     }
   }
 
-  export async function run(cmd: string[], options?: Bun.SpawnOptions.OptionsObject<any, any, any>) {
+  export async function run(cmd: string[], options?: { cwd?: string; env?: Record<string, string> }) {
     log.info("running", {
       cmd: [which(), ...cmd],
       ...options,
     })
-    const result = Bun.spawn([which(), ...cmd], {
+    const proc = Process.spawn([which(), ...cmd], {
       ...options,
       stdout: "pipe",
       stderr: "pipe",
@@ -33,26 +33,18 @@ export namespace BunProc {
         BUN_BE_BUN: "1",
       },
     })
-    const code = await result.exited
-    const stdout = result.stdout
-      ? typeof result.stdout === "number"
-        ? result.stdout
-        : await readableStreamToText(result.stdout)
-      : undefined
-    const stderr = result.stderr
-      ? typeof result.stderr === "number"
-        ? result.stderr
-        : await readableStreamToText(result.stderr)
-      : undefined
+    const code = await proc.exited
+    const stdout = proc.stdout ? await Util.streamToText(proc.stdout) : undefined
+    const stderr = proc.stderr ? await Util.streamToText(proc.stderr) : undefined
     log.info("done", {
       code,
       stdout,
       stderr,
     })
     if (code !== 0) {
-      throw new Error(`Command failed with exit code ${result.exitCode}`)
+      throw new Error(`Command failed with exit code ${code}`)
     }
-    return result
+    return { exitCode: code, stdout, stderr }
   }
 
   export function which() {
@@ -68,13 +60,18 @@ export namespace BunProc {
   )
 
   async function readPackageJson(): Promise<PackageJson> {
-    const file = Bun.file(path.join(Global.Path.cache, "package.json"))
-    return file.json().catch(() => ({}))
+    const pkgPath = path.join(Global.Path.cache, "package.json")
+    try {
+      const content = await File.read(pkgPath)
+      return JSON.parse(content)
+    } catch {
+      return {}
+    }
   }
 
   async function writePackageJson(parsed: PackageJson) {
-    const file = Bun.file(path.join(Global.Path.cache, "package.json"))
-    await Bun.write(file.name!, JSON.stringify(parsed, null, 2))
+    const pkgPath = path.join(Global.Path.cache, "package.json")
+    await File.write(pkgPath, JSON.stringify(parsed, null, 2))
   }
 
   async function track(provider: string, pkg: string) {
@@ -93,7 +90,7 @@ export namespace BunProc {
     await fs.mkdir(Global.Path.cache, { recursive: true })
     const pkgJsonPath = path.join(Global.Path.cache, "package.json")
     if (!(await Filesystem.exists(pkgJsonPath))) {
-      await Bun.write(pkgJsonPath, "{}")
+      await File.write(pkgJsonPath, "{}")
     }
 
     const mod = path.join(Global.Path.cache, "node_modules", pkg)

@@ -1,5 +1,6 @@
 import z from "zod"
 import { spawn } from "child_process"
+import { Process } from "@opencode-ai/runtime"
 import { Tool } from "./tool"
 import path from "path"
 import DESCRIPTION from "./bash.txt"
@@ -8,7 +9,6 @@ import { Instance } from "../project/instance"
 import { lazy } from "@/util/lazy"
 import { Language } from "web-tree-sitter"
 
-import { $ } from "bun"
 import { Filesystem } from "@/util/filesystem"
 import { fileURLToPath } from "url"
 import { Flag } from "@/flag/flag.ts"
@@ -52,7 +52,7 @@ const parser = lazy(async () => {
 
 // TODO: we may wanna rename this tool so it works better on other shells
 export const BashTool = Tool.define("bash", async () => {
-  const shell = Shell.acceptable()
+  const shell = await Shell.acceptable()
   log.info("bash tool using shell", { shell })
 
   return {
@@ -115,12 +115,12 @@ export const BashTool = Tool.define("bash", async () => {
         if (["cd", "rm", "cp", "mv", "mkdir", "touch", "chmod", "chown", "cat"].includes(command[0])) {
           for (const arg of command.slice(1)) {
             if (arg.startsWith("-") || (command[0] === "chmod" && arg.startsWith("+"))) continue
-            const resolved = await $`realpath ${arg}`
-              .cwd(cwd)
-              .quiet()
-              .nothrow()
-              .text()
-              .then((x) => x.trim())
+            const result = await Process.exec(`realpath ${arg}`, {
+              cwd,
+              quiet: true,
+              nothrow: true,
+            })
+            const resolved = result.stdout.trim()
             log.info("resolved path", { arg, resolved })
             if (resolved) {
               // Git Bash on Windows returns Unix-style paths like /c/Users/...

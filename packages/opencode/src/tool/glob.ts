@@ -5,6 +5,7 @@ import DESCRIPTION from "./glob.txt"
 import { Ripgrep } from "../file/ripgrep"
 import { Instance } from "../project/instance"
 import { assertExternalDirectory } from "./external-directory"
+import { File } from "@opencode-ai/runtime"
 
 export const GlobTool = Tool.define("glob", {
   description: DESCRIPTION,
@@ -49,8 +50,7 @@ export const GlobTool = Tool.define("glob", {
     const files = await Promise.all(
       paths.map(async (full) => ({
         path: full,
-        mtime: await Bun.file(full)
-          .stat()
+        mtime: await File.stat(full)
           .then((x) => x.mtime.getTime())
           .catch(() => 0),
       })),

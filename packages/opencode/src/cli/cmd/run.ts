@@ -11,6 +11,7 @@ import { createOpencodeClient, type OpencodeClient } from "@opencode-ai/sdk/v2"
 import { Server } from "../../server/server"
 import { Provider } from "../../provider/provider"
 import { Agent } from "../../agent/agent"
+import { File, Util } from "@opencode-ai/runtime"
 
 const TOOL: Record<string, [string, string]> = {
   todowrite: ["Todo", UI.Style.TEXT_WARNING_BOLD],
@@ -103,19 +104,13 @@ export const RunCommand = cmd({
 
       for (const filePath of files) {
         const resolvedPath = path.resolve(process.cwd(), filePath)
-        const file = Bun.file(resolvedPath)
-        const stats = await file.stat().catch(() => {})
-        if (!stats) {
-          UI.error(`File not found: ${filePath}`)
-          process.exit(1)
-        }
-        if (!(await file.exists())) {
+        const stat = await File.stat(resolvedPath).catch(() => undefined)
+        if (!stat) {
           UI.error(`File not found: ${filePath}`)
           process.exit(1)
         }
 
-        const stat = await file.stat()
-        const mime = stat.isDirectory() ? "application/x-directory" : "text/plain"
+        const mime = stat.isDirectory ? "application/x-directory" : "text/plain"
 
         fileParts.push({
           type: "file",
@@ -126,7 +121,7 @@ export const RunCommand = cmd({
       }
     }
 
-    if (!process.stdin.isTTY) message += "\n" + (await Bun.stdin.text())
+    if (!process.stdin.isTTY) message += "\n" + (await Util.stdinText())
 
     if (message.trim().length === 0 && !args.command) {
       UI.error("You must provide a message or a command")

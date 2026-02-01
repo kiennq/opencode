@@ -38,6 +38,7 @@ import { Config } from "@/config/config"
 import { Todo } from "@/session/todo"
 import { z } from "zod"
 import { LoadAPIKeyError } from "ai"
+import { File } from "@opencode-ai/runtime"
 import type { Event, OpencodeClient, SessionMessageResponse } from "@opencode-ai/sdk/v2"
 import { applyPatch } from "diff"
 
@@ -159,7 +160,7 @@ export namespace ACP {
                 const filepath = typeof metadata["filepath"] === "string" ? metadata["filepath"] : ""
                 const diff = typeof metadata["diff"] === "string" ? metadata["diff"] : ""
 
-                const content = await Bun.file(filepath).text()
+                const content = await File.read(filepath)
                 const newContent = getNewContent(content, diff)
 
                 if (newContent) {

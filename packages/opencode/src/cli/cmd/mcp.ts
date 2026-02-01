@@ -1,3 +1,4 @@
+import { File } from "@opencode-ai/runtime"
 import { cmd } from "./cmd"
 import { Client } from "@modelcontextprotocol/sdk/client/index.js"
 import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js"
@@ -388,7 +389,7 @@ async function resolveConfigPath(baseDir: string, global = false) {
   }
 
   for (const candidate of candidates) {
-    if (await Bun.file(candidate).exists()) {
+    if (await File.exists(candidate)) {
       return candidate
     }
   }
@@ -398,11 +399,9 @@ async function resolveConfigPath(baseDir: string, global = false) {
 }
 
 async function addMcpToConfig(name: string, mcpConfig: Config.Mcp, configPath: string) {
-  const file = Bun.file(configPath)
-
   let text = "{}"
-  if (await file.exists()) {
-    text = await file.text()
+  if (await File.exists(configPath)) {
+    text = await File.read(configPath)
   }
 
   // Use jsonc-parser to modify while preserving comments
@@ -411,7 +410,7 @@ async function addMcpToConfig(name: string, mcpConfig: Config.Mcp, configPath: s
   })
   const result = applyEdits(text, edits)
 
-  await Bun.write(configPath, result)
+  await File.write(configPath, result)
 
   return configPath
 }

@@ -1,17 +1,16 @@
 import { realpathSync } from "fs"
 import { dirname, join, relative } from "path"
+import { File, Glob } from "@opencode-ai/runtime"
 
 export namespace Filesystem {
   export const exists = (p: string) =>
-    Bun.file(p)
-      .stat()
+    File.stat(p)
       .then(() => true)
       .catch(() => false)
 
   export const isDir = (p: string) =>
-    Bun.file(p)
-      .stat()
-      .then((s) => s.isDirectory())
+    File.stat(p)
+      .then((s) => s.isDirectory)
       .catch(() => false)
   /**
    * On Windows, normalize a path to its canonical casing using the filesystem.
@@ -70,8 +69,7 @@ export namespace Filesystem {
     const result = []
     while (true) {
       try {
-        const glob = new Bun.Glob(pattern)
-        for await (const match of glob.scan({
+        for await (const match of Glob.scan(pattern, {
           cwd: current,
           absolute: true,
           onlyFiles: true,

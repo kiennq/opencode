@@ -32,6 +32,7 @@ export interface SpawnOptions {
   detached?: boolean
   shell?: boolean | string
   timeout?: number
+  signal?: AbortSignal
 }
 
 /**
@@ -67,6 +68,16 @@ export interface ShellOptions {
   env?: Record<string, string | undefined>
   timeout?: number
   quiet?: boolean
+  /** If true, don't throw on non-zero exit code */
+  nothrow?: boolean
+}
+
+/**
+ * Options for finding executables
+ */
+export interface WhichOptions {
+  /** Custom PATH to search in (will be appended to existing PATH) */
+  PATH?: string
 }
 
 /**
@@ -132,6 +143,7 @@ export interface ServerWebSocket<T = unknown> {
 export interface ServerHandle {
   port: number
   hostname: string
+  url: string
   stop(closeActiveConnections?: boolean): void
   upgrade<T>(request: Request, options?: { data?: T }): boolean
 }
@@ -157,7 +169,8 @@ export interface RuntimeAdapter {
     spawn(command: string[], options?: SpawnOptions): Subprocess
     spawnSync(command: string[], options?: SpawnOptions): SpawnResult
     exec(command: string, options?: ShellOptions): Promise<ShellResult>
-    which(name: string): string | null
+    which(name: string, options?: WhichOptions): string | null
+    resolve(specifier: string, parent: string): Promise<string | undefined>
   }
 
   // Glob operations
@@ -179,6 +192,7 @@ export interface RuntimeAdapter {
     stringWidth(str: string): number
     streamToText(stream: ReadableStream<Uint8Array>): Promise<string>
     streamToBytes(stream: ReadableStream<Uint8Array>): Promise<Uint8Array>
+    stdinText(): Promise<string>
   }
 }
 

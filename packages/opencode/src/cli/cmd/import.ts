@@ -5,6 +5,7 @@ import { bootstrap } from "../bootstrap"
 import { Storage } from "../../storage/storage"
 import { Instance } from "../../project/instance"
 import { EOL } from "os"
+import { File } from "@opencode-ai/runtime"
 
 export const ImportCommand = cmd({
   command: "import <file>",
@@ -66,13 +67,13 @@ export const ImportCommand = cmd({
           }),
         }
       } else {
-        const file = Bun.file(args.file)
-        exportData = await file.json().catch(() => {})
-        if (!exportData) {
+        const content = await File.read(args.file).catch(() => undefined)
+        if (!content) {
           process.stdout.write(`File not found: ${args.file}`)
           process.stdout.write(EOL)
           return
         }
+        exportData = JSON.parse(content)
       }
 
       if (!exportData) {

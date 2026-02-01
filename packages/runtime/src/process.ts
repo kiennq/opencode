@@ -2,7 +2,15 @@
  * Process operations abstraction
  */
 
-import type { SpawnOptions, SpawnResult, ShellOptions, ShellResult, Subprocess, RuntimeAdapter } from "./types"
+import type {
+  SpawnOptions,
+  SpawnResult,
+  ShellOptions,
+  ShellResult,
+  Subprocess,
+  RuntimeAdapter,
+  WhichOptions,
+} from "./types"
 
 /**
  * Process namespace - provides process operations using the current runtime adapter
@@ -43,7 +51,14 @@ export namespace Process {
   /**
    * Find an executable in PATH
    */
-  export function which(name: string): string | null {
-    return getAdapter().which(name)
+  export function which(name: string, options?: WhichOptions): string | null {
+    return getAdapter().which(name, options)
+  }
+
+  /**
+   * Resolve a module specifier to its file path
+   */
+  export function resolve(specifier: string, parent: string): Promise<string | undefined> {
+    return getAdapter().resolve(specifier, parent)
   }
 }

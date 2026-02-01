@@ -1,3 +1,4 @@
+import { File } from "@opencode-ai/runtime"
 import { createStore } from "solid-js/store"
 import { batch, createEffect, createMemo } from "solid-js"
 import { useSync } from "@tui/context/sync"
@@ -112,7 +113,7 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
         variant: {},
       })
 
-      const file = Bun.file(path.join(Global.Path.state, "model.json"))
+      const filePath = path.join(Global.Path.state, "model.json")
       const state = {
         pending: false,
       }
@@ -123,8 +124,8 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
           return
         }
         state.pending = false
-        Bun.write(
-          file,
+        File.write(
+          filePath,
           JSON.stringify({
             recent: modelStore.recent,
             favorite: modelStore.favorite,
@@ -133,8 +134,8 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
         )
       }
 
-      file
-        .json()
+      File.read(filePath)
+        .then((content) => JSON.parse(content))
         .then((x) => {
           if (Array.isArray(x.recent)) setModelStore("recent", x.recent)
           if (Array.isArray(x.favorite)) setModelStore("favorite", x.favorite)

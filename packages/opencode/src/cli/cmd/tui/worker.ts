@@ -1,3 +1,4 @@
+import { Util } from "@opencode-ai/runtime"
 import { Installation } from "@/installation"
 import { Server } from "@/server/server"
 import { Log } from "@/util/log"
@@ -8,7 +9,6 @@ import { upgrade } from "@/cli/upgrade"
 import { Config } from "@/config/config"
 import { GlobalBus } from "@/bus/global"
 import { createOpencodeClient, type Event } from "@opencode-ai/sdk/v2"
-import type { BunWebSocketData } from "hono/bun"
 import { Flag } from "@/flag/flag"
 
 await Log.init({
@@ -38,7 +38,7 @@ const globalBusHandler = (event: { directory?: string; payload: any }) => {
 }
 GlobalBus.on("event", globalBusHandler)
 
-let server: Bun.Server<BunWebSocketData> | undefined
+let server: ReturnType<typeof Server.listen> | undefined
 
 const eventStream = {
   abort: undefined as AbortController | undefined,
@@ -80,7 +80,7 @@ const startEventStream = (directory: string) => {
       ).catch(() => undefined)
 
       if (!events) {
-        await Bun.sleep(backoff)
+        await Util.sleep(backoff)
         backoff = Math.min(backoff * backoffMultiplier, maxBackoff)
         continue
       }
@@ -93,7 +93,7 @@ const startEventStream = (directory: string) => {
       }
 
       if (!signal.aborted) {
-        await Bun.sleep(250)
+        await Util.sleep(250)
       }
     }
   })().catch((error) => {

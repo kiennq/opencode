@@ -1,4 +1,5 @@
 import { SyntaxStyle, RGBA, type TerminalColors } from "@opentui/core"
+import { File, Glob } from "@opencode-ai/runtime"
 import path from "path"
 import { createEffect, createMemo, onMount } from "solid-js"
 import { useSync } from "@tui/context/sync"
@@ -391,7 +392,6 @@ export const { use: useTheme, provider: ThemeProvider } = createSimpleContext({
   },
 })
 
-const CUSTOM_THEME_GLOB = new Bun.Glob("themes/*.json")
 async function getCustomThemes() {
   const directories = [
     Global.Path.config,
@@ -405,14 +405,14 @@ async function getCustomThemes() {
 
   const result: Record<string, ThemeJson> = {}
   for (const dir of directories) {
-    for await (const item of CUSTOM_THEME_GLOB.scan({
+    for await (const item of Glob.scan("themes/*.json", {
       absolute: true,
       followSymlinks: true,
       dot: true,
       cwd: dir,
     })) {
       const name = path.basename(item, ".json")
-      result[name] = await Bun.file(item).json()
+      result[name] = JSON.parse(await File.read(item))
     }
   }
   return result

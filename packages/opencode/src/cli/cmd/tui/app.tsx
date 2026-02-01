@@ -1,3 +1,4 @@
+import { File, Process, Util } from "@opencode-ai/runtime"
 import { render, useKeyboard, useRenderer, useTerminalDimensions } from "@opentui/solid"
 import { Clipboard } from "@tui/util/clipboard"
 import { TextAttributes } from "@opentui/core"
@@ -544,7 +545,7 @@ function App() {
       value: "app.heap_snapshot",
       onSelect: async (dialog) => {
         // Force GC first
-        Bun.gc(true)
+        Util.gc()
 
         const lines: string[] = []
         const log = (msg: string) => lines.push(msg)
@@ -561,8 +562,8 @@ function App() {
           const cmd = isWindows
             ? ["powershell", "-nop", "-c", `(Get-Process -Id ${pid}).WorkingSet64 / 1MB`]
             : ["ps", "-o", "rss=", "-p", String(pid)]
-          const result = Bun.spawnSync(cmd)
-          const output = result.stdout.toString().trim()
+          const result = Process.spawnSync(cmd)
+          const output = result.stdout.trim()
           if (isWindows) {
             log(`Working Set: ${parseFloat(output).toFixed(2)} MB`)
           } else {
@@ -581,25 +582,10 @@ function App() {
         log(`External: ${(memUsage.external / 1024 / 1024).toFixed(2)} MB`)
         log(`Array buffers: ${(memUsage.arrayBuffers / 1024 / 1024).toFixed(2)} MB`)
 
-        // Get Bun GC stats
-        const gc = Bun.gc(false)
-        log("\n--- Bun GC Stats ---")
-        log(`Heap size: ${((gc as any).heapSize / 1024 / 1024).toFixed(2)} MB`)
-        log(`Heap capacity: ${((gc as any).heapCapacity / 1024 / 1024).toFixed(2)} MB`)
-        log(`External memory: ${(((gc as any).extraMemorySize ?? 0) / 1024 / 1024).toFixed(2)} MB`)
-        log(`Object count: ${(gc as any).objectCount?.toLocaleString()}`)
-
-        // Log object type counts
-        const typeCounts = (gc as any).objectTypeCounts
-        if (typeCounts) {
-          log("\n--- Top Object Types by Count ---")
-          const sorted = Object.entries(typeCounts)
-            .sort((a, b) => (b[1] as number) - (a[1] as number))
-            .slice(0, 30)
-          for (const [type, count] of sorted) {
-            log(`  ${type}: ${(count as number).toLocaleString()}`)
-          }
-        }
+        // Note: Bun-specific GC stats are not available in the runtime abstraction
+        // Using standard Node.js memory stats instead
+        log("\n--- Runtime GC Stats ---")
+        log("(Bun-specific GC stats not available in abstracted runtime)")
 
         // Log store sizes
         log("\n--- Sync Store Sizes ---")
@@ -691,7 +677,7 @@ function App() {
 
         // Write stats to file next to snapshot
         const statsPath = snapshotPath.replace(".heapsnapshot", ".stats.txt")
-        await Bun.write(statsPath, lines.join("\n"))
+        await File.write(statsPath, lines.join("\n"))
 
         toast.show({
           variant: "info",

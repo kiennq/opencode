@@ -1,5 +1,6 @@
 import z from "zod"
 import * as path from "path"
+import { File as RuntimeFile } from "@opencode-ai/runtime"
 import { Tool } from "./tool"
 import { LSP } from "../lsp"
 import { createTwoFilesPatch } from "diff"
@@ -26,9 +27,8 @@ export const WriteTool = Tool.define("write", {
     const filepath = path.isAbsolute(params.filePath) ? params.filePath : path.join(Instance.directory, params.filePath)
     await assertExternalDirectory(ctx, filepath)
 
-    const file = Bun.file(filepath)
-    const exists = await file.exists()
-    const contentOld = exists ? await file.text() : ""
+    const exists = await RuntimeFile.exists(filepath)
+    const contentOld = exists ? await RuntimeFile.read(filepath) : ""
     if (exists) await FileTime.assert(ctx.sessionID, filepath)
 
     const diff = trimDiff(createTwoFilesPatch(filepath, filepath, contentOld, params.content))
@@ -42,7 +42,7 @@ export const WriteTool = Tool.define("write", {
       },
     })
 
-    await Bun.write(filepath, params.content)
+    await RuntimeFile.write(filepath, params.content)
     await Bus.publish(File.Event.Edited, {
       file: filepath,
     })

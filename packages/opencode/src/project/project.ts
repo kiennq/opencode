@@ -1,8 +1,8 @@
 import z from "zod"
 import fs from "fs/promises"
+import { File, Glob, Process } from "@opencode-ai/runtime"
 import { Filesystem } from "../util/filesystem"
 import path from "path"
-import { $ } from "bun"
 import { Storage } from "../storage/storage"
 import { Log } from "../util/log"
 import { Flag } from "@/flag/flag"
@@ -60,11 +60,10 @@ export namespace Project {
       if (git) {
         let sandbox = path.dirname(git)
 
-        const gitBinary = Bun.which("git")
+        const gitBinary = Process.which("git")
 
         // cached id calculation
-        let id = await Bun.file(path.join(git, "opencode"))
-          .text()
+        let id = await File.read(path.join(git, "opencode"))
           .then((x) => x.trim())
           .catch(() => undefined)
 
@@ -79,21 +78,18 @@ export namespace Project {
 
         // generate id from root commit
         if (!id) {
-          const roots = await $`git rev-list --max-parents=0 --all`
-            .quiet()
-            .nothrow()
-            .cwd(sandbox)
-            .text()
-            .then((x) =>
-              x
-                .split("\n")
-                .filter(Boolean)
-                .map((x) => x.trim())
-                .toSorted(),
-            )
-            .catch(() => undefined)
+          const result = await Process.exec("git rev-list --max-parents=0 --all", {
+            cwd: sandbox,
+            quiet: true,
+            nothrow: true,
+          })
+          const roots = result.stdout
+            .split("\n")
+            .filter(Boolean)
+            .map((x) => x.trim())
+            .toSorted()
 
-          if (!roots) {
+          if (!roots || roots.length === 0) {
             return {
               id: "global",
               worktree: sandbox,
@@ -104,9 +100,7 @@ export namespace Project {
 
           id = roots[0]
           if (id) {
-            void Bun.file(path.join(git, "opencode"))
-              .write(id)
-              .catch(() => undefined)
+            void File.write(path.join(git, "opencode"), id).catch(() => undefined)
           }
         }
 
@@ -119,13 +113,12 @@ export namespace Project {
           }
         }
 
-        const top = await $`git rev-parse --show-toplevel`
-          .quiet()
-          .nothrow()
-          .cwd(sandbox)
-          .text()
-          .then((x) => path.resolve(sandbox, x.trim()))
-          .catch(() => undefined)
+        const topResult = await Process.exec("git rev-parse --show-toplevel", {
+          cwd: sandbox,
+          quiet: true,
+          nothrow: true,
+        })
+        const top = topResult.exitCode === 0 ? path.resolve(sandbox, topResult.stdout.trim()) : undefined
 
         if (!top) {
           return {
@@ -138,17 +131,19 @@ export namespace Project {
 
         sandbox = top
 
-        const worktree = await $`git rev-parse --git-common-dir`
-          .quiet()
-          .nothrow()
-          .cwd(sandbox)
-          .text()
-          .then((x) => {
-            const dirname = path.dirname(x.trim())
-            if (dirname === ".") return sandbox
-            return dirname
-          })
-          .catch(() => undefined)
+        const worktreeResult = await Process.exec("git rev-parse --git-common-dir", {
+          cwd: sandbox,
+          quiet: true,
+          nothrow: true,
+        })
+        const worktree =
+          worktreeResult.exitCode === 0
+            ? (() => {
+                const dirname = path.dirname(worktreeResult.stdout.trim())
+                if (dirname === ".") return sandbox
+                return dirname
+              })()
+            : undefined
 
         if (!worktree) {
           return {
@@ -222,9 +217,8 @@ export namespace Project {
     if (input.vcs !== "git") return
     if (input.icon?.override) return
     if (input.icon?.url) return
-    const glob = new Bun.Glob("**/{favicon}.{ico,png,svg,jpg,jpeg,webp}")
     const matches = await Array.fromAsync(
-      glob.scan({
+      Glob.scan("**/{favicon}.{ico,png,svg,jpg,jpeg,webp}", {
         cwd: input.worktree,
         absolute: true,
         onlyFiles: true,
@@ -234,10 +228,19 @@ export namespace Project {
     )
     const shortest = matches.sort((a, b) => a.length - b.length)[0]
     if (!shortest) return
-    const file = Bun.file(shortest)
-    const buffer = await file.arrayBuffer()
+    const buffer = await File.readBytes(shortest)
+    // Determine MIME type from extension
+    const ext = path.extname(shortest).toLowerCase()
+    const mimeTypes: Record<string, string> = {
+      ".ico": "image/x-icon",
+      ".png": "image/png",
+      ".svg": "image/svg+xml",
+      ".jpg": "image/jpeg",
+      ".jpeg": "image/jpeg",
+      ".webp": "image/webp",
+    }
+    const mime = mimeTypes[ext] || "image/png"
     const base64 = Buffer.from(buffer).toString("base64")
-    const mime = file.type || "image/png"
     const url = `data:${mime};base64,${base64}`
     await update({
       projectID: input.id,

@@ -1,4 +1,5 @@
 import z from "zod"
+import { File, Process, Util } from "@opencode-ai/runtime"
 import { Tool } from "./tool"
 import { Ripgrep } from "../file/ripgrep"
 
@@ -43,15 +44,15 @@ export const GrepTool = Tool.define("grep", {
     }
     args.push(searchPath)
 
-    const proc = Bun.spawn([rgPath, ...args], {
+    const proc = Process.spawn([rgPath, ...args], {
       stdout: "pipe",
       stderr: "pipe",
       signal: ctx.abort,
     })
 
     const [output, errorOutput] = await Promise.all([
-      Bun.readableStreamToText(proc.stdout),
-      Bun.readableStreamToText(proc.stderr),
+      proc.stdout ? Util.streamToText(proc.stdout) : Promise.resolve(""),
+      proc.stderr ? Util.streamToText(proc.stderr) : Promise.resolve(""),
     ])
     const exitCode = await proc.exited
 
@@ -91,9 +92,7 @@ export const GrepTool = Tool.define("grep", {
 
     const results = await Promise.all(
       parsed.map(async (item) => {
-        const stats = await Bun.file(item.path)
-          .stat()
-          .catch(() => null)
+        const stats = await File.stat(item.path).catch(() => null)
         if (!stats) return null
         return {
           ...item,

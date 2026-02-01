@@ -3,7 +3,7 @@ import { UI } from "../ui"
 import * as prompts from "@clack/prompts"
 import { Installation } from "../../installation"
 import { Global } from "../../global"
-import { $ } from "bun"
+import { File, Process } from "@opencode-ai/runtime"
 import fs from "fs/promises"
 import path from "path"
 import os from "os"
@@ -193,14 +193,11 @@ async function executeUninstall(method: Installation.Method, targets: RemovalTar
       spinner.start(`Running ${cmd.join(" ")}...`)
       const result =
         method === "choco"
-          ? await $`echo Y | choco uninstall opencode -y -r`.quiet().nothrow()
-          : await $`${cmd}`.quiet().nothrow()
+          ? await Process.exec("echo Y | choco uninstall opencode -y -r", { quiet: true, nothrow: true })
+          : await Process.exec(cmd.join(" "), { quiet: true, nothrow: true })
       if (result.exitCode !== 0) {
         spinner.stop(`Package manager uninstall failed: exit code ${result.exitCode}`, 1)
-        if (
-          method === "choco" &&
-          result.stdout.toString("utf8").includes("not running from an elevated command shell")
-        ) {
+        if (method === "choco" && result.stdout.includes("not running from an elevated command shell")) {
           prompts.log.warn(`You may need to run '${cmd.join(" ")}' from an elevated command shell`)
         } else {
           prompts.log.warn(`You may need to run manually: ${cmd.join(" ")}`)
@@ -267,9 +264,7 @@ async function getShellConfigFile(): Promise<string | null> {
       .catch(() => false)
     if (!exists) continue
 
-    const content = await Bun.file(file)
-      .text()
-      .catch(() => "")
+    const content = await File.read(file).catch(() => "")
     if (content.includes("# opencode") || content.includes(".opencode/bin")) {
       return file
     }
@@ -279,7 +274,7 @@ async function getShellConfigFile(): Promise<string | null> {
 }
 
 async function cleanShellConfig(file: string) {
-  const content = await Bun.file(file).text()
+  const content = await File.read(file)
   const lines = content.split("\n")
 
   const filtered: string[] = []
@@ -315,7 +310,7 @@ async function cleanShellConfig(file: string) {
   }
 
   const output = filtered.join("\n") + "\n"
-  await Bun.write(file, output)
+  await File.write(file, output)
 }
 
 async function getDirectorySize(dir: string): Promise<number> {

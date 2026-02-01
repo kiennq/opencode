@@ -27,16 +27,16 @@ import { LspTool } from "./lsp"
 import { Truncate } from "./truncation"
 import { PlanExitTool, PlanEnterTool } from "./plan"
 import { ApplyPatchTool } from "./apply_patch"
+import { Glob } from "@opencode-ai/runtime"
 
 export namespace ToolRegistry {
   const log = Log.create({ service: "tool.registry" })
 
   export const state = Instance.state(async () => {
     const custom = [] as Tool.Info[]
-    const glob = new Bun.Glob("{tool,tools}/*.{js,ts}")
 
     for (const dir of await Config.directories()) {
-      for await (const match of glob.scan({
+      for await (const match of Glob.scan("{tool,tools}/*.{js,ts}", {
         cwd: dir,
         absolute: true,
         followSymlinks: true,

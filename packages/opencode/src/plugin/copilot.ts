@@ -1,4 +1,5 @@
 import type { Hooks, PluginInput } from "@opencode-ai/plugin"
+import { Util } from "@opencode-ai/runtime"
 import { Installation } from "@/installation"
 import { iife } from "@/util/iife"
 
@@ -270,7 +271,7 @@ export async function CopilotAuthPlugin(input: PluginInput): Promise<Hooks> {
                   }
 
                   if (data.error === "authorization_pending") {
-                    await Bun.sleep(deviceData.interval * 1000 + OAUTH_POLLING_SAFETY_MARGIN_MS)
+                    await Util.sleep(deviceData.interval * 1000 + OAUTH_POLLING_SAFETY_MARGIN_MS)
                     continue
                   }
 
@@ -286,13 +287,13 @@ export async function CopilotAuthPlugin(input: PluginInput): Promise<Hooks> {
                       newInterval = serverInterval * 1000
                     }
 
-                    await Bun.sleep(newInterval + OAUTH_POLLING_SAFETY_MARGIN_MS)
+                    await Util.sleep(newInterval + OAUTH_POLLING_SAFETY_MARGIN_MS)
                     continue
                   }
 
                   if (data.error) return { type: "failed" as const }
 
-                  await Bun.sleep(deviceData.interval * 1000 + OAUTH_POLLING_SAFETY_MARGIN_MS)
+                  await Util.sleep(deviceData.interval * 1000 + OAUTH_POLLING_SAFETY_MARGIN_MS)
                   continue
                 }
               },

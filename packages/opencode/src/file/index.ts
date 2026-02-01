@@ -1,7 +1,6 @@
 import { BusEvent } from "@/bus/bus-event"
 import z from "zod"
-import { $ } from "bun"
-import type { BunFile } from "bun"
+import { File as RuntimeFile, Process } from "@opencode-ai/runtime"
 import { formatPatch, structuredPatch } from "diff"
 import path from "path"
 import fs from "fs"
@@ -237,25 +236,46 @@ export namespace File {
     return binaryExtensions.has(ext)
   }
 
-  function isImage(mimeType: string): boolean {
-    return mimeType.startsWith("image/")
+  function shouldEncodeByExtension(filepath: string): boolean {
+    const ext = path.extname(filepath).toLowerCase().slice(1)
+    return imageExtensions.has(ext) || binaryExtensions.has(ext)
   }
 
-  async function shouldEncode(file: BunFile): Promise<boolean> {
-    const type = file.type?.toLowerCase()
-    log.info("shouldEncode", { type })
-    if (!type) return false
-
-    if (type.startsWith("text/")) return false
-    if (type.includes("charset=")) return false
-
-    const parts = type.split("/", 2)
-    const top = parts[0]
-
-    const tops = ["image", "audio", "video", "font", "model", "multipart"]
-    if (tops.includes(top)) return true
-
-    return false
+  function getMimeType(ext: string): string {
+    const mimeTypes: Record<string, string> = {
+      // Images (also in getImageMimeType but included for completeness)
+      ".png": "image/png",
+      ".jpg": "image/jpeg",
+      ".jpeg": "image/jpeg",
+      ".gif": "image/gif",
+      ".bmp": "image/bmp",
+      ".ico": "image/x-icon",
+      ".webp": "image/webp",
+      ".svg": "image/svg+xml",
+      // Documents and archives
+      ".pdf": "application/pdf",
+      ".zip": "application/zip",
+      ".gz": "application/gzip",
+      ".tar": "application/x-tar",
+      ".rar": "application/vnd.rar",
+      ".7z": "application/x-7z-compressed",
+      // Audio
+      ".mp3": "audio/mpeg",
+      ".wav": "audio/wav",
+      ".ogg": "audio/ogg",
+      ".flac": "audio/flac",
+      // Video
+      ".mp4": "video/mp4",
+      ".webm": "video/webm",
+      ".avi": "video/x-msvideo",
+      ".mov": "video/quicktime",
+      // Executables
+      ".exe": "application/x-msdownload",
+      ".dll": "application/x-msdownload",
+      ".so": "application/x-sharedlib",
+      ".dylib": "application/x-sharedlib",
+    }
+    return mimeTypes[ext] || "application/octet-stream"
   }
 
   export const Event = {
@@ -354,11 +374,12 @@ export namespace File {
     const project = Instance.project
     if (project.vcs !== "git") return []
 
-    const diffOutput = await $`git -c core.quotepath=false diff --numstat HEAD`
-      .cwd(Instance.directory)
-      .quiet()
-      .nothrow()
-      .text()
+    const diffResult = await Process.exec("git -c core.quotepath=false diff --numstat HEAD", {
+      cwd: Instance.directory,
+      quiet: true,
+      nothrow: true,
+    })
+    const diffOutput = diffResult.stdout
 
     const changedFiles: Info[] = []
 
@@ -375,17 +396,18 @@ export namespace File {
       }
     }
 
-    const untrackedOutput = await $`git -c core.quotepath=false ls-files --others --exclude-standard`
-      .cwd(Instance.directory)
-      .quiet()
-      .nothrow()
-      .text()
+    const untrackedResult = await Process.exec("git -c core.quotepath=false ls-files --others --exclude-standard", {
+      cwd: Instance.directory,
+      quiet: true,
+      nothrow: true,
+    })
+    const untrackedOutput = untrackedResult.stdout
 
     if (untrackedOutput.trim()) {
       const untrackedFiles = untrackedOutput.trim().split("\n")
       for (const filepath of untrackedFiles) {
         try {
-          const content = await Bun.file(path.join(Instance.directory, filepath)).text()
+          const content = await RuntimeFile.read(path.join(Instance.directory, filepath))
           const lines = content.split("\n").length
           changedFiles.push({
             path: filepath,
@@ -400,11 +422,12 @@ export namespace File {
     }
 
     // Get deleted files
-    const deletedOutput = await $`git -c core.quotepath=false diff --name-only --diff-filter=D HEAD`
-      .cwd(Instance.directory)
-      .quiet()
-      .nothrow()
-      .text()
+    const deletedResult = await Process.exec("git -c core.quotepath=false diff --name-only --diff-filter=D HEAD", {
+      cwd: Instance.directory,
+      quiet: true,
+      nothrow: true,
+    })
+    const deletedOutput = deletedResult.stdout
 
     if (deletedOutput.trim()) {
       const deletedFiles = deletedOutput.trim().split("\n")
@@ -437,9 +460,8 @@ export namespace File {
 
     // Fast path: check extension before any filesystem operations
     if (isImageByExtension(file)) {
-      const bunFile = Bun.file(full)
-      if (await bunFile.exists()) {
-        const buffer = await bunFile.arrayBuffer().catch(() => new ArrayBuffer(0))
+      if (await RuntimeFile.exists(full)) {
+        const buffer = await RuntimeFile.readBytes(full).catch(() => new Uint8Array(0))
         const content = Buffer.from(buffer).toString("base64")
         const mimeType = getImageMimeType(file)
         return { type: "text", content, mimeType, encoding: "base64" }
@@ -451,35 +473,47 @@ export namespace File {
       return { type: "binary", content: "" }
     }
 
-    const bunFile = Bun.file(full)
-
-    if (!(await bunFile.exists())) {
+    if (!(await RuntimeFile.exists(full))) {
       return { type: "text", content: "" }
     }
 
-    const encode = await shouldEncode(bunFile)
-    const mimeType = bunFile.type || "application/octet-stream"
+    // Check if file should be encoded as base64 (non-image binary files)
+    // Images are already handled in the fast path above
+    const encode = shouldEncodeByExtension(full)
 
-    if (encode && !isImage(mimeType)) {
+    if (encode) {
+      // This handles non-image binary files that weren't caught by the fast path
+      const ext = path.extname(full).toLowerCase()
+      const mimeType = getMimeType(ext)
       return { type: "binary", content: "", mimeType }
     }
 
-    if (encode) {
-      const buffer = await bunFile.arrayBuffer().catch(() => new ArrayBuffer(0))
-      const content = Buffer.from(buffer).toString("base64")
-      return { type: "text", content, mimeType, encoding: "base64" }
-    }
-
-    const content = await bunFile
-      .text()
+    const content = await RuntimeFile.read(full)
       .catch(() => "")
       .then((x) => x.trim())
 
     if (project.vcs === "git") {
-      let diff = await $`git diff ${file}`.cwd(Instance.directory).quiet().nothrow().text()
-      if (!diff.trim()) diff = await $`git diff --staged ${file}`.cwd(Instance.directory).quiet().nothrow().text()
+      let diffResult = await Process.exec(`git diff ${file}`, {
+        cwd: Instance.directory,
+        quiet: true,
+        nothrow: true,
+      })
+      let diff = diffResult.stdout
+      if (!diff.trim()) {
+        diffResult = await Process.exec(`git diff --staged ${file}`, {
+          cwd: Instance.directory,
+          quiet: true,
+          nothrow: true,
+        })
+        diff = diffResult.stdout
+      }
       if (diff.trim()) {
-        const original = await $`git show HEAD:${file}`.cwd(Instance.directory).quiet().nothrow().text()
+        const originalResult = await Process.exec(`git show HEAD:${file}`, {
+          cwd: Instance.directory,
+          quiet: true,
+          nothrow: true,
+        })
+        const original = originalResult.stdout
         const patch = structuredPatch(file, file, original, content, "old", "new", {
           context: Infinity,
           ignoreWhitespace: true,
@@ -497,13 +531,13 @@ export namespace File {
     let ignored = (_: string) => false
     if (project.vcs === "git") {
       const ig = ignore()
-      const gitignore = Bun.file(path.join(Instance.worktree, ".gitignore"))
-      if (await gitignore.exists()) {
-        ig.add(await gitignore.text())
+      const gitignorePath = path.join(Instance.worktree, ".gitignore")
+      if (await RuntimeFile.exists(gitignorePath)) {
+        ig.add(await RuntimeFile.read(gitignorePath))
       }
-      const ignoreFile = Bun.file(path.join(Instance.worktree, ".ignore"))
-      if (await ignoreFile.exists()) {
-        ig.add(await ignoreFile.text())
+      const ignoreFilePath = path.join(Instance.worktree, ".ignore")
+      if (await RuntimeFile.exists(ignoreFilePath)) {
+        ig.add(await RuntimeFile.read(ignoreFilePath))
       }
       ignored = ig.ignores.bind(ig)
     }

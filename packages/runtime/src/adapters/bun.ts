@@ -14,6 +14,7 @@ import type {
   GlobOptions,
   ServeOptions,
   ServerHandle,
+  WhichOptions,
 } from "../types"
 
 /**
@@ -76,6 +77,13 @@ export const BunAdapter: RuntimeAdapter = {
         stdout: options?.stdout === "pipe" ? "pipe" : options?.stdout === "inherit" ? "inherit" : "ignore",
         stderr: options?.stderr === "pipe" ? "pipe" : options?.stderr === "inherit" ? "inherit" : "ignore",
       })
+
+      // Handle abort signal
+      if (options?.signal) {
+        options.signal.addEventListener("abort", () => {
+          proc.kill()
+        })
+      }
 
       // Convert Bun's stdin FileSink to WritableStream if needed
       let stdinStream: WritableStream<Uint8Array> | null = null
@@ -145,8 +153,19 @@ export const BunAdapter: RuntimeAdapter = {
       }
     },
 
-    which(name: string): string | null {
+    which(name: string, options?: WhichOptions): string | null {
+      if (options?.PATH) {
+        return Bun.which(name, { PATH: options.PATH })
+      }
       return Bun.which(name)
+    },
+
+    async resolve(specifier: string, parent: string): Promise<string | undefined> {
+      try {
+        return await Bun.resolve(specifier, parent)
+      } catch {
+        return undefined
+      }
     },
   },
 
@@ -206,6 +225,7 @@ export const BunAdapter: RuntimeAdapter = {
       return {
         port: server.port ?? 0,
         hostname: server.hostname ?? "localhost",
+        url: server.url?.toString() ?? `http://${server.hostname ?? "localhost"}:${server.port ?? 0}`,
         stop(closeActiveConnections?: boolean) {
           server.stop(closeActiveConnections)
         },
@@ -236,6 +256,10 @@ export const BunAdapter: RuntimeAdapter = {
     async streamToBytes(stream: ReadableStream<Uint8Array>): Promise<Uint8Array> {
       const buffer = await Bun.readableStreamToArrayBuffer(stream)
       return new Uint8Array(buffer)
+    },
+
+    stdinText(): Promise<string> {
+      return Bun.stdin.text()
     },
   },
 }

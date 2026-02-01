@@ -1,5 +1,6 @@
 import path from "path"
 import os from "os"
+import { File, Glob } from "@opencode-ai/runtime"
 import { Global } from "../global"
 import { Filesystem } from "../util/filesystem"
 import { Config } from "../config/config"
@@ -84,7 +85,7 @@ export namespace InstructionPrompt {
     }
 
     for (const file of globalFiles()) {
-      if (await Bun.file(file).exists()) {
+      if (await File.exists(file)) {
         paths.add(path.resolve(file))
         break
       }
@@ -98,7 +99,7 @@ export namespace InstructionPrompt {
         }
         const matches = path.isAbsolute(instruction)
           ? await Array.fromAsync(
-              new Bun.Glob(path.basename(instruction)).scan({
+              Glob.scan(path.basename(instruction), {
                 cwd: path.dirname(instruction),
                 absolute: true,
                 onlyFiles: true,
@@ -119,9 +120,7 @@ export namespace InstructionPrompt {
     const paths = await systemPaths()
 
     const files = Array.from(paths).map(async (p) => {
-      const content = await Bun.file(p)
-        .text()
-        .catch(() => "")
+      const content = await File.read(p).catch(() => "")
       return content ? "Instructions from: " + p + "\n" + content : ""
     })
 
@@ -163,7 +162,7 @@ export namespace InstructionPrompt {
   export async function find(dir: string) {
     for (const file of FILES) {
       const filepath = path.resolve(path.join(dir, file))
-      if (await Bun.file(filepath).exists()) return filepath
+      if (await File.exists(filepath)) return filepath
     }
   }
 
@@ -181,9 +180,7 @@ export namespace InstructionPrompt {
 
       if (found && found !== target && !system.has(found) && !already.has(found) && !isClaimed(messageID, found)) {
         claim(messageID, found)
-        const content = await Bun.file(found)
-          .text()
-          .catch(() => undefined)
+        const content = await File.read(found).catch(() => undefined)
         if (content) {
           results.push({ filepath: found, content: "Instructions from: " + found + "\n" + content })
         }

@@ -1,6 +1,6 @@
 import { BusEvent } from "@/bus/bus-event"
 import { Bus } from "@/bus"
-import { spawn } from "bun"
+import { Process, Util } from "@opencode-ai/runtime"
 import z from "zod"
 import { NamedError } from "@opencode-ai/util/error"
 import { Log } from "../util/log"
@@ -52,12 +52,15 @@ export namespace Ide {
     const cmd = SUPPORTED_IDES.find((i) => i.name === ide)?.cmd
     if (!cmd) throw new Error(`Unknown IDE: ${ide}`)
 
-    const p = spawn([cmd, "--install-extension", "sst-dev.opencode"], {
+    const p = Process.spawn([cmd, "--install-extension", "sst-dev.opencode"], {
       stdout: "pipe",
       stderr: "pipe",
     })
-    await p.exited
-    const [stdout, stderr] = await Promise.all([Bun.readableStreamToText(p.stdout), Bun.readableStreamToText(p.stderr)])
+    const exitCode = await p.exited
+    const [stdout, stderr] = await Promise.all([
+      p.stdout ? Util.streamToText(p.stdout) : "",
+      p.stderr ? Util.streamToText(p.stderr) : "",
+    ])
 
     log.info("installed", {
       ide,
@@ -65,7 +68,7 @@ export namespace Ide {
       stderr,
     })
 
-    if (p.exitCode !== 0) {
+    if (exitCode !== 0) {
       throw new InstallFailedError({ stderr })
     }
     if (stdout.includes("already installed")) {

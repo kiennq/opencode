@@ -1,5 +1,6 @@
 import { BusEvent } from "@/bus/bus-event"
 import { Bus } from "@/bus"
+import { File } from "@opencode-ai/runtime"
 import path from "path"
 import { pathToFileURL, fileURLToPath } from "url"
 import { createMessageConnection, StreamMessageReader, StreamMessageWriter } from "vscode-jsonrpc/node"
@@ -151,8 +152,7 @@ export namespace LSPClient {
       notify: {
         async open(input: { path: string }) {
           input.path = path.isAbsolute(input.path) ? input.path : path.resolve(Instance.directory, input.path)
-          const file = Bun.file(input.path)
-          const text = await file.text()
+          const text = await File.read(input.path)
           const extension = path.extname(input.path)
           const languageId = LANGUAGE_EXTENSIONS[extension] ?? "plaintext"
 

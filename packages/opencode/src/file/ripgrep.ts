@@ -5,10 +5,10 @@ import fs from "fs/promises"
 import z from "zod"
 import { NamedError } from "@opencode-ai/util/error"
 import { lazy } from "../util/lazy"
-import { $ } from "bun"
 
 import { ZipReader, BlobReader, BlobWriter } from "@zip.js/zip.js"
 import { Log } from "@/util/log"
+import { File, Process, Util } from "@opencode-ai/runtime"
 
 export namespace Ripgrep {
   const log = Log.create({ service: "ripgrep" })
@@ -123,12 +123,11 @@ export namespace Ripgrep {
   )
 
   const state = lazy(async () => {
-    let filepath = Bun.which("rg")
+    let filepath = Process.which("rg")
     if (filepath) return { filepath }
     filepath = path.join(Global.Path.bin, "rg" + (process.platform === "win32" ? ".exe" : ""))
 
-    const file = Bun.file(filepath)
-    if (!(await file.exists())) {
+    if (!(await File.exists(filepath))) {
       const platformKey = `${process.arch}-${process.platform}` as keyof typeof PLATFORM
       const config = PLATFORM[platformKey]
       if (!config) throw new UnsupportedPlatformError({ platform: platformKey })
@@ -140,29 +139,30 @@ export namespace Ripgrep {
       const response = await fetch(url)
       if (!response.ok) throw new DownloadFailedError({ url, status: response.status })
 
-      const buffer = await response.arrayBuffer()
+      const buffer = new Uint8Array(await response.arrayBuffer())
       const archivePath = path.join(Global.Path.bin, filename)
-      await Bun.write(archivePath, buffer)
+      await File.write(archivePath, buffer)
       if (config.extension === "tar.gz") {
         const args = ["tar", "-xzf", archivePath, "--strip-components=1"]
 
         if (platformKey.endsWith("-darwin")) args.push("--include=*/rg")
         if (platformKey.endsWith("-linux")) args.push("--wildcards", "*/rg")
 
-        const proc = Bun.spawn(args, {
+        const proc = Process.spawn(args, {
           cwd: Global.Path.bin,
           stderr: "pipe",
           stdout: "pipe",
         })
-        await proc.exited
-        if (proc.exitCode !== 0)
+        const exitCode = await proc.exited
+        if (exitCode !== 0)
           throw new ExtractionFailedError({
             filepath,
-            stderr: await Bun.readableStreamToText(proc.stderr),
+            stderr: proc.stderr ? await Util.streamToText(proc.stderr) : "",
           })
       }
       if (config.extension === "zip") {
-        const zipFileReader = new ZipReader(new BlobReader(new Blob([await Bun.file(archivePath).arrayBuffer()])))
+        const archiveData = await File.readBytes(archivePath)
+        const zipFileReader = new ZipReader(new BlobReader(new Blob([archiveData.buffer as ArrayBuffer])))
         const entries = await zipFileReader.getEntries()
         let rgEntry: any
         for (const entry of entries) {
@@ -186,7 +186,7 @@ export namespace Ripgrep {
             stderr: "Failed to extract rg.exe from zip archive",
           })
         }
-        await Bun.write(filepath, await rgBlob.arrayBuffer())
+        await File.write(filepath, new Uint8Array(await rgBlob.arrayBuffer()))
         await zipFileReader.close()
       }
       await fs.unlink(archivePath)
@@ -233,13 +233,15 @@ export namespace Ripgrep {
       })
     }
 
-    const proc = Bun.spawn(args, {
+    const proc = Process.spawn(args, {
       cwd: input.cwd,
       stdout: "pipe",
       stderr: "ignore",
-      maxBuffer: 1024 * 1024 * 20,
-      signal: input.signal,
     })
+
+    if (!proc.stdout) {
+      throw new Error("Failed to get stdout from ripgrep process")
+    }
 
     const reader = proc.stdout.getReader()
     const decoder = new TextDecoder()
@@ -353,13 +355,13 @@ export namespace Ripgrep {
     args.push(input.pattern)
 
     const command = args.join(" ")
-    const result = await $`${{ raw: command }}`.cwd(input.cwd).quiet().nothrow()
+    const result = await Process.exec(command, { cwd: input.cwd, quiet: true, nothrow: true })
     if (result.exitCode !== 0) {
       return []
     }
 
     // Handle both Unix (\n) and Windows (\r\n) line endings
-    const lines = result.text().trim().split(/\r?\n/).filter(Boolean)
+    const lines = result.stdout.trim().split(/\r?\n/).filter(Boolean)
     // Parse JSON lines from ripgrep output
 
     return lines

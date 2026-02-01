@@ -1,3 +1,4 @@
+import { File, Process } from "@opencode-ai/runtime"
 import { defer } from "@/util/defer"
 import { rm } from "node:fs/promises"
 import { tmpdir } from "node:os"
@@ -12,18 +13,17 @@ export namespace Editor {
     const filepath = join(tmpdir(), `${Date.now()}.md`)
     await using _ = defer(async () => rm(filepath, { force: true }))
 
-    await Bun.write(filepath, opts.value)
+    await File.write(filepath, opts.value)
     opts.renderer.suspend()
     opts.renderer.currentRenderBuffer.clear()
     const parts = editor.split(" ")
-    const proc = Bun.spawn({
-      cmd: [...parts, filepath],
+    const proc = Process.spawn([...parts, filepath], {
       stdin: "inherit",
       stdout: "inherit",
       stderr: "inherit",
     })
     await proc.exited
-    const content = await Bun.file(filepath).text()
+    const content = await File.read(filepath)
     opts.renderer.currentRenderBuffer.clear()
     opts.renderer.resume()
     opts.renderer.requestRender()

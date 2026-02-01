@@ -3,6 +3,7 @@ import { Global } from "../global"
 import { Filesystem } from "../util/filesystem"
 import { Config } from "../config/config"
 import { Log } from "../util/log"
+import { File, Glob } from "@opencode-ai/runtime"
 
 import { Instance } from "../project/instance"
 import path from "path"
@@ -110,7 +111,7 @@ export namespace SystemPrompt {
     }
 
     for (const globalRuleFile of GLOBAL_RULE_FILES) {
-      if (await Bun.file(globalRuleFile).exists()) {
+      if (await File.exists(globalRuleFile)) {
         paths.add(globalRuleFile)
         break
       }
@@ -129,7 +130,7 @@ export namespace SystemPrompt {
         let matches: string[] = []
         if (path.isAbsolute(instruction)) {
           matches = await Array.fromAsync(
-            new Bun.Glob(path.basename(instruction)).scan({
+            Glob.scan(path.basename(instruction), {
               cwd: path.dirname(instruction),
               absolute: true,
               onlyFiles: true,
@@ -143,8 +144,7 @@ export namespace SystemPrompt {
     }
 
     const foundFiles = Array.from(paths).map((p) =>
-      Bun.file(p)
-        .text()
+      File.read(p)
         .catch(() => "")
         .then((x) => "Instructions from: " + p + "\n" + x),
     )

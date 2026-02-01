@@ -17,6 +17,7 @@ import type {
   GlobOptions,
   ServeOptions,
   ServerHandle,
+  WhichOptions,
 } from "../types"
 
 // Declare Deno global for TypeScript
@@ -28,6 +29,7 @@ declare const Deno: {
   stat(path: string): Promise<{ size: number; mtime: Date | null; isFile: boolean; isDirectory: boolean }>
   remove(path: string): Promise<void>
   build: { os: "windows" | "darwin" | "linux" }
+  stdin: { readable: ReadableStream<Uint8Array> }
   Command: new (
     cmd: string,
     options?: {
@@ -230,14 +232,23 @@ export const DenoAdapter: RuntimeAdapter = {
       }
     },
 
-    which(name: string): string | null {
+    which(name: string, options?: WhichOptions): string | null {
       // Deno doesn't have a built-in which, use command
       try {
         const shell = Deno.build.os === "windows" ? "where" : "which"
+
+        // Build PATH environment
+        const env: Record<string, string> = {}
+        if (options?.PATH) {
+          const currentPath = (globalThis as any).Deno?.env?.get?.("PATH") ?? ""
+          env["PATH"] = currentPath + (Deno.build.os === "windows" ? ";" : ":") + options.PATH
+        }
+
         const result = new Deno.Command(shell, {
           args: [name],
           stdout: "piped",
           stderr: "null",
+          env: Object.keys(env).length > 0 ? env : undefined,
         }).outputSync()
 
         if (result.success) {
@@ -247,6 +258,41 @@ export const DenoAdapter: RuntimeAdapter = {
         return null
       } catch {
         return null
+      }
+    },
+
+    async resolve(specifier: string, parent: string): Promise<string | undefined> {
+      // Deno module resolution - try to import.meta.resolve if available
+      // This is a simplified implementation
+      try {
+        // For npm packages, try to find in node_modules
+        const path = await import("node:path")
+        const fs = await import("node:fs")
+
+        // Walk up from parent looking for node_modules
+        let current = parent
+        while (current !== path.dirname(current)) {
+          const nodeModulesPath = path.join(current, "node_modules", ...specifier.split("/"))
+
+          // Try with common extensions
+          for (const ext of ["", ".js", ".mjs", ".cjs", "/index.js", "/index.mjs"]) {
+            const fullPath = nodeModulesPath + ext
+            try {
+              const stat = fs.statSync(fullPath)
+              if (stat.isFile()) {
+                return fullPath
+              }
+            } catch {
+              // Continue
+            }
+          }
+
+          current = path.dirname(current)
+        }
+
+        return undefined
+      } catch {
+        return undefined
       }
     },
   },
@@ -301,6 +347,9 @@ export const DenoAdapter: RuntimeAdapter = {
         },
         get hostname() {
           return serverHostname
+        },
+        get url() {
+          return `http://${serverHostname}:${serverPort}`
         },
         stop(_closeActiveConnections?: boolean) {
           abortController.abort()
@@ -404,6 +453,32 @@ export const DenoAdapter: RuntimeAdapter = {
       }
 
       return result
+    },
+
+    async stdinText(): Promise<string> {
+      // Read all stdin as text
+      const chunks: Uint8Array[] = []
+      const reader = Deno.stdin.readable.getReader()
+
+      try {
+        while (true) {
+          const { done, value } = await reader.read()
+          if (done) break
+          chunks.push(value)
+        }
+      } finally {
+        reader.releaseLock()
+      }
+
+      const totalLength = chunks.reduce((acc, chunk) => acc + chunk.length, 0)
+      const result = new Uint8Array(totalLength)
+      let offset = 0
+      for (const chunk of chunks) {
+        result.set(chunk, offset)
+        offset += chunk.length
+      }
+
+      return new TextDecoder().decode(result)
     },
   },
 }

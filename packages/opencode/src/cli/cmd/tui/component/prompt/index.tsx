@@ -1,6 +1,8 @@
 import { BoxRenderable, TextareaRenderable, MouseEvent, PasteEvent, t, dim, fg } from "@opentui/core"
 import { createEffect, createMemo, type JSX, onMount, createSignal, onCleanup, Show, Switch, Match } from "solid-js"
 import "opentui-spinner/solid"
+import path from "path"
+import { File } from "@opencode-ai/runtime"
 import { useLocal } from "@tui/context/local"
 import { useTheme } from "@tui/context/theme"
 import { EmptyBorder } from "@tui/component/border"
@@ -915,26 +917,39 @@ export function Prompt(props: PromptProps) {
                 const isUrl = /^(https?):\/\//.test(filepath)
                 if (!isUrl) {
                   try {
-                    const file = Bun.file(filepath)
+                    // Get MIME type from extension
+                    const ext = path.extname(filepath).toLowerCase()
+                    const mimeTypes: Record<string, string> = {
+                      ".png": "image/png",
+                      ".jpg": "image/jpeg",
+                      ".jpeg": "image/jpeg",
+                      ".gif": "image/gif",
+                      ".webp": "image/webp",
+                      ".svg": "image/svg+xml",
+                      ".bmp": "image/bmp",
+                      ".ico": "image/x-icon",
+                    }
+                    const mimeType = mimeTypes[ext] || ""
+                    const filename = path.basename(filepath)
+
                     // Handle SVG as raw text content, not as base64 image
-                    if (file.type === "image/svg+xml") {
+                    if (mimeType === "image/svg+xml") {
                       event.preventDefault()
-                      const content = await file.text().catch(() => {})
+                      const content = await File.read(filepath).catch(() => undefined)
                       if (content) {
-                        pasteText(content, `[SVG: ${file.name ?? "image"}]`)
+                        pasteText(content, `[SVG: ${filename}]`)
                         return
                       }
                     }
-                    if (file.type.startsWith("image/")) {
+                    if (mimeType.startsWith("image/")) {
                       event.preventDefault()
-                      const content = await file
-                        .arrayBuffer()
-                        .then((buffer) => Buffer.from(buffer).toString("base64"))
-                        .catch(() => {})
+                      const content = await File.readBytes(filepath)
+                        .then((bytes) => Buffer.from(bytes).toString("base64"))
+                        .catch(() => undefined)
                       if (content) {
                         await pasteImage({
-                          filename: file.name,
-                          mime: file.type,
+                          filename,
+                          mime: mimeType,
                           content,
                         })
                         return

@@ -7,28 +7,32 @@ import { Locale } from "../../util/locale"
 import { Flag } from "../../flag/flag"
 import { EOL } from "os"
 import path from "path"
+import { File, Process } from "@opencode-ai/runtime"
 
-function pagerCmd(): string[] {
+async function pagerCmd(): Promise<string[]> {
   const lessOptions = ["-R", "-S"]
   if (process.platform !== "win32") {
     return ["less", ...lessOptions]
   }
 
   // user could have less installed via other options
-  const lessOnPath = Bun.which("less")
+  const lessOnPath = Process.which("less")
   if (lessOnPath) {
-    if (Bun.file(lessOnPath).size) return [lessOnPath, ...lessOptions]
+    const stat = await File.stat(lessOnPath).catch(() => null)
+    if (stat && stat.size > 0) return [lessOnPath, ...lessOptions]
   }
 
   if (Flag.OPENCODE_GIT_BASH_PATH) {
     const less = path.join(Flag.OPENCODE_GIT_BASH_PATH, "..", "..", "usr", "bin", "less.exe")
-    if (Bun.file(less).size) return [less, ...lessOptions]
+    const stat = await File.stat(less).catch(() => null)
+    if (stat && stat.size > 0) return [less, ...lessOptions]
   }
 
-  const git = Bun.which("git")
+  const git = Process.which("git")
   if (git) {
     const less = path.join(git, "..", "..", "usr", "bin", "less.exe")
-    if (Bun.file(less).size) return [less, ...lessOptions]
+    const stat = await File.stat(less).catch(() => null)
+    if (stat && stat.size > 0) return [less, ...lessOptions]
   }
 
   // Fall back to Windows built-in more (via cmd.exe)
@@ -86,15 +90,17 @@ export const SessionListCommand = cmd({
       const shouldPaginate = process.stdout.isTTY && !args.maxCount && args.format === "table"
 
       if (shouldPaginate) {
-        const proc = Bun.spawn({
-          cmd: pagerCmd(),
+        const proc = Process.spawn(await pagerCmd(), {
           stdin: "pipe",
           stdout: "inherit",
           stderr: "inherit",
         })
 
-        proc.stdin.write(output)
-        proc.stdin.end()
+        const writer = proc.stdin?.getWriter()
+        if (writer) {
+          await writer.write(new TextEncoder().encode(output))
+          await writer.close()
+        }
         await proc.exited
       } else {
         console.log(output)

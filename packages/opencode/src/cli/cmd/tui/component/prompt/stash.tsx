@@ -5,6 +5,7 @@ import { createStore, produce } from "solid-js/store"
 import { clone } from "remeda"
 import { createSimpleContext } from "../../context/helper"
 import { appendFile, writeFile } from "fs/promises"
+import { File } from "@opencode-ai/runtime"
 import type { PromptInfo } from "./history"
 
 export type StashEntry = {
@@ -18,9 +19,9 @@ const MAX_STASH_ENTRIES = 50
 export const { use: usePromptStash, provider: PromptStashProvider } = createSimpleContext({
   name: "PromptStash",
   init: () => {
-    const stashFile = Bun.file(path.join(Global.Path.state, "prompt-stash.jsonl"))
+    const stashFilePath = path.join(Global.Path.state, "prompt-stash.jsonl")
     onMount(async () => {
-      const text = await stashFile.text().catch(() => "")
+      const text = await File.read(stashFilePath).catch(() => "")
       const lines = text
         .split("\n")
         .filter(Boolean)
@@ -39,7 +40,7 @@ export const { use: usePromptStash, provider: PromptStashProvider } = createSimp
       // Rewrite file with only valid entries to self-heal corruption
       if (lines.length > 0) {
         const content = lines.map((line) => JSON.stringify(line)).join("\n") + "\n"
-        writeFile(stashFile.name!, content).catch(() => {})
+        writeFile(stashFilePath, content).catch(() => {})
       }
     })
 
@@ -66,11 +67,11 @@ export const { use: usePromptStash, provider: PromptStashProvider } = createSimp
 
         if (trimmed) {
           const content = store.entries.map((line) => JSON.stringify(line)).join("\n") + "\n"
-          writeFile(stashFile.name!, content).catch(() => {})
+          writeFile(stashFilePath, content).catch(() => {})
           return
         }
 
-        appendFile(stashFile.name!, JSON.stringify(stash) + "\n").catch(() => {})
+        appendFile(stashFilePath, JSON.stringify(stash) + "\n").catch(() => {})
       },
       pop() {
         if (store.entries.length === 0) return undefined
@@ -82,7 +83,7 @@ export const { use: usePromptStash, provider: PromptStashProvider } = createSimp
         )
         const content =
           store.entries.length > 0 ? store.entries.map((line) => JSON.stringify(line)).join("\n") + "\n" : ""
-        writeFile(stashFile.name!, content).catch(() => {})
+        writeFile(stashFilePath, content).catch(() => {})
         return entry
       },
       remove(index: number) {
@@ -94,7 +95,7 @@ export const { use: usePromptStash, provider: PromptStashProvider } = createSimp
         )
         const content =
           store.entries.length > 0 ? store.entries.map((line) => JSON.stringify(line)).join("\n") + "\n" : ""
-        writeFile(stashFile.name!, content).catch(() => {})
+        writeFile(stashFilePath, content).catch(() => {})
       },
     }
   },

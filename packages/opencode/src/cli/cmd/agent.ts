@@ -10,6 +10,7 @@ import matter from "gray-matter"
 import { Instance } from "../../project/instance"
 import { EOL } from "os"
 import type { Argv } from "yargs"
+import { File } from "@opencode-ai/runtime"
 
 type AgentMode = "all" | "primary" | "subagent"
 
@@ -202,8 +203,7 @@ const AgentCreateCommand = cmd({
 
         await fs.mkdir(targetPath, { recursive: true })
 
-        const file = Bun.file(filePath)
-        if (await file.exists()) {
+        if (await File.exists(filePath)) {
           if (isFullyNonInteractive) {
             console.error(`Error: Agent file already exists: ${filePath}`)
             process.exit(1)
@@ -212,7 +212,7 @@ const AgentCreateCommand = cmd({
           throw new UI.CancelledError()
         }
 
-        await Bun.write(filePath, content)
+        await File.write(filePath, content)
 
         if (isFullyNonInteractive) {
           console.log(filePath)

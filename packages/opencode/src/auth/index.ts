@@ -1,4 +1,5 @@
 import path from "path"
+import { File } from "@opencode-ai/runtime"
 import { Global } from "../global"
 import z from "zod"
 
@@ -42,8 +43,13 @@ export namespace Auth {
   }
 
   export async function all(): Promise<Record<string, Info>> {
-    const file = Bun.file(filepath)
-    const data = await file.json().catch(() => ({}) as Record<string, unknown>)
+    const content = await File.read(filepath).catch(() => "{}")
+    let data: Record<string, unknown> = {}
+    try {
+      data = JSON.parse(content)
+    } catch {
+      data = {}
+    }
     return Object.entries(data).reduce(
       (acc, [key, value]) => {
         const parsed = Info.safeParse(value)
@@ -56,15 +62,13 @@ export namespace Auth {
   }
 
   export async function set(key: string, info: Info) {
-    const file = Bun.file(filepath)
     const data = await all()
-    await Bun.write(file, JSON.stringify({ ...data, [key]: info }, null, 2), { mode: 0o600 })
+    await File.write(filepath, JSON.stringify({ ...data, [key]: info }, null, 2), { mode: 0o600 })
   }
 
   export async function remove(key: string) {
-    const file = Bun.file(filepath)
     const data = await all()
     delete data[key]
-    await Bun.write(file, JSON.stringify(data, null, 2), { mode: 0o600 })
+    await File.write(filepath, JSON.stringify(data, null, 2), { mode: 0o600 })
   }
 }
