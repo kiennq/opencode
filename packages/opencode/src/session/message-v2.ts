@@ -10,8 +10,14 @@ import { Storage } from "@/storage/storage"
 import { ProviderTransform } from "@/provider/transform"
 import { STATUS_CODES } from "http"
 import { iife } from "@/util/iife"
-import { type SystemError } from "bun"
 import type { Provider } from "@/provider/provider"
+
+// Node.js system error interface
+interface SystemError extends Error {
+  code?: string
+  syscall?: string
+  errno?: number
+}
 
 export namespace MessageV2 {
   export const OutputLengthError = NamedError.create("MessageOutputLengthError", z.object({}))

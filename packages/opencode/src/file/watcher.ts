@@ -11,7 +11,7 @@ import { createWrapper } from "@parcel/watcher/wrapper"
 import { lazy } from "@/util/lazy"
 import { withTimeout } from "@/util/timeout"
 import type ParcelWatcher from "@parcel/watcher"
-import { $ } from "bun"
+import { $ } from "@opencode-ai/runtime"
 import { Flag } from "@/flag/flag"
 import { readdir } from "fs/promises"
 

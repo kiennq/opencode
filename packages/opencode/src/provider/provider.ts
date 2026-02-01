@@ -15,6 +15,7 @@ import { Instance } from "../project/instance"
 import { Flag } from "../flag/flag"
 import { iife } from "@/util/iife"
 import { createLruCache } from "@/util/cache"
+import { createHash } from "crypto"
 
 // Type imports only (no runtime cost)
 import type { AmazonBedrockProviderSettings } from "@ai-sdk/amazon-bedrock"
@@ -1009,7 +1010,9 @@ export namespace Provider {
           ...model.headers,
         }
 
-      const key = Bun.hash.xxHash32(JSON.stringify({ providerID: model.providerID, npm: model.api.npm, options }))
+      const key = createHash("md5")
+        .update(JSON.stringify({ providerID: model.providerID, npm: model.api.npm, options }))
+        .digest("hex")
       const existing = s.sdk.get(key)
       if (existing) return existing
 

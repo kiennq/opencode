@@ -1,4 +1,4 @@
-import { $ } from "bun"
+import { $ } from "@opencode-ai/runtime"
 import path from "path"
 
 export namespace Archive {

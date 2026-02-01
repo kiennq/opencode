@@ -26,6 +26,7 @@ export * from "./process"
 export * from "./glob"
 export * from "./server"
 export * from "./util"
+export * from "./shell"
 
 // Runtime adapter management
 export { Runtime, autoInit } from "./adapter"

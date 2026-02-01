@@ -1,4 +1,4 @@
-import { $ } from "bun"
+import { $ } from "@opencode-ai/runtime"
 import fs from "fs/promises"
 import path from "path"
 import z from "zod"

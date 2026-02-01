@@ -2,7 +2,7 @@ import { BoxRenderable, TextareaRenderable, MouseEvent, PasteEvent, t, dim, fg }
 import { createEffect, createMemo, type JSX, onMount, createSignal, onCleanup, Show, Switch, Match } from "solid-js"
 import "opentui-spinner/solid"
 import path from "path"
-import { File } from "@opencode-ai/runtime"
+import { File, Util } from "@opencode-ai/runtime"
 import { useLocal } from "@tui/context/local"
 import { useTheme } from "@tui/context/theme"
 import { EmptyBorder } from "@tui/component/border"
@@ -316,7 +316,7 @@ export function Prompt(props: PromptProps) {
             parts: updatedNonTextParts,
           })
           restoreExtmarksFromParts(updatedNonTextParts)
-          input.cursorOffset = Bun.stringWidth(content)
+          input.cursorOffset = Util.stringWidth(content)
         },
       },
       {
