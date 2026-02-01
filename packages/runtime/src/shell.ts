@@ -6,59 +6,111 @@
 
 import { Runtime } from "./adapter"
 
-export interface ShellExecResult {
-  exitCode: number
-  stdout: Uint8Array
-  stderr: Uint8Array
-  /**
-   * Get stdout as text
-   */
-  text(): string
+// Buffer polyfill for Deno compatibility
+const BufferClass =
+  typeof Buffer !== "undefined"
+    ? Buffer
+    : class FakeBuffer extends Uint8Array {
+        override toString(encoding?: string): string {
+          return new TextDecoder(encoding === "utf8" || encoding === "utf-8" ? "utf-8" : encoding).decode(this)
+        }
+      }
+
+export interface ShellOutput {
+  readonly exitCode: number
+  readonly stdout: Buffer
+  readonly stderr: Buffer
+  text(encoding?: BufferEncoding): string
+  json(): any
+  arrayBuffer(): ArrayBuffer
+  bytes(): Uint8Array
+  blob(): Blob
 }
 
-export interface ShellCommand {
+export interface ShellPromise extends Promise<ShellOutput> {
   /**
-   * Execute the command and return the result
+   * Change the current working directory of the shell.
    */
-  then<T>(
-    onfulfilled?: ((value: ShellExecResult) => T | PromiseLike<T>) | null,
-    onrejected?: ((reason: unknown) => T | PromiseLike<T>) | null,
-  ): Promise<T>
+  cwd(newCwd: string): ShellPromise
 
   /**
-   * Don't throw on non-zero exit code
+   * Set environment variables for the shell.
    */
-  nothrow(): ShellCommand
-
-  /**
-   * Alias for nothrow() - matches Bun's API
-   */
-  throws(shouldThrow: boolean): ShellCommand
+  env(newEnv: Record<string, string | undefined>): ShellPromise
 
   /**
    * Suppress stdout/stderr output
    */
-  quiet(): ShellCommand
+  quiet(): ShellPromise
 
   /**
-   * Set working directory
-   */
-  cwd(directory: string): ShellCommand
-
-  /**
-   * Set environment variables
-   */
-  env(vars: Record<string, string | undefined>): ShellCommand
-
-  /**
-   * Get stdout as text (convenience method)
-   */
-  text(): Promise<string>
-
-  /**
-   * Iterate over stdout lines
+   * Read from stdout as a string, line by line
    */
   lines(): AsyncIterable<string>
+
+  /**
+   * Read from stdout as a string
+   */
+  text(encoding?: BufferEncoding): Promise<string>
+
+  /**
+   * Read from stdout as a JSON object
+   */
+  json(): Promise<any>
+
+  /**
+   * Read from stdout as an ArrayBuffer
+   */
+  arrayBuffer(): Promise<ArrayBuffer>
+
+  /**
+   * Read from stdout as a Blob
+   */
+  blob(): Promise<Blob>
+
+  /**
+   * Configure the shell to not throw an exception on non-zero exit codes.
+   */
+  nothrow(): ShellPromise
+
+  /**
+   * Configure whether or not the shell should throw an exception on non-zero exit codes.
+   */
+  throws(shouldThrow: boolean): ShellPromise
+}
+
+export interface ShellInterface {
+  (strings: TemplateStringsArray, ...expressions: unknown[]): ShellPromise
+
+  /**
+   * Perform bash-like brace expansion on the given pattern.
+   */
+  braces(pattern: string): string[]
+
+  /**
+   * Escape strings for input into shell commands.
+   */
+  escape(input: string): string
+
+  /**
+   * Change the default environment variables for shells created by this instance.
+   */
+  env(newEnv?: Record<string, string | undefined>): ShellInterface
+
+  /**
+   * Default working directory to use for shells created by this instance.
+   */
+  cwd(newCwd?: string): ShellInterface
+
+  /**
+   * Configure the shell to not throw an exception on non-zero exit codes.
+   */
+  nothrow(): ShellInterface
+
+  /**
+   * Configure whether or not the shell should throw an exception on non-zero exit codes.
+   */
+  throws(shouldThrow: boolean): ShellInterface
 }
 
 interface ShellOptions {
@@ -69,15 +121,54 @@ interface ShellOptions {
   nothrow?: boolean
 }
 
-class ShellCommandImpl implements ShellCommand {
+interface ShellDefaults {
+  cwd?: string
+  env?: Record<string, string | undefined>
+  nothrow?: boolean
+}
+
+function createOutput(exitCode: number, stdoutBytes: Uint8Array, stderrBytes: Uint8Array): ShellOutput {
+  const stdout = typeof Buffer !== "undefined" ? Buffer.from(stdoutBytes) : (stdoutBytes as unknown as Buffer)
+  const stderr = typeof Buffer !== "undefined" ? Buffer.from(stderrBytes) : (stderrBytes as unknown as Buffer)
+
+  return {
+    exitCode,
+    stdout,
+    stderr,
+    text(encoding?: BufferEncoding): string {
+      return new TextDecoder(encoding === "utf8" || encoding === "utf-8" ? "utf-8" : encoding).decode(stdoutBytes)
+    },
+    json(): any {
+      return JSON.parse(this.text())
+    },
+    arrayBuffer(): ArrayBuffer {
+      const sliced = stdoutBytes.buffer.slice(stdoutBytes.byteOffset, stdoutBytes.byteOffset + stdoutBytes.byteLength)
+      // Handle SharedArrayBuffer case by copying to ArrayBuffer
+      if (sliced instanceof SharedArrayBuffer) {
+        const ab = new ArrayBuffer(sliced.byteLength)
+        new Uint8Array(ab).set(new Uint8Array(sliced))
+        return ab
+      }
+      return sliced
+    },
+    bytes(): Uint8Array {
+      return stdoutBytes
+    },
+    blob(): Blob {
+      return new Blob([this.arrayBuffer()])
+    },
+  }
+}
+
+class ShellPromiseImpl implements ShellPromise {
   private options: ShellOptions
-  private _promise: Promise<ShellExecResult> | null = null
+  private _promise: Promise<ShellOutput> | null = null
 
   constructor(options: ShellOptions) {
     this.options = { ...options }
   }
 
-  private execute(): Promise<ShellExecResult> {
+  private execute(): Promise<ShellOutput> {
     if (this._promise) return this._promise
 
     this._promise = (async () => {
@@ -108,23 +199,14 @@ class ShellCommandImpl implements ShellCommand {
         }
       }
 
-      const result: ShellExecResult = {
-        exitCode: exitCode ?? 1,
-        stdout: stdoutBytes,
-        stderr: stderrBytes,
-        text() {
-          return new TextDecoder().decode(this.stdout)
-        },
-      }
+      const result = createOutput(exitCode ?? 1, stdoutBytes, stderrBytes)
 
       // Throw if exit code is non-zero and nothrow is not set
       if (!this.options.nothrow && result.exitCode !== 0) {
         const error = new Error(
           `Command failed with exit code ${result.exitCode}: ${this.options.command.join(" ")}`,
-        ) as Error & { exitCode: number; stdout: Uint8Array; stderr: Uint8Array }
-        error.exitCode = result.exitCode
-        error.stdout = result.stdout
-        error.stderr = result.stderr
+        ) as Error & ShellOutput
+        Object.assign(error, result)
         throw error
       }
 
@@ -134,39 +216,68 @@ class ShellCommandImpl implements ShellCommand {
     return this._promise
   }
 
-  then<T>(
-    onfulfilled?: ((value: ShellExecResult) => T | PromiseLike<T>) | null,
-    onrejected?: ((reason: unknown) => T | PromiseLike<T>) | null,
-  ): Promise<T> {
+  then<TResult1 = ShellOutput, TResult2 = never>(
+    onfulfilled?: ((value: ShellOutput) => TResult1 | PromiseLike<TResult1>) | null,
+    onrejected?: ((reason: unknown) => TResult2 | PromiseLike<TResult2>) | null,
+  ): Promise<TResult1 | TResult2> {
     return this.execute().then(onfulfilled, onrejected)
   }
 
-  nothrow(): ShellCommand {
-    return new ShellCommandImpl({ ...this.options, nothrow: true })
+  catch<TResult = never>(
+    onrejected?: ((reason: unknown) => TResult | PromiseLike<TResult>) | null,
+  ): Promise<ShellOutput | TResult> {
+    return this.execute().catch(onrejected)
   }
 
-  throws(shouldThrow: boolean): ShellCommand {
-    return new ShellCommandImpl({ ...this.options, nothrow: !shouldThrow })
+  finally(onfinally?: (() => void) | null): Promise<ShellOutput> {
+    return this.execute().finally(onfinally)
   }
 
-  quiet(): ShellCommand {
-    return new ShellCommandImpl({ ...this.options, quiet: true })
+  get [Symbol.toStringTag]() {
+    return "ShellPromise"
   }
 
-  cwd(directory: string): ShellCommand {
-    return new ShellCommandImpl({ ...this.options, cwd: directory })
+  nothrow(): ShellPromise {
+    return new ShellPromiseImpl({ ...this.options, nothrow: true })
   }
 
-  env(vars: Record<string, string | undefined>): ShellCommand {
-    return new ShellCommandImpl({
+  throws(shouldThrow: boolean): ShellPromise {
+    return new ShellPromiseImpl({ ...this.options, nothrow: !shouldThrow })
+  }
+
+  quiet(): ShellPromise {
+    return new ShellPromiseImpl({ ...this.options, quiet: true })
+  }
+
+  cwd(directory: string): ShellPromise {
+    return new ShellPromiseImpl({ ...this.options, cwd: directory })
+  }
+
+  env(vars: Record<string, string | undefined>): ShellPromise {
+    return new ShellPromiseImpl({
       ...this.options,
       env: { ...this.options.env, ...vars },
     })
   }
 
-  async text(): Promise<string> {
+  async text(encoding?: BufferEncoding): Promise<string> {
     const result = await this.execute()
-    return result.text().trim()
+    return result.text(encoding).trim()
+  }
+
+  async json(): Promise<any> {
+    const result = await this.execute()
+    return result.json()
+  }
+
+  async arrayBuffer(): Promise<ArrayBuffer> {
+    const result = await this.execute()
+    return result.arrayBuffer()
+  }
+
+  async blob(): Promise<Blob> {
+    const result = await this.execute()
+    return result.blob()
   }
 
   async *lines(): AsyncIterable<string> {
@@ -256,6 +367,129 @@ function parseCommand(cmd: string): string[] {
 }
 
 /**
+ * Escape a string for safe use in shell commands
+ */
+function escapeShellArg(input: string): string {
+  // If the string contains no special characters, return as-is
+  if (/^[a-zA-Z0-9._\-\/=]+$/.test(input)) {
+    return input
+  }
+  // Otherwise, wrap in single quotes and escape any single quotes within
+  return "'" + input.replace(/'/g, "'\\''") + "'"
+}
+
+/**
+ * Simple bash-like brace expansion
+ * Supports patterns like: {a,b,c}, {1..5}, file.{txt,md}
+ */
+function expandBraces(pattern: string): string[] {
+  const braceMatch = pattern.match(/^(.*?)\{([^}]+)\}(.*)$/)
+  if (!braceMatch) {
+    return [pattern]
+  }
+
+  const prefix = braceMatch[1] ?? ""
+  const content = braceMatch[2] ?? ""
+  const suffix = braceMatch[3] ?? ""
+  const parts: string[] = []
+
+  // Check for range pattern like {1..5} or {a..z}
+  const rangeMatch = content.match(/^(.+)\.\.(.+)$/)
+  if (rangeMatch) {
+    const start = rangeMatch[1] ?? ""
+    const end = rangeMatch[2] ?? ""
+    const startNum = parseInt(start, 10)
+    const endNum = parseInt(end, 10)
+
+    if (!isNaN(startNum) && !isNaN(endNum)) {
+      // Numeric range
+      const step = startNum <= endNum ? 1 : -1
+      for (let i = startNum; step > 0 ? i <= endNum : i >= endNum; i += step) {
+        parts.push(String(i))
+      }
+    } else if (start.length === 1 && end.length === 1) {
+      // Character range
+      const startCode = start.charCodeAt(0)
+      const endCode = end.charCodeAt(0)
+      const step = startCode <= endCode ? 1 : -1
+      for (let i = startCode; step > 0 ? i <= endCode : i >= endCode; i += step) {
+        parts.push(String.fromCharCode(i))
+      }
+    } else {
+      parts.push(content)
+    }
+  } else {
+    // Comma-separated list
+    parts.push(...content.split(","))
+  }
+
+  // Recursively expand any remaining braces
+  const results: string[] = []
+  for (const part of parts) {
+    const expanded = expandBraces(prefix + part + suffix)
+    results.push(...expanded)
+  }
+
+  return results
+}
+
+/**
+ * Create a shell instance with optional defaults
+ */
+function createShell(defaults: ShellDefaults = {}): ShellInterface {
+  function shell(strings: TemplateStringsArray, ...values: unknown[]): ShellPromise {
+    // Build the command string from template
+    let command = ""
+    for (let i = 0; i < strings.length; i++) {
+      command += strings[i]
+      if (i < values.length) {
+        const value = values[i]
+        // Escape and quote values that contain spaces or special characters
+        if (typeof value === "string") {
+          if (value.includes(" ") || value.includes('"') || value.includes("'")) {
+            // Escape double quotes and wrap in double quotes
+            command += `"${value.replace(/"/g, '\\"')}"`
+          } else {
+            command += value
+          }
+        } else {
+          command += String(value)
+        }
+      }
+    }
+
+    const args = parseCommand(command.trim())
+    return new ShellPromiseImpl({
+      command: args,
+      cwd: defaults.cwd,
+      env: defaults.env,
+      nothrow: defaults.nothrow,
+    })
+  }
+
+  shell.braces = expandBraces
+  shell.escape = escapeShellArg
+
+  shell.env = (newEnv?: Record<string, string | undefined>): ShellInterface => {
+    return createShell({ ...defaults, env: { ...defaults.env, ...newEnv } })
+  }
+
+  shell.cwd = (newCwd?: string): ShellInterface => {
+    return createShell({ ...defaults, cwd: newCwd })
+  }
+
+  shell.nothrow = (): ShellInterface => {
+    return createShell({ ...defaults, nothrow: true })
+  }
+
+  shell.throws = (shouldThrow: boolean): ShellInterface => {
+    return createShell({ ...defaults, nothrow: !shouldThrow })
+  }
+
+  return shell as ShellInterface
+}
+
+/**
  * Shell template tag function
  *
  * Usage:
@@ -264,30 +498,7 @@ function parseCommand(cmd: string): string[] {
  * console.log(result.text())
  * ```
  */
-export function $(strings: TemplateStringsArray, ...values: unknown[]): ShellCommand {
-  // Build the command string from template
-  let command = ""
-  for (let i = 0; i < strings.length; i++) {
-    command += strings[i]
-    if (i < values.length) {
-      const value = values[i]
-      // Escape and quote values that contain spaces or special characters
-      if (typeof value === "string") {
-        if (value.includes(" ") || value.includes('"') || value.includes("'")) {
-          // Escape double quotes and wrap in double quotes
-          command += `"${value.replace(/"/g, '\\"')}"`
-        } else {
-          command += value
-        }
-      } else {
-        command += String(value)
-      }
-    }
-  }
-
-  const args = parseCommand(command.trim())
-  return new ShellCommandImpl({ command: args })
-}
+export const $: ShellInterface = createShell()
 
 /**
  * Shell namespace for explicit command building
@@ -296,14 +507,24 @@ export namespace Shell {
   /**
    * Create a shell command from an array of arguments
    */
-  export function command(args: string[]): ShellCommand {
-    return new ShellCommandImpl({ command: args })
+  export function command(args: string[]): ShellPromise {
+    return new ShellPromiseImpl({ command: args })
   }
 
   /**
    * Create a shell command from a command string
    */
-  export function exec(cmd: string): ShellCommand {
-    return new ShellCommandImpl({ command: parseCommand(cmd) })
+  export function exec(cmd: string): ShellPromise {
+    return new ShellPromiseImpl({ command: parseCommand(cmd) })
   }
+
+  /**
+   * Escape a string for safe use in shell commands
+   */
+  export const escape = escapeShellArg
+
+  /**
+   * Perform bash-like brace expansion
+   */
+  export const braces = expandBraces
 }
