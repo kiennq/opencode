@@ -1,0 +1,24 @@
+{
+  "name": "@opencode-ai/runtime",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "license": "MIT",
+  "description": "Runtime abstraction layer for cross-runtime compatibility (Bun/Deno)",
+  "exports": {
+    ".": "./src/index.ts",
+    "./*": "./src/*.ts",
+    "./adapters/bun": "./src/adapters/bun.ts",
+    "./adapters/deno": "./src/adapters/deno.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "test": "bun test",
+    "test:deno": "deno test --allow-all"
+  },
+  "devDependencies": {
+    "typescript": "catalog:",
+    "@types/bun": "catalog:",
+    "@types/node": "catalog:"
+  }
+}

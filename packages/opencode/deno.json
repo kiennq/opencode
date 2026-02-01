@@ -1,0 +1,18 @@
+{
+  "compilerOptions": {
+    "strict": true,
+    "lib": ["deno.window", "dom"],
+    "jsx": "react-jsx",
+    "jsxImportSource": "solid-js"
+  },
+  "imports": {
+    "@opencode-ai/runtime": "../runtime/src/index.ts",
+    "@opencode-ai/runtime/": "../runtime/src/"
+  },
+  "tasks": {
+    "build": "deno run --allow-all script/build-deno.ts",
+    "build:single": "deno run --allow-all script/build-deno.ts --single",
+    "check": "deno check src/deno-entry.ts"
+  },
+  "exclude": ["node_modules", "dist", "dist-deno"]
+}
