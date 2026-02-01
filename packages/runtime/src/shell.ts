@@ -4,7 +4,7 @@
  * Provides a cross-runtime shell execution API similar to Bun's $ template tag.
  */
 
-import { Runtime } from "./adapter"
+import { Process } from "./process"
 
 // Buffer polyfill for Deno compatibility
 const BufferClass =
@@ -172,8 +172,7 @@ class ShellPromiseImpl implements ShellPromise {
     if (this._promise) return this._promise
 
     this._promise = (async () => {
-      const adapter = Runtime.get()
-      const proc = adapter.process.spawn(this.options.command, {
+      const proc = Process.spawn(this.options.command, {
         cwd: this.options.cwd,
         env: this.options.env ? { ...process.env, ...this.options.env } : undefined,
         stdout: "pipe",
@@ -181,13 +180,13 @@ class ShellPromiseImpl implements ShellPromise {
         stdin: "inherit",
       })
 
-      const exitCode = await proc.exited
+      // Read stdout and stderr concurrently with process execution
+      // We need to start reading BEFORE waiting for exit, otherwise streams may be closed
+      const stdoutPromise = proc.stdout ? readStream(proc.stdout) : Promise.resolve(new Uint8Array(0))
+      const stderrPromise = proc.stderr ? readStream(proc.stderr) : Promise.resolve(new Uint8Array(0))
 
-      // Read stdout and stderr
-      const [stdoutBytes, stderrBytes] = await Promise.all([
-        proc.stdout ? readStream(proc.stdout) : new Uint8Array(0),
-        proc.stderr ? readStream(proc.stderr) : new Uint8Array(0),
-      ])
+      // Wait for process to exit and streams to be fully read
+      const [exitCode, stdoutBytes, stderrBytes] = await Promise.all([proc.exited, stdoutPromise, stderrPromise])
 
       // If not quiet, write to console
       if (!this.options.quiet) {
