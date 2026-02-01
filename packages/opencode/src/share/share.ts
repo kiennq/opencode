@@ -1,7 +1,7 @@
-import { Bus } from "../bus"
-import { Installation } from "../installation"
+import { Bus } from "../bus/index"
+import { Installation } from "../installation/index"
 import { Instance } from "../project/instance"
-import { Session } from "../session"
+import { Session } from "../session/index"
 import { MessageV2 } from "../session/message-v2"
 import { Log } from "../util/log"
 

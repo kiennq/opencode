@@ -1,12 +1,12 @@
 import { $ } from "@opencode-ai/runtime"
-import path from "path"
-import fs from "fs/promises"
+import path from "node:path"
+import fs from "node:fs/promises"
 import { Log } from "../util/log"
-import { Global } from "../global"
+import { Global } from "../global/index"
 import z from "zod"
 import { Config } from "../config/config"
 import { Instance } from "../project/instance"
-import { Scheduler } from "../scheduler"
+import { Scheduler } from "../scheduler/index"
 
 export namespace Snapshot {
   const log = Log.create({ service: "snapshot" })

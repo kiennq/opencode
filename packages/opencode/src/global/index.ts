@@ -1,8 +1,8 @@
-import fs from "fs/promises"
+import fs from "node:fs/promises"
 import { File } from "@opencode-ai/runtime"
 import { xdgData, xdgCache, xdgConfig, xdgState } from "xdg-basedir"
-import path from "path"
-import os from "os"
+import path from "node:path"
+import os from "node:os"
 
 const app = "opencode"
 

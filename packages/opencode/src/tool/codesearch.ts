@@ -1,6 +1,6 @@
 import z from "zod"
 import { Tool } from "./tool"
-import DESCRIPTION from "./codesearch.txt"
+import DESCRIPTION from "./codesearch.txt.ts"
 
 const API_CONFIG = {
   BASE_URL: "https://mcp.exa.ai",

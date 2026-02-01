@@ -1,5 +1,5 @@
-import { EOL } from "os"
-import { Skill } from "../../../skill"
+import { EOL } from "node:os"
+import { Skill } from "../../../skill/index"
 import { bootstrap } from "../../bootstrap"
 import { cmd } from "../cmd"
 

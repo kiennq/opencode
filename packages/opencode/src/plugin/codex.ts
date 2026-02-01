@@ -1,9 +1,9 @@
 import type { Hooks, PluginInput } from "@opencode-ai/plugin"
 import { Server, Util } from "@opencode-ai/runtime"
 import { Log } from "../util/log"
-import { Installation } from "../installation"
-import { Auth, OAUTH_DUMMY_KEY } from "../auth"
-import os from "os"
+import { Installation } from "../installation/index"
+import { Auth, OAUTH_DUMMY_KEY } from "../auth/index"
+import os from "node:os"
 
 const log = Log.create({ service: "plugin.codex" })
 

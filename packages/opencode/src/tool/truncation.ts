@@ -1,11 +1,11 @@
-import fs from "fs/promises"
-import path from "path"
+import fs from "node:fs/promises"
+import path from "node:path"
 import { File, Glob } from "@opencode-ai/runtime"
-import { Global } from "../global"
+import { Global } from "../global/index"
 import { Identifier } from "../id/id"
 import { PermissionNext } from "../permission/next"
 import type { Agent } from "../agent/agent"
-import { Scheduler } from "../scheduler"
+import { Scheduler } from "../scheduler/index"
 
 export namespace Truncate {
   export const MAX_LINES = 2000

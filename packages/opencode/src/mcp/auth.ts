@@ -1,7 +1,7 @@
-import path from "path"
+import path from "node:path"
 import z from "zod"
 import { File } from "@opencode-ai/runtime"
-import { Global } from "../global"
+import { Global } from "../global/index"
 
 export namespace McpAuth {
   export const Tokens = z.object({

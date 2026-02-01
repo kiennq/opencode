@@ -1,7 +1,7 @@
-import { Bus } from "../bus"
-import { File } from "../file"
+import { Bus } from "../bus/index"
+import { File } from "../file/index"
 import { Log } from "../util/log"
-import path from "path"
+import path from "node:path"
 import z from "zod"
 import { Process } from "@opencode-ai/runtime"
 

@@ -1,7 +1,7 @@
 import { BusEvent } from "@/bus/bus-event"
 import { Bus } from "@/bus"
 import { TuiEvent } from "@/cli/cmd/tui/event"
-import { Session } from "."
+import { Session } from "./index"
 import { Identifier } from "../id/id"
 import { Instance } from "../project/instance"
 import { Provider } from "../provider/provider"

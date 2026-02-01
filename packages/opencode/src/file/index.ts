@@ -2,15 +2,15 @@ import { BusEvent } from "@/bus/bus-event"
 import z from "zod"
 import { File as RuntimeFile, Process } from "@opencode-ai/runtime"
 import { formatPatch, structuredPatch } from "diff"
-import path from "path"
-import fs from "fs"
+import path from "node:path"
+import fs from "node:fs"
 import ignore from "ignore"
 import { Log } from "../util/log"
 import { Filesystem } from "../util/filesystem"
 import { Instance } from "../project/instance"
 import { Ripgrep } from "./ripgrep"
 import fuzzysort from "fuzzysort"
-import { Global } from "../global"
+import { Global } from "../global/index"
 
 export namespace File {
   const log = Log.create({ service: "file" })

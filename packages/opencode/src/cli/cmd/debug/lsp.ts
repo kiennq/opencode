@@ -1,8 +1,8 @@
-import { LSP } from "../../../lsp"
+import { LSP } from "../../../lsp/index"
 import { bootstrap } from "../../bootstrap"
 import { cmd } from "../cmd"
 import { Log } from "../../../util/log"
-import { EOL } from "os"
+import { EOL } from "node:os"
 import { Util } from "@opencode-ai/runtime"
 
 export const LSPCommand = cmd({

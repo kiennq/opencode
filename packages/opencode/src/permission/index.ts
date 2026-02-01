@@ -3,7 +3,7 @@ import { Bus } from "@/bus"
 import z from "zod"
 import { Log } from "../util/log"
 import { Identifier } from "../id/id"
-import { Plugin } from "../plugin"
+import { Plugin } from "../plugin/index"
 import { Instance } from "../project/instance"
 import { Wildcard } from "../util/wildcard"
 

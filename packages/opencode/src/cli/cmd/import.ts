@@ -1,10 +1,10 @@
 import type { Argv } from "yargs"
-import { Session } from "../../session"
+import { Session } from "../../session/index"
 import { cmd } from "./cmd"
 import { bootstrap } from "../bootstrap"
 import { Storage } from "../../storage/storage"
 import { Instance } from "../../project/instance"
-import { EOL } from "os"
+import { EOL } from "node:os"
 import { File } from "@opencode-ai/runtime"
 
 export const ImportCommand = cmd({

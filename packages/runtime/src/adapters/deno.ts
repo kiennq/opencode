@@ -160,20 +160,25 @@ export const DenoAdapter: RuntimeAdapter = {
   process: {
     spawn(command: string[], options?: SpawnOptions): Subprocess {
       const [cmd, ...args] = command
+      const stdinMode = options?.stdin === "pipe" ? "piped" : options?.stdin === "inherit" ? "inherit" : "null"
+      const stdoutMode = options?.stdout === "pipe" ? "piped" : options?.stdout === "inherit" ? "inherit" : "null"
+      const stderrMode = options?.stderr === "pipe" ? "piped" : options?.stderr === "inherit" ? "inherit" : "null"
+
       const proc = new Deno.Command(cmd!, {
         args,
         cwd: options?.cwd,
         env: options?.env as Record<string, string>,
-        stdin: options?.stdin === "pipe" ? "piped" : options?.stdin === "inherit" ? "inherit" : "null",
-        stdout: options?.stdout === "pipe" ? "piped" : options?.stdout === "inherit" ? "inherit" : "null",
-        stderr: options?.stderr === "pipe" ? "piped" : options?.stderr === "inherit" ? "inherit" : "null",
+        stdin: stdinMode,
+        stdout: stdoutMode,
+        stderr: stderrMode,
       }).spawn()
 
       return {
         pid: proc.pid,
-        stdin: proc.stdin,
-        stdout: proc.stdout,
-        stderr: proc.stderr,
+        // Only access stdin/stdout/stderr if they are piped, otherwise they throw in Deno
+        stdin: stdinMode === "piped" ? proc.stdin : null,
+        stdout: stdoutMode === "piped" ? proc.stdout : null,
+        stderr: stderrMode === "piped" ? proc.stderr : null,
         exited: proc.status.then((s) => s.code),
         kill(signal?: number) {
           // Deno uses string signals, map common ones

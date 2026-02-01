@@ -1,5 +1,5 @@
-import { realpathSync } from "fs"
-import { dirname, join, relative } from "path"
+import { realpathSync } from "node:fs"
+import { dirname, join, relative } from "node:path"
 import { File, Glob } from "@opencode-ai/runtime"
 
 export namespace Filesystem {

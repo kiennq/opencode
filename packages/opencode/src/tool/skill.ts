@@ -1,7 +1,7 @@
-import path from "path"
+import path from "node:path"
 import z from "zod"
 import { Tool } from "./tool"
-import { Skill } from "../skill"
+import { Skill } from "../skill/index"
 import { PermissionNext } from "../permission/next"
 
 export const SkillTool = Tool.define("skill", async (ctx) => {

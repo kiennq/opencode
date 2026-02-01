@@ -7,7 +7,7 @@ import { Storage } from "@/storage/storage"
 import { fn } from "@/util/fn"
 import { Log } from "@/util/log"
 import { Wildcard } from "@/util/wildcard"
-import os from "os"
+import os from "node:os"
 import z from "zod"
 
 export namespace PermissionNext {

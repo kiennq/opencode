@@ -1,7 +1,7 @@
 import { MessageV2 } from "./message-v2"
 import { Log } from "@/util/log"
 import { Identifier } from "@/id/id"
-import { Session } from "."
+import { Session } from "./index"
 import { Agent } from "@/agent/agent"
 import { Snapshot } from "@/snapshot"
 import { SessionSummary } from "./summary"

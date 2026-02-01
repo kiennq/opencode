@@ -1,7 +1,7 @@
-import path from "path"
-import fs from "fs/promises"
+import path from "node:path"
+import fs from "node:fs/promises"
 import { Glob } from "@opencode-ai/runtime"
-import { Global } from "../global"
+import { Global } from "../global/index"
 import z from "zod"
 
 export namespace Log {

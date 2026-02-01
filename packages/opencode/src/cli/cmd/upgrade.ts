@@ -1,7 +1,7 @@
 import type { Argv } from "yargs"
 import { UI } from "../ui"
 import * as prompts from "@clack/prompts"
-import { Installation } from "../../installation"
+import { Installation } from "../../installation/index"
 
 export const UpgradeCommand = {
   command: "upgrade [target]",

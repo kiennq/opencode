@@ -1,6 +1,6 @@
 import z from "zod"
-import path from "path"
-import os from "os"
+import path from "node:path"
+import os from "node:os"
 import { Glob } from "@opencode-ai/runtime"
 import { Config } from "../config/config"
 import { Instance } from "../project/instance"

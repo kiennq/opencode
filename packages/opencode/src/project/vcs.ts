@@ -1,7 +1,7 @@
 import { BusEvent } from "@/bus/bus-event"
 import { Bus } from "@/bus"
 import { $ } from "@opencode-ai/runtime"
-import path from "path"
+import path from "node:path"
 import z from "zod"
 import { Log } from "@/util/log"
 import { Instance } from "./instance"

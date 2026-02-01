@@ -3,7 +3,7 @@ import { Global } from "@/global"
 import { createSignal, type Setter } from "solid-js"
 import { createStore } from "solid-js/store"
 import { createSimpleContext } from "./helper"
-import path from "path"
+import path from "node:path"
 
 export const { use: useKV, provider: KVProvider } = createSimpleContext({
   name: "KV",

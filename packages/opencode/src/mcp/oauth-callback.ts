@@ -1,6 +1,6 @@
 import { Log } from "../util/log"
 import { Server } from "@opencode-ai/runtime"
-import { createConnection } from "net"
+import { createConnection } from "node:net"
 import { OAUTH_CALLBACK_PORT, OAUTH_CALLBACK_PATH } from "./oauth-provider"
 
 const log = Log.create({ service: "mcp.oauth-callback" })

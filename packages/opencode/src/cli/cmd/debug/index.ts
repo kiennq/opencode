@@ -1,4 +1,4 @@
-import { Global } from "../../../global"
+import { Global } from "../../../global/index"
 import { bootstrap } from "../../bootstrap"
 import { cmd } from "../cmd"
 import { ConfigCommand } from "./config"

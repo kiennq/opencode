@@ -5,7 +5,7 @@ import { Instance } from "../project/instance"
 import { Log } from "../util/log"
 import { FileIgnore } from "./ignore"
 import { Config } from "../config/config"
-import path from "path"
+import path from "node:path"
 // @ts-ignore
 import { createWrapper } from "@parcel/watcher/wrapper"
 import { lazy } from "@/util/lazy"
@@ -13,7 +13,7 @@ import { withTimeout } from "@/util/timeout"
 import type ParcelWatcher from "@parcel/watcher"
 import { $ } from "@opencode-ai/runtime"
 import { Flag } from "@/flag/flag"
-import { readdir } from "fs/promises"
+import { readdir } from "node:fs/promises"
 
 const SUBSCRIBE_TIMEOUT_MS = 10_000
 

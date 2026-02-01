@@ -1,5 +1,5 @@
 import { $ } from "@opencode-ai/runtime"
-import path from "path"
+import path from "node:path"
 
 export namespace Archive {
   export async function extractZip(zipPath: string, destDir: string) {

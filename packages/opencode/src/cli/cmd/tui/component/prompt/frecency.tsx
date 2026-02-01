@@ -1,4 +1,4 @@
-import path from "path"
+import path from "node:path"
 import { File } from "@opencode-ai/runtime"
 import { Global } from "@/global"
 import { onMount } from "solid-js"

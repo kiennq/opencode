@@ -1,20 +1,20 @@
 import { Ripgrep } from "../file/ripgrep"
-import { Global } from "../global"
+import { Global } from "../global/index"
 import { Filesystem } from "../util/filesystem"
 import { Config } from "../config/config"
 import { Log } from "../util/log"
 import { File, Glob } from "@opencode-ai/runtime"
 
 import { Instance } from "../project/instance"
-import path from "path"
-import os from "os"
+import path from "node:path"
+import os from "node:os"
 
-import PROMPT_ANTHROPIC from "./prompt/anthropic.txt"
-import PROMPT_ANTHROPIC_WITHOUT_TODO from "./prompt/qwen.txt"
-import PROMPT_BEAST from "./prompt/beast.txt"
-import PROMPT_GEMINI from "./prompt/gemini.txt"
+import PROMPT_ANTHROPIC from "./prompt/anthropic.txt.ts"
+import PROMPT_ANTHROPIC_WITHOUT_TODO from "./prompt/qwen.txt.ts"
+import PROMPT_BEAST from "./prompt/beast.txt.ts"
+import PROMPT_GEMINI from "./prompt/gemini.txt.ts"
 
-import PROMPT_CODEX from "./prompt/codex_header.txt"
+import PROMPT_CODEX from "./prompt/codex_header.txt.ts"
 import type { Provider } from "@/provider/provider"
 import { Flag } from "@/flag/flag"
 

@@ -1,12 +1,12 @@
 import type { Argv } from "yargs"
 import { cmd } from "./cmd"
-import { Session } from "../../session"
+import { Session } from "../../session/index"
 import { bootstrap } from "../bootstrap"
 import { UI } from "../ui"
 import { Locale } from "../../util/locale"
 import { Flag } from "../../flag/flag"
-import { EOL } from "os"
-import path from "path"
+import { EOL } from "node:os"
+import path from "node:path"
 import { File, Process } from "@opencode-ai/runtime"
 
 async function pagerCmd(): Promise<string[]> {

@@ -1,5 +1,5 @@
 import { File, Process, Util } from "@opencode-ai/runtime"
-import { BunProc } from "../bun"
+import { BunProc } from "../bun/index"
 import { Instance } from "../project/instance"
 import { Filesystem } from "../util/filesystem"
 import { Flag } from "@/flag/flag"

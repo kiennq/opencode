@@ -1,12 +1,12 @@
 import type { Argv } from "yargs"
 import { UI } from "../ui"
 import * as prompts from "@clack/prompts"
-import { Installation } from "../../installation"
-import { Global } from "../../global"
+import { Installation } from "../../installation/index"
+import { Global } from "../../global/index"
 import { File, Process } from "@opencode-ai/runtime"
-import fs from "fs/promises"
-import path from "path"
-import os from "os"
+import fs from "node:fs/promises"
+import path from "node:path"
+import os from "node:os"
 
 interface UninstallArgs {
   keepConfig: boolean

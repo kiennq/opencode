@@ -1,4 +1,4 @@
-import { Snapshot } from "../../../snapshot"
+import { Snapshot } from "../../../snapshot/index"
 import { bootstrap } from "../../bootstrap"
 import { cmd } from "../cmd"
 

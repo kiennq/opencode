@@ -1,6 +1,6 @@
 import { SyntaxStyle, RGBA, type TerminalColors } from "@opentui/core"
 import { File, Glob } from "@opencode-ai/runtime"
-import path from "path"
+import path from "node:path"
 import { createEffect, createMemo, onMount } from "solid-js"
 import { useSync } from "@tui/context/sync"
 import { createSimpleContext } from "./helper"

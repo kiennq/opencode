@@ -1,4 +1,4 @@
-import path from "path"
+import path from "node:path"
 import { Global } from "@/global"
 import { onMount } from "solid-js"
 import { createStore, produce } from "solid-js/store"

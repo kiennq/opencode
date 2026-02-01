@@ -1,5 +1,5 @@
 import z from "zod"
-import { EOL } from "os"
+import { EOL } from "node:os"
 import { NamedError } from "@opencode-ai/util/error"
 import { logo as glyphs } from "./logo"
 

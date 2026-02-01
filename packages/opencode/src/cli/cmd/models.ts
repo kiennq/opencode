@@ -4,7 +4,7 @@ import { Provider } from "../../provider/provider"
 import { ModelsDev } from "../../provider/models"
 import { cmd } from "./cmd"
 import { UI } from "../ui"
-import { EOL } from "os"
+import { EOL } from "node:os"
 
 export const ModelsCommand = cmd({
   command: "models [provider]",

@@ -5,14 +5,24 @@
     "jsx": "react-jsx",
     "jsxImportSource": "solid-js"
   },
+  "unstable": ["sloppy-imports"],
+  "nodeModulesDir": "auto",
   "imports": {
     "@opencode-ai/runtime": "../runtime/src/index.ts",
-    "@opencode-ai/runtime/": "../runtime/src/"
+    "@opencode-ai/runtime/": "../runtime/src/",
+    "@opencode-ai/util": "../util/src/index.ts",
+    "@opencode-ai/util/": "../util/src/",
+    "@opencode-ai/sdk": "../sdk/src/index.ts",
+    "@opencode-ai/sdk/": "../sdk/src/",
+    "@opencode-ai/function": "../function/src/index.ts",
+    "@opencode-ai/function/": "../function/src/",
+    "@/": "./src/",
+    "@tui/": "./src/cli/cmd/tui/"
   },
   "tasks": {
     "build": "deno run --allow-all script/build-deno.ts",
     "build:single": "deno run --allow-all script/build-deno.ts --single",
-    "check": "deno check src/deno-entry.ts"
+    "check": "deno check src/index.ts"
   },
   "exclude": ["node_modules", "dist", "dist-deno"]
 }

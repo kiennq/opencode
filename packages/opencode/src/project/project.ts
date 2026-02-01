@@ -1,18 +1,18 @@
 import z from "zod"
-import fs from "fs/promises"
+import fs from "node:fs/promises"
 import { File, Glob, Process } from "@opencode-ai/runtime"
 import { Filesystem } from "../util/filesystem"
-import path from "path"
+import path from "node:path"
 import { Storage } from "../storage/storage"
 import { Log } from "../util/log"
 import { Flag } from "@/flag/flag"
-import { Session } from "../session"
+import { Session } from "../session/index"
 import { work } from "../util/queue"
 import { fn } from "@opencode-ai/util/fn"
 import { BusEvent } from "@/bus/bus-event"
 import { iife } from "@/util/iife"
 import { GlobalBus } from "@/bus/global"
-import { existsSync } from "fs"
+import { existsSync } from "node:fs"
 
 export namespace Project {
   const log = Log.create({ service: "project" })

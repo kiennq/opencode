@@ -1,9 +1,9 @@
 import { File } from "@opencode-ai/runtime"
-import { Global } from "../global"
+import { Global } from "../global/index"
 import { Log } from "../util/log"
-import path from "path"
+import path from "node:path"
 import z from "zod"
-import { Installation } from "../installation"
+import { Installation } from "../installation/index"
 import { Flag } from "../flag/flag"
 import { lazy } from "@/util/lazy"
 

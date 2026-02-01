@@ -1,7 +1,7 @@
 import { Hono } from "hono"
 import { describeRoute, validator, resolver } from "hono-openapi"
 import z from "zod"
-import { MCP } from "../../mcp"
+import { MCP } from "../../mcp/index"
 import { Config } from "../../config/config"
 import { errors } from "../error"
 import { lazy } from "../../util/lazy"

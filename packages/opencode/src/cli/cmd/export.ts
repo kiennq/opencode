@@ -1,10 +1,10 @@
 import type { Argv } from "yargs"
-import { Session } from "../../session"
+import { Session } from "../../session/index"
 import { cmd } from "./cmd"
 import { bootstrap } from "../bootstrap"
 import { UI } from "../ui"
 import * as prompts from "@clack/prompts"
-import { EOL } from "os"
+import { EOL } from "node:os"
 
 export const ExportCommand = cmd({
   command: "export [sessionID]",

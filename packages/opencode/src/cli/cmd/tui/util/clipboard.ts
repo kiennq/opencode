@@ -1,8 +1,8 @@
-import { platform, release } from "os"
+import { platform, release } from "node:os"
 import clipboardy from "clipboardy"
 import { lazy } from "../../../../util/lazy.js"
-import { tmpdir } from "os"
-import path from "path"
+import { tmpdir } from "node:os"
+import path from "node:path"
 import { File, Process } from "@opencode-ai/runtime"
 
 export namespace Clipboard {

@@ -1,6 +1,6 @@
-import path from "path"
+import path from "node:path"
 import { File } from "@opencode-ai/runtime"
-import { Global } from "../global"
+import { Global } from "../global/index"
 import z from "zod"
 
 export const OAUTH_DUMMY_KEY = "opencode-oauth-dummy-key"

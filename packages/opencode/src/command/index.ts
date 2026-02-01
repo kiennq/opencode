@@ -4,11 +4,11 @@ import z from "zod"
 import { Config } from "../config/config"
 import { Instance } from "../project/instance"
 import { Identifier } from "../id/id"
-import PROMPT_INITIALIZE from "./template/initialize.txt"
-import PROMPT_REVIEW from "./template/review.txt"
-import { MCP } from "../mcp"
+import PROMPT_INITIALIZE from "./template/initialize.txt.ts"
+import PROMPT_REVIEW from "./template/review.txt.ts"
+import { MCP } from "../mcp/index"
 import { Log } from "@/util/log"
-import { Skill } from "../skill"
+import { Skill } from "../skill/index"
 
 export namespace Command {
   const log = Log.create({ service: "command" })

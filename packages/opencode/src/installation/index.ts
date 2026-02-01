@@ -1,5 +1,5 @@
 import { BusEvent } from "@/bus/bus-event"
-import path from "path"
+import path from "node:path"
 import { $ } from "@opencode-ai/runtime"
 import z from "zod"
 import { NamedError } from "@opencode-ai/util/error"

@@ -2,14 +2,14 @@ import { Provider } from "@/provider/provider"
 
 import { fn } from "@/util/fn"
 import z from "zod"
-import { Session } from "."
+import { Session } from "./index"
 
 import { MessageV2 } from "./message-v2"
 import { Identifier } from "@/id/id"
 import { Snapshot } from "@/snapshot"
 
 import { Log } from "@/util/log"
-import path from "path"
+import path from "node:path"
 import { Instance } from "@/project/instance"
 import { Storage } from "@/storage/storage"
 import { Bus } from "@/bus"

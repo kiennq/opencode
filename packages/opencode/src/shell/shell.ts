@@ -1,7 +1,7 @@
 import { Flag } from "@/flag/flag"
 import { lazy } from "@/util/lazy"
-import path from "path"
-import { spawn, type ChildProcess } from "child_process"
+import path from "node:path"
+import { spawn, type ChildProcess } from "node:child_process"
 import { File, Process, Util } from "@opencode-ai/runtime"
 
 const SIGKILL_TIMEOUT_MS = 200

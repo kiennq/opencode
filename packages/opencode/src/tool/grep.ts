@@ -3,9 +3,9 @@ import { File, Process, Util } from "@opencode-ai/runtime"
 import { Tool } from "./tool"
 import { Ripgrep } from "../file/ripgrep"
 
-import DESCRIPTION from "./grep.txt"
+import DESCRIPTION from "./grep.txt.ts"
 import { Instance } from "../project/instance"
-import path from "path"
+import path from "node:path"
 import { assertExternalDirectory } from "./external-directory"
 
 const MAX_LINE_LENGTH = 2000
