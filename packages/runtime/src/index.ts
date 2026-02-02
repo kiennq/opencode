@@ -1,19 +1,26 @@
 /**
  * Runtime abstraction layer for cross-runtime compatibility.
  *
- * This module provides a unified interface that works across Bun and Deno.
+ * This module provides a unified interface that works across Bun, Deno, and Node.js.
  * The implementation is selected at build time or runtime based on the environment.
  *
  * Usage:
  * ```typescript
  * import { Runtime, File, Process, Glob, Util } from "@opencode-ai/runtime"
  *
- * // Initialize the runtime (auto-detects Bun or Deno)
+ * // Initialize the runtime (auto-detects Bun, Deno, or Node.js)
  * await Runtime.init()
  *
  * // Use the abstracted APIs
  * const content = await File.read("file.txt")
  * const result = Process.spawnSync(["ls", "-la"])
+ * ```
+ *
+ * To use a specific adapter, import it directly:
+ * ```typescript
+ * import { Runtime } from "@opencode-ai/runtime"
+ * import { NodeAdapter } from "@opencode-ai/runtime/adapters/node"
+ * await Runtime.init(NodeAdapter)
  * ```
  */
 
@@ -31,7 +38,8 @@ export * from "./shell"
 // Runtime adapter management
 export { Runtime, autoInit } from "./adapter"
 
-// Re-export adapters for direct use
-export { BunAdapter } from "./adapters/bun"
-export { DenoAdapter } from "./adapters/deno"
-export { NodeAdapter } from "./adapters/node"
+// Note: Adapters are NOT re-exported here to avoid loading runtime-specific code
+// in incompatible environments. Import adapters directly from their paths:
+// - import { BunAdapter } from "@opencode-ai/runtime/adapters/bun"
+// - import { DenoAdapter } from "@opencode-ai/runtime/adapters/deno"
+// - import { NodeAdapter } from "@opencode-ai/runtime/adapters/node"

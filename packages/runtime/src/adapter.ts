@@ -33,6 +33,11 @@ export namespace Runtime {
    * @param adapter - Optional specific adapter to use, otherwise auto-detects
    */
   export async function init(adapter?: RuntimeAdapter): Promise<RuntimeAdapter> {
+    // If already initialized with an adapter, return it (idempotent)
+    if (currentAdapter && !adapter) {
+      return currentAdapter
+    }
+
     if (adapter) {
       currentAdapter = adapter
     } else {
