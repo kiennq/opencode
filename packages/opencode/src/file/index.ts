@@ -8,6 +8,7 @@ import ignore from "ignore"
 import { Log } from "../util/log"
 import { Filesystem } from "../util/filesystem"
 import { Instance } from "../project/instance"
+import { instanceState } from "@/project/instance-state"
 import { Ripgrep } from "./ripgrep"
 import fuzzysort from "fuzzysort"
 import { Global } from "../global/index"
@@ -287,7 +288,7 @@ export namespace File {
     ),
   }
 
-  const state = Instance.state(async () => {
+  const state = instanceState(async () => {
     type Entry = { files: string[]; dirs: string[] }
     let cache: Entry = { files: [], dirs: [] }
     let fetching = false

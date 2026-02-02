@@ -1,13 +1,24 @@
 import { BusEvent } from "@/bus/bus-event"
 import { Bus } from "@/bus"
-import { type IPty } from "bun-pty"
 import z from "zod"
 import { Identifier } from "../id/id"
 import { Log } from "../util/log"
 import type { WSContext } from "hono/ws"
 import { Instance } from "../project/instance"
+import { instanceState } from "@/project/instance-state"
 import { lazy } from "@opencode-ai/util/lazy"
 import { Shell } from "@/shell/shell"
+
+// Type definition for bun-pty's IPty interface
+// Duplicated here to avoid importing from bun-pty at module load time
+interface IPty {
+  pid: number
+  write(data: string): void
+  resize(cols: number, rows: number): void
+  kill(signal?: number): void
+  onData(callback: (data: string) => void): void
+  onExit(callback: (result: { exitCode: number }) => void): void
+}
 
 export namespace Pty {
   const log = Log.create({ service: "pty" })
@@ -15,7 +26,15 @@ export namespace Pty {
   const BUFFER_LIMIT = 1024 * 1024 * 2
   const BUFFER_CHUNK = 64 * 1024
 
+  // Check if PTY is available (only on Bun runtime)
+  export function isAvailable(): boolean {
+    return typeof Bun !== "undefined"
+  }
+
   const pty = lazy(async () => {
+    if (typeof Bun === "undefined") {
+      throw new Error("PTY functionality requires Bun runtime. bun-pty is not available on Node.js.")
+    }
     const { spawn } = await import("bun-pty")
     return spawn
   })
@@ -71,7 +90,7 @@ export namespace Pty {
     subscribers: Set<WSContext>
   }
 
-  const state = Instance.state(
+  const state = instanceState(
     () => new Map<string, ActiveSession>(),
     async (sessions) => {
       for (const session of sessions.values()) {

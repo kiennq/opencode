@@ -13,6 +13,10 @@ interface Context {
   project: Project.Info
 }
 const context = Context.create<Context>("instance")
+
+// Register the instance directory getter with State to avoid circular dependency issues.
+// This is called at module load time, but the getter itself is only invoked at state access time.
+State.registerInstanceDirectory(() => context.use().directory)
 const cache = createLruCache<string, Promise<Context>>({
   maxEntries: 20,
   onEvict: async (_key, value) => {
@@ -74,8 +78,15 @@ export const Instance = {
     if (Instance.worktree === "/") return false
     return Filesystem.contains(Instance.worktree, filepath)
   },
+  /**
+   * Create instance-scoped state.
+   *
+   * Note: This uses State.lazy internally to avoid circular dependency issues
+   * in Node.js. The state is initialized lazily when first accessed, not when
+   * the module is loaded.
+   */
   state<S>(init: () => S, dispose?: (state: Awaited<S>) => Promise<void>): () => S {
-    return State.create(() => Instance.directory, init, dispose)
+    return State.lazy(init, dispose)
   },
   async dispose() {
     Log.Default.info("disposing instance", { directory: Instance.directory })

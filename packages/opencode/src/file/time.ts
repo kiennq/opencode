@@ -1,4 +1,5 @@
 import { Instance } from "../project/instance"
+import { instanceState } from "@/project/instance-state"
 import { Log } from "../util/log"
 import { Flag } from "../flag/flag"
 import { File } from "@opencode-ai/runtime"
@@ -9,7 +10,7 @@ export namespace FileTime {
   // All tools that overwrite existing files should run their
   // assert/read/write/update sequence inside withLock(filepath, ...)
   // so concurrent writes to the same file are serialized.
-  export const state = Instance.state(() => {
+  export const state = instanceState(() => {
     const read: {
       [sessionID: string]: {
         [path: string]: Date | undefined

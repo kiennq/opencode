@@ -3,6 +3,7 @@ import { Bus } from "@/bus"
 import z from "zod"
 import { Config } from "../config/config"
 import { Instance } from "../project/instance"
+import { instanceState } from "@/project/instance-state"
 import { Identifier } from "../id/id"
 import PROMPT_INITIALIZE from "./template/initialize.txt.ts"
 import PROMPT_REVIEW from "./template/review.txt.ts"
@@ -134,7 +135,7 @@ export namespace Command {
     Updated: BusEvent.define("command.updated", z.array(InfoSerialized)),
   }
 
-  const state = Instance.state(async () => {
+  const state = instanceState(async () => {
     const cfg = await Config.get()
 
     const result: Record<string, Info> = {

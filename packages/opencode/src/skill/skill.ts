@@ -4,6 +4,7 @@ import os from "node:os"
 import { Glob } from "@opencode-ai/runtime"
 import { Config } from "../config/config"
 import { Instance } from "../project/instance"
+import { instanceState } from "@/project/instance-state"
 import { NamedError } from "@opencode-ai/util/error"
 import { ConfigMarkdown } from "../config/markdown"
 import { Log } from "../util/log"
@@ -45,7 +46,7 @@ export namespace Skill {
   const CLAUDE_SKILL_GLOB = "skills/**/SKILL.md"
   const SKILL_GLOB = "**/SKILL.md"
 
-  export const state = Instance.state(async () => {
+  export const state = instanceState(async () => {
     const skills: Record<string, Info> = {}
 
     const addSkill = async (match: string) => {

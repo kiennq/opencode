@@ -33,7 +33,6 @@ import { lazy } from "../util/lazy"
 import { InstanceBootstrap } from "../project/bootstrap"
 import { Storage } from "../storage/storage"
 import type { ContentfulStatusCode } from "hono/utils/http-status"
-import { websocket } from "hono/bun"
 import { HTTPException } from "hono/http-exception"
 import { errors } from "./error"
 import { QuestionRoutes } from "./routes/question"
@@ -563,7 +562,7 @@ export namespace Server {
     return result
   }
 
-  export function listen(opts: {
+  export async function listen(opts: {
     port: number
     hostname: string
     mdns?: boolean
@@ -572,42 +571,106 @@ export namespace Server {
   }) {
     _corsWhitelist = opts.cors ?? []
 
-    const args = {
-      hostname: opts.hostname,
-      idleTimeout: 0,
-      fetch: App().fetch,
-      websocket: websocket,
-    } as const
-    const tryServe = (port: number) => {
-      try {
-        return Bun.serve({ ...args, port })
-      } catch {
-        return undefined
+    // Runtime-specific server implementation
+    if (typeof Bun !== "undefined") {
+      // Bun runtime - use Bun.serve with websocket support
+      const { websocket } = await import("hono/bun")
+      const args = {
+        hostname: opts.hostname,
+        idleTimeout: 0,
+        fetch: App().fetch,
+        websocket: websocket,
+      } as const
+      const tryServe = (port: number) => {
+        try {
+          return Bun.serve({ ...args, port })
+        } catch {
+          return undefined
+        }
       }
+      const server = opts.port === 0 ? (tryServe(4096) ?? tryServe(0)) : tryServe(opts.port)
+      if (!server) throw new Error(`Failed to start server on port ${opts.port}`)
+
+      _url = server.url
+
+      const shouldPublishMDNS =
+        opts.mdns &&
+        server.port &&
+        opts.hostname !== "127.0.0.1" &&
+        opts.hostname !== "localhost" &&
+        opts.hostname !== "::1"
+      if (shouldPublishMDNS) {
+        MDNS.publish(server.port!, opts.mdnsDomain)
+      } else if (opts.mdns) {
+        log.warn("mDNS enabled but hostname is loopback; skipping mDNS publish")
+      }
+
+      const originalStop = server.stop.bind(server)
+      server.stop = async (closeActiveConnections?: boolean) => {
+        if (shouldPublishMDNS) MDNS.unpublish()
+        return originalStop(closeActiveConnections)
+      }
+
+      return server
+    } else {
+      // Node.js runtime - use node:http with @hono/node-server
+      const { serve } = await import("@hono/node-server")
+
+      const tryServe = (port: number): Promise<{ url: URL; port: number; stop: () => Promise<void> }> => {
+        return new Promise((resolve, reject) => {
+          try {
+            const server = serve({
+              fetch: App().fetch,
+              hostname: opts.hostname,
+              port,
+            })
+
+            const url = new URL(`http://${opts.hostname}:${port}`)
+            resolve({
+              url,
+              port,
+              stop: async () => {
+                server.close()
+              },
+            })
+          } catch (e) {
+            reject(e)
+          }
+        })
+      }
+
+      let server: Awaited<ReturnType<typeof tryServe>>
+      try {
+        server = await tryServe(opts.port === 0 ? 4096 : opts.port)
+      } catch {
+        if (opts.port === 0) {
+          server = await tryServe(0)
+        } else {
+          throw new Error(`Failed to start server on port ${opts.port}`)
+        }
+      }
+
+      _url = server.url
+
+      const shouldPublishMDNS =
+        opts.mdns &&
+        server.port &&
+        opts.hostname !== "127.0.0.1" &&
+        opts.hostname !== "localhost" &&
+        opts.hostname !== "::1"
+      if (shouldPublishMDNS) {
+        MDNS.publish(server.port, opts.mdnsDomain)
+      } else if (opts.mdns) {
+        log.warn("mDNS enabled but hostname is loopback; skipping mDNS publish")
+      }
+
+      const originalStop = server.stop.bind(server)
+      server.stop = async () => {
+        if (shouldPublishMDNS) MDNS.unpublish()
+        return originalStop()
+      }
+
+      return server
     }
-    const server = opts.port === 0 ? (tryServe(4096) ?? tryServe(0)) : tryServe(opts.port)
-    if (!server) throw new Error(`Failed to start server on port ${opts.port}`)
-
-    _url = server.url
-
-    const shouldPublishMDNS =
-      opts.mdns &&
-      server.port &&
-      opts.hostname !== "127.0.0.1" &&
-      opts.hostname !== "localhost" &&
-      opts.hostname !== "::1"
-    if (shouldPublishMDNS) {
-      MDNS.publish(server.port!, opts.mdnsDomain)
-    } else if (opts.mdns) {
-      log.warn("mDNS enabled but hostname is loopback; skipping mDNS publish")
-    }
-
-    const originalStop = server.stop.bind(server)
-    server.stop = async (closeActiveConnections?: boolean) => {
-      if (shouldPublishMDNS) MDNS.unpublish()
-      return originalStop(closeActiveConnections)
-    }
-
-    return server
   }
 }

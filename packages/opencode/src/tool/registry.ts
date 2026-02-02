@@ -14,6 +14,7 @@ import { SkillTool } from "./skill"
 import type { Agent } from "../agent/agent"
 import { Tool } from "./tool"
 import { Instance } from "../project/instance"
+import { instanceState } from "@/project/instance-state"
 import { Config } from "../config/config"
 import path from "node:path"
 import { type ToolContext as PluginToolContext, type ToolDefinition } from "@opencode-ai/plugin"
@@ -32,7 +33,7 @@ import { Glob } from "@opencode-ai/runtime"
 export namespace ToolRegistry {
   const log = Log.create({ service: "tool.registry" })
 
-  export const state = Instance.state(async () => {
+  export const state = instanceState(async () => {
     const custom = [] as Tool.Info[]
 
     for (const dir of await Config.directories()) {

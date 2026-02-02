@@ -2,6 +2,7 @@ import { BusEvent } from "@/bus/bus-event"
 import { Bus } from "@/bus"
 import z from "zod"
 import { Instance } from "../project/instance"
+import { instanceState } from "@/project/instance-state"
 import { Log } from "../util/log"
 import { FileIgnore } from "./ignore"
 import { Config } from "../config/config"
@@ -44,7 +45,7 @@ export namespace FileWatcher {
     }
   })
 
-  const state = Instance.state(
+  const state = instanceState(
     async () => {
       if (Instance.project.vcs !== "git") return {}
       log.info("init")

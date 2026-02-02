@@ -8,7 +8,7 @@ import { LSPServer } from "./server"
 import z from "zod"
 import { Config } from "../config/config"
 import { spawn } from "node:child_process"
-import { Instance } from "../project/instance"
+import { State } from "../project/state"
 import { Flag } from "@/flag/flag"
 
 function normalizePathForUri(filePath: string): string {
@@ -84,8 +84,11 @@ export namespace LSP {
     }
   }
 
-  const state = Instance.state(
+  // Use State.lazy to avoid circular dependency with Instance at module load time
+  const state = State.lazy(
     async () => {
+      // Import Instance dynamically to avoid circular dependency
+      const { Instance } = await import("../project/instance")
       const clients: LSPClient.Info[] = []
       const servers: Record<string, LSPServer.Info> = {}
       const cfg = await Config.get()
@@ -116,7 +119,12 @@ export namespace LSP {
         servers[name] = {
           ...existing,
           id: name,
-          root: existing?.root ?? (async () => Instance.directory),
+          root:
+            existing?.root ??
+            (async () => {
+              const { Instance } = await import("../project/instance")
+              return Instance.directory
+            }),
           extensions: item.extensions ?? existing?.extensions ?? [],
           spawn: async (root) => {
             return {
@@ -168,6 +176,7 @@ export namespace LSP {
   export type Status = z.infer<typeof Status>
 
   export async function status() {
+    const { Instance } = await import("../project/instance")
     return state().then((x) => {
       const result: Status[] = []
       for (const client of x.clients) {

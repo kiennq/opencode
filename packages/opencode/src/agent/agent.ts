@@ -4,6 +4,7 @@ import { Provider } from "../provider/provider"
 import { generateObject, streamObject, type ModelMessage } from "ai"
 import { SystemPrompt } from "../session/system"
 import { Instance } from "../project/instance"
+import { instanceState } from "@/project/instance-state"
 import { Truncate } from "../tool/truncation"
 import { Auth } from "../auth/index"
 import { ProviderTransform } from "../provider/transform"
@@ -49,7 +50,7 @@ export namespace Agent {
     })
   export type Info = z.infer<typeof Info>
 
-  const state = Instance.state(async () => {
+  const state = instanceState(async () => {
     const cfg = await Config.get()
 
     const defaults = PermissionNext.fromConfig({

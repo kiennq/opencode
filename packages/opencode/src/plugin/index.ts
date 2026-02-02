@@ -7,6 +7,7 @@ import { createOpencodeClient } from "@opencode-ai/sdk"
 // bootstrap.ts → plugin/index.ts → server/server.ts → bootstrap.ts
 import { BunProc } from "../bun/index"
 import { Instance } from "../project/instance"
+import { instanceState } from "@/project/instance-state"
 import { Flag } from "../flag/flag"
 import { CodexAuthPlugin } from "./codex"
 import { Session } from "../session/index"
@@ -22,7 +23,7 @@ export namespace Plugin {
   // Built-in plugins that are directly imported (not installed from npm)
   const INTERNAL_PLUGINS: PluginInstance[] = [CodexAuthPlugin, CopilotAuthPlugin]
 
-  const state = Instance.state(
+  const state = instanceState(
     async () => {
       // Dynamic import to avoid circular dependency:
       // bootstrap.ts → plugin/index.ts → server/server.ts → bootstrap.ts

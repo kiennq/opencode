@@ -3,6 +3,7 @@ import { Config } from "@/config/config"
 import { ulid } from "ulid"
 import { Provider } from "@/provider/provider"
 import { Instance } from "@/project/instance"
+import { instanceState } from "@/project/instance-state"
 import { Session } from "@/session"
 import { MessageV2 } from "@/session/message-v2"
 import { Storage } from "@/storage/storage"
@@ -18,7 +19,7 @@ export namespace ShareNext {
 
   const disabled = process.env["OPENCODE_DISABLE_SHARE"] === "true" || process.env["OPENCODE_DISABLE_SHARE"] === "1"
 
-  const state = Instance.state(
+  const state = instanceState(
     async () => {
       if (disabled)
         return { unsubs: [], queue: new Map<string, { timeout: NodeJS.Timeout; data: Map<string, Data> }>() }

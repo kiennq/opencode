@@ -1,7 +1,8 @@
-import { Instance } from "../project/instance"
+import { State } from "../project/state"
 
 export namespace Env {
-  const state = Instance.state(() => {
+  // Use State.lazy to avoid circular dependency with Instance at module load time
+  const state = State.lazy(() => {
     // Create a shallow copy to isolate environment per instance
     // Prevents parallel tests from interfering with each other's env vars
     return { ...process.env } as Record<string, string | undefined>

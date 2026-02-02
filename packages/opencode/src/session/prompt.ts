@@ -13,6 +13,7 @@ import { Provider } from "../provider/provider"
 import { type Tool as AITool, tool, jsonSchema, type ToolCallOptions } from "ai"
 import { SessionCompaction } from "./compaction"
 import { Instance } from "../project/instance"
+import { instanceState } from "@/project/instance-state"
 import { Bus } from "../bus/index"
 import { ProviderTransform } from "../provider/transform"
 import { SystemPrompt } from "./system"
@@ -56,7 +57,7 @@ export namespace SessionPrompt {
   const log = Log.create({ service: "session.prompt" })
   export const OUTPUT_TOKEN_MAX = Flag.OPENCODE_EXPERIMENTAL_OUTPUT_TOKEN_MAX || 32_000
 
-  const state = Instance.state(
+  const state = instanceState(
     () => {
       const data: Record<
         string,

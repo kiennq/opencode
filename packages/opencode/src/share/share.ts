@@ -1,6 +1,7 @@
 import { Bus } from "../bus/index"
 import { Installation } from "../installation/index"
 import { Instance } from "../project/instance"
+import { instanceState } from "@/project/instance-state"
 import { Session } from "../session/index"
 import { MessageV2 } from "../session/message-v2"
 import { Log } from "../util/log"
@@ -47,7 +48,7 @@ export namespace Share {
       })
   }
 
-  const state = Instance.state(
+  const state = instanceState(
     async () => {
       const unsubs: Array<() => void> = []
 

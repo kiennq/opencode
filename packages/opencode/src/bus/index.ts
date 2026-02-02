@@ -1,6 +1,6 @@
 import z from "zod"
 import { Log } from "../util/log"
-import { Instance } from "../project/instance"
+import { State } from "../project/state"
 import { BusEvent } from "./bus-event"
 import { GlobalBus } from "./global"
 
@@ -15,7 +15,8 @@ export namespace Bus {
     }),
   )
 
-  const state = Instance.state(
+  // Use State.lazy to avoid circular dependency with Instance at module load time
+  const state = State.lazy(
     () => {
       const subscriptions = new Map<any, Subscription[]>()
 
@@ -24,6 +25,8 @@ export namespace Bus {
       }
     },
     async (entry) => {
+      // Dynamically import Instance for the disposal callback
+      const { Instance } = await import("../project/instance")
       const wildcard = entry.subscriptions.get("*")
       if (wildcard) {
         const event = {
@@ -44,6 +47,8 @@ export namespace Bus {
     def: Definition,
     properties: z.output<Definition["properties"]>,
   ) {
+    // Dynamically import Instance to avoid circular dependency
+    const { Instance } = await import("../project/instance")
     const payload = {
       type: def.type,
       properties,

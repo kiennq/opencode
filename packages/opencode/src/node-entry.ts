@@ -18,10 +18,10 @@ import { NodeAdapter } from "@opencode-ai/runtime/adapters/node"
 await Runtime.init(NodeAdapter)
 
 // Now dynamically import and run the main application
-// The main app calls Runtime.init() which will be a no-op since we already initialized
+// Use the Node.js-specific index which excludes TUI/PTY commands
 try {
-  // Import the main index which sets up yargs and runs the CLI
-  await import("./index")
+  // Import the Node.js-specific index which doesn't include Bun-only commands
+  await import("./index-node")
 } catch (error) {
   // Handle any errors during import/execution
   if (error instanceof Error) {

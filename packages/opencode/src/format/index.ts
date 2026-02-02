@@ -9,6 +9,7 @@ import * as Formatter from "./formatter"
 import { Config } from "../config/config"
 import { mergeDeep } from "remeda"
 import { Instance } from "../project/instance"
+import { instanceState } from "@/project/instance-state"
 
 export namespace Format {
   const log = Log.create({ service: "format" })
@@ -30,7 +31,7 @@ export namespace Format {
     state()
   }
 
-  const state = Instance.state(
+  const state = instanceState(
     async () => {
       const cfg = await Config.get()
       const enabled: Record<string, boolean> = {}

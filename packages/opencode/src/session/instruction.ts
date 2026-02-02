@@ -5,6 +5,7 @@ import { Global } from "../global/index"
 import { Filesystem } from "../util/filesystem"
 import { Config } from "../config/config"
 import { Instance } from "../project/instance"
+import { instanceState } from "@/project/instance-state"
 import { Flag } from "@/flag/flag"
 import { Log } from "../util/log"
 import type { MessageV2 } from "./message-v2"
@@ -42,7 +43,7 @@ async function resolveRelative(instruction: string): Promise<string[]> {
 }
 
 export namespace InstructionPrompt {
-  const state = Instance.state(() => {
+  const state = instanceState(() => {
     return {
       claims: new Map<string, Set<string>>(),
     }

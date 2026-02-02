@@ -3,6 +3,7 @@ import { BusEvent } from "@/bus/bus-event"
 import { Config } from "@/config/config"
 import { Identifier } from "@/id/id"
 import { Instance } from "@/project/instance"
+import { instanceState } from "@/project/instance-state"
 import { Storage } from "@/storage/storage"
 import { fn } from "@/util/fn"
 import { Log } from "@/util/log"
@@ -139,7 +140,7 @@ export namespace PermissionNext {
     ),
   }
 
-  const state = Instance.state(async () => {
+  const state = instanceState(async () => {
     const projectID = Instance.project.id
     const stored = await Storage.read<Ruleset>(["permission", projectID]).catch(() => [] as Ruleset)
 

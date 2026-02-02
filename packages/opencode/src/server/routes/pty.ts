@@ -1,14 +1,14 @@
 import { Hono } from "hono"
 import { describeRoute, validator, resolver } from "hono-openapi"
-import { upgradeWebSocket } from "hono/bun"
 import z from "zod"
 import { Pty } from "@/pty"
 import { Storage } from "../../storage/storage"
 import { errors } from "../error"
 import { lazy } from "../../util/lazy"
 
-export const PtyRoutes = lazy(() =>
-  new Hono()
+export const PtyRoutes = lazy(() => {
+  // Create the base app with REST endpoints (work on all runtimes)
+  const app = new Hono()
     .get(
       "/",
       describeRoute({
@@ -130,7 +130,15 @@ export const PtyRoutes = lazy(() =>
         return c.json(true)
       },
     )
-    .get(
+
+  // Add WebSocket connect route only on Bun (requires upgradeWebSocket from hono/bun)
+  if (typeof Bun !== "undefined") {
+    // We need to dynamically require this at runtime since it's Bun-only
+    // Using require() here since we're in a sync context and already checked for Bun
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const { upgradeWebSocket } = require("hono/bun") as typeof import("hono/bun")
+
+    return app.get(
       "/:ptyID/connect",
       describeRoute({
         summary: "Connect to PTY session",
@@ -165,5 +173,32 @@ export const PtyRoutes = lazy(() =>
           },
         }
       }),
-    ),
-)
+    )
+  }
+
+  // For Node.js/Deno, return endpoint that indicates WebSocket not supported
+  return app.get(
+    "/:ptyID/connect",
+    describeRoute({
+      summary: "Connect to PTY session",
+      description:
+        "Establish a WebSocket connection to interact with a pseudo-terminal (PTY) session in real-time. NOTE: WebSocket connections are only supported on Bun runtime.",
+      operationId: "pty.connect",
+      responses: {
+        501: {
+          description: "WebSocket not supported on this runtime",
+          content: {
+            "application/json": {
+              schema: resolver(z.object({ error: z.string() })),
+            },
+          },
+        },
+        ...errors(404),
+      },
+    }),
+    validator("param", z.object({ ptyID: z.string() })),
+    async (c) => {
+      return c.json({ error: "PTY WebSocket connections are only supported on Bun runtime" }, 501)
+    },
+  )
+})

@@ -11,7 +11,7 @@ import { ModelsDev } from "./models"
 import { NamedError } from "@opencode-ai/util/error"
 import { Auth } from "../auth/index"
 import { Env } from "../env/index"
-import { Instance } from "../project/instance"
+import { instanceState } from "../project/instance-state"
 import { Flag } from "../flag/flag"
 import { iife } from "@/util/iife"
 import { createLruCache } from "@/util/cache"
@@ -696,7 +696,7 @@ export namespace Provider {
     }
   }
 
-  const state = Instance.state(async () => {
+  const state = instanceState(async () => {
     using _ = log.time("state")
     const config = await Config.get()
     const modelsDev = await ModelsDev.get()

@@ -20,6 +20,7 @@ import {
   printParseErrorCode,
 } from "jsonc-parser"
 import { Instance } from "../project/instance"
+import { instanceState } from "@/project/instance-state"
 // NOTE: LSPServer is imported dynamically below to avoid circular dependency:
 // config.ts → lsp/server.ts → ... → bootstrap.ts → plugin/index.ts → config.ts
 import { BunProc } from "@/bun"
@@ -61,7 +62,7 @@ export namespace Config {
     return merged
   }
 
-  export const state = Instance.state(async () => {
+  export const state = instanceState(async () => {
     const auth = await Auth.all()
 
     // Config loading order (low -> high precedence): https://opencode.ai/docs/config#precedence-order

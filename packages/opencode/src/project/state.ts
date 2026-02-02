@@ -9,6 +9,34 @@ export namespace State {
   const log = Log.create({ service: "state" })
   const recordsByKey = new Map<string, Map<any, Entry>>()
 
+  /**
+   * Registry for the instance directory getter.
+   * This is set by Instance at module load time to avoid circular dependency issues.
+   * The getter is called at state access time, not at module load time.
+   */
+  let instanceDirectoryGetter: (() => string) | null = null
+
+  /**
+   * Register the instance directory getter.
+   * Called by Instance module during initialization.
+   */
+  export function registerInstanceDirectory(getter: () => string) {
+    instanceDirectoryGetter = getter
+  }
+
+  /**
+   * Get the current instance directory.
+   * Throws if called before Instance has registered itself.
+   */
+  export function getInstanceDirectory(): string {
+    if (!instanceDirectoryGetter) {
+      throw new Error(
+        "Instance directory getter not registered. Ensure Instance module is loaded before accessing state.",
+      )
+    }
+    return instanceDirectoryGetter()
+  }
+
   export function create<S>(root: () => string, init: () => S, dispose?: (state: Awaited<S>) => Promise<void>) {
     return () => {
       const key = root()
@@ -25,6 +53,26 @@ export namespace State {
         dispose,
       })
       return state
+    }
+  }
+
+  /**
+   * Create a lazy instance state that doesn't require Instance at module load time.
+   * This avoids circular dependency issues in Node.js where Instance might not
+   * be fully initialized when modules that depend on it are loaded.
+   *
+   * Usage: const state = State.lazy(() => ({ ... }), disposeCallback)
+   * Access: state() returns the state for the current Instance
+   */
+  export function lazy<S>(init: () => S, dispose?: (state: Awaited<S>) => Promise<void>): () => S {
+    let _state: (() => S) | null = null
+    return () => {
+      if (!_state) {
+        // Use the registered getter instead of importing Instance
+        // This avoids circular dependency issues with top-level await
+        _state = create(getInstanceDirectory, init, dispose)
+      }
+      return _state()
     }
   }
 

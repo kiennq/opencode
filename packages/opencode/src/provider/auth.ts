@@ -1,4 +1,5 @@
 import { Instance } from "@/project/instance"
+import { instanceState } from "@/project/instance-state"
 import { Plugin } from "../plugin/index"
 import { map, filter, pipe, fromEntries, mapValues } from "remeda"
 import z from "zod"
@@ -8,7 +9,7 @@ import { NamedError } from "@opencode-ai/util/error"
 import { Auth } from "@/auth"
 
 export namespace ProviderAuth {
-  const state = Instance.state(async () => {
+  const state = instanceState(async () => {
     const methods = pipe(
       await Plugin.list(),
       filter((x) => x.auth?.provider !== undefined),

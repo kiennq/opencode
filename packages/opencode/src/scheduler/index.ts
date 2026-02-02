@@ -1,4 +1,4 @@
-import { Instance } from "../project/instance"
+import { instanceState } from "../project/instance-state"
 import { Log } from "../util/log"
 
 export namespace Scheduler {
@@ -25,7 +25,7 @@ export namespace Scheduler {
 
   const shared = create()
 
-  const state = Instance.state(
+  const state = instanceState(
     () => create(),
     async (entry) => {
       for (const timer of entry.timers.values()) {
