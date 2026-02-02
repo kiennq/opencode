@@ -1,153 +1,657 @@
-#!/usr/bin/env -S deno run --allow-all
+#!/usr/bin/env bun
 /**
  * Deno build script for opencode
  *
- * This script compiles opencode for various platforms using Deno's compile feature.
- * It's an alternative to the Bun build script for better Windows stability.
+ * This script:
+ * 1. Bundles the application with esbuild into a single ESM file
+ * 2. Compiles the bundle with Deno for each target platform
  *
  * Usage:
- *   deno run --allow-all script/build-deno.ts [--single] [--target=<target>]
- *
- * Options:
- *   --single    Build only for the current platform
- *   --target    Specific target (e.g., x86_64-pc-windows-msvc)
+ *   bun run script/build-deno.ts [--single] [--skip-compile] [--bundle-only]
  */
 
-import * as path from "https://deno.land/std@0.224.0/path/mod.ts"
-import { ensureDir } from "https://deno.land/std@0.224.0/fs/mod.ts"
+import * as esbuild from "esbuild"
+import { solidPlugin } from "esbuild-plugin-solid"
+import path from "node:path"
+import fs from "node:fs"
+import { fileURLToPath } from "node:url"
 
-const __dirname = path.dirname(path.fromFileUrl(import.meta.url))
+const __filename = fileURLToPath(import.meta.url)
+const __dirname = path.dirname(__filename)
 const projectDir = path.resolve(__dirname, "..")
 
-// Read package.json for version
-const pkgJson = JSON.parse(await Deno.readTextFile(path.join(projectDir, "package.json")))
-const version = pkgJson.version as string
+process.chdir(projectDir)
 
-// Deno compile targets
-// Format: https://deno.land/manual/tools/compiler#cross-compilation
+// Read package.json for version info
+const pkg = JSON.parse(fs.readFileSync(path.join(projectDir, "package.json"), "utf-8"))
+
+const args = process.argv.slice(2)
+const singleFlag = args.includes("--single")
+const skipCompile = args.includes("--skip-compile")
+const bundleOnly = args.includes("--bundle-only")
+
+// Determine output directory
+const outDir = path.join(projectDir, "dist-deno")
+fs.mkdirSync(outDir, { recursive: true })
+
+// Platform targets for Deno compile
 const allTargets = [
-  { target: "x86_64-unknown-linux-gnu", os: "linux", arch: "x64" },
-  { target: "aarch64-unknown-linux-gnu", os: "linux", arch: "arm64" },
-  { target: "x86_64-pc-windows-msvc", os: "windows", arch: "x64" },
-  // Note: Windows ARM64 is not yet supported by Deno compile
-  { target: "x86_64-apple-darwin", os: "darwin", arch: "x64" },
-  { target: "aarch64-apple-darwin", os: "darwin", arch: "arm64" },
+  { os: "linux", arch: "x86_64", denoTarget: "x86_64-unknown-linux-gnu" },
+  { os: "linux", arch: "aarch64", denoTarget: "aarch64-unknown-linux-gnu" },
+  { os: "darwin", arch: "x86_64", denoTarget: "x86_64-apple-darwin" },
+  { os: "darwin", arch: "aarch64", denoTarget: "aarch64-apple-darwin" },
+  { os: "windows", arch: "x86_64", denoTarget: "x86_64-pc-windows-msvc" },
 ]
 
-// Parse command line arguments
-const args = Deno.args
-const singleFlag = args.includes("--single")
-const targetArg = args.find((a) => a.startsWith("--target="))?.split("=")[1]
+const targets = singleFlag
+  ? allTargets
+      .filter((t) => {
+        if (process.platform === "win32" && t.os === "windows") return true
+        if (process.platform === "darwin" && t.os === "darwin") return true
+        if (process.platform === "linux" && t.os === "linux") return true
+        return false
+      })
+      .filter((t) => {
+        if (process.arch === "x64" && t.arch === "x86_64") return true
+        if (process.arch === "arm64" && t.arch === "aarch64") return true
+        return false
+      })
+  : allTargets
 
-// Filter targets based on flags
-let targets = allTargets
-if (targetArg) {
-  targets = allTargets.filter((t) => t.target === targetArg)
-} else if (singleFlag) {
-  const currentOs = Deno.build.os
-  const currentArch = Deno.build.arch
-  targets = allTargets.filter((t) => {
-    const osMatch =
-      (currentOs === "windows" && t.os === "windows") ||
-      (currentOs === "darwin" && t.os === "darwin") ||
-      (currentOs === "linux" && t.os === "linux")
-    const archMatch =
-      (currentArch === "x86_64" && t.arch === "x64") || (currentArch === "aarch64" && t.arch === "arm64")
-    return osMatch && archMatch
-  })
-}
+console.log("📦 Building OpenCode for Deno runtime...")
+console.log(`   Version: ${pkg.version}`)
+console.log(`   Output: ${outDir}`)
+console.log(`   Targets: ${targets.map((t) => `${t.os}-${t.arch}`).join(", ")}\n`)
 
-if (targets.length === 0) {
-  console.error("No matching targets found")
-  Deno.exit(1)
-}
-
-console.log(`Building opencode v${version}`)
-console.log(`Targets: ${targets.map((t) => t.target).join(", ")}`)
-
-// Clean dist directory
-const distDir = path.join(projectDir, "dist-deno")
-try {
-  await Deno.remove(distDir, { recursive: true })
-} catch {
-  // Ignore if doesn't exist
-}
-await ensureDir(distDir)
-
-// Fetch and generate models snapshot (similar to Bun build)
-const modelsUrl = Deno.env.get("OPENCODE_MODELS_URL") || "https://models.dev"
-const modelsJsonPath = Deno.env.get("MODELS_DEV_API_JSON")
+// Fetch and generate models snapshot
+const modelsUrl = process.env.OPENCODE_MODELS_URL || "https://models.dev"
+const modelsJsonPath = process.env.MODELS_DEV_API_JSON
 let modelsData: string
 if (modelsJsonPath) {
-  modelsData = await Deno.readTextFile(modelsJsonPath)
+  modelsData = fs.readFileSync(modelsJsonPath, "utf-8")
 } else {
+  console.log("📡 Fetching models data...")
   const response = await fetch(`${modelsUrl}/api.json`)
   modelsData = await response.text()
 }
-await Deno.writeTextFile(
+fs.writeFileSync(
   path.join(projectDir, "src/provider/models-snapshot.ts"),
   `// Auto-generated by build-deno.ts - do not edit\nexport const snapshot = ${modelsData} as const\n`,
 )
-console.log("Generated models-snapshot.ts")
+console.log("   ✅ Generated models-snapshot.ts\n")
 
-// Build for each target
-for (const { target, os, arch } of targets) {
-  const name = `opencode-${os}-${arch}`
-  const outputDir = path.join(distDir, name, "bin")
-  await ensureDir(outputDir)
+// Helper to resolve paths with extensions
+function resolveWithExtensions(basePath: string): { path: string } | null {
+  const extensions = [".ts", ".tsx", "/index.ts", "/index.tsx"]
+  for (const ext of extensions) {
+    const fullPath = basePath + ext
+    if (fs.existsSync(fullPath)) {
+      return { path: fullPath }
+    }
+  }
+  // Check if it exists as-is
+  if (fs.existsSync(basePath)) {
+    const stat = fs.statSync(basePath)
+    if (stat.isDirectory()) {
+      const indexPath = path.join(basePath, "index.ts")
+      if (fs.existsSync(indexPath)) {
+        return { path: indexPath }
+      }
+    } else {
+      return { path: basePath }
+    }
+  }
+  return null
+}
 
-  const outputFile = os === "windows" ? path.join(outputDir, "opencode.exe") : path.join(outputDir, "opencode")
+// Step 1: Bundle with esbuild
+console.log("🔧 Step 1: Bundling with esbuild...")
 
-  console.log(`\nBuilding ${name} (${target})...`)
+const bundleOutFile = path.join(outDir, "opencode.mjs")
 
-  // Note: Deno compile requires a Deno-compatible entry point
-  // We need to create a Deno shim that imports the main module
-  const entryPoint = path.join(projectDir, "src/deno-entry.ts")
+try {
+  const result = await esbuild.build({
+    entryPoints: [path.join(projectDir, "src/index.ts")],
+    bundle: true,
+    outfile: bundleOutFile,
+    format: "esm",
+    platform: "node",
+    target: "esnext",
+    sourcemap: false,
+    minify: false,
+    treeShaking: true,
+    keepNames: true,
 
-  // Build compile command
-  const cmd = new Deno.Command("deno", {
-    args: [
-      "compile",
-      "--allow-all", // Grant all permissions
-      "--target",
-      target,
-      "--output",
-      outputFile,
-      // Deno-specific environment variables
-      "--env",
-      `OPENCODE_VERSION=${version}`,
-      entryPoint,
+    // Use browser condition for solid-js to get DOM exports instead of server exports
+    // This is needed because solid-js/web exports setStyleProperty and use only in browser build
+    conditions: ["browser", "import", "module", "default"],
+
+    // Prefer ESM module field over CommonJS main field
+    mainFields: ["module", "main"],
+
+    // No external packages - we shim everything that isn't available in Deno
+    external: [],
+
+    // Resolve extensions
+    resolveExtensions: [".tsx", ".ts", ".jsx", ".js", ".json", ".txt.ts"],
+
+    // Loaders
+    loader: {
+      ".ts": "ts",
+      ".tsx": "tsx",
+      ".txt": "text",
+      ".txt.ts": "ts",
+    },
+
+    // Plugins
+    plugins: [
+      // Add node: prefix to Node built-in modules for Deno compatibility
+      {
+        name: "node-builtins-prefix",
+        setup(build) {
+          // List of Node.js built-in modules
+          const nodeBuiltins = [
+            "assert",
+            "async_hooks",
+            "buffer",
+            "child_process",
+            "cluster",
+            "console",
+            "constants",
+            "crypto",
+            "dgram",
+            "diagnostics_channel",
+            "dns",
+            "domain",
+            "events",
+            "fs",
+            "http",
+            "http2",
+            "https",
+            "inspector",
+            "module",
+            "net",
+            "os",
+            "path",
+            "perf_hooks",
+            "process",
+            "punycode",
+            "querystring",
+            "readline",
+            "repl",
+            "stream",
+            "string_decoder",
+            "sys",
+            "timers",
+            "tls",
+            "trace_events",
+            "tty",
+            "url",
+            "util",
+            "v8",
+            "vm",
+            "wasi",
+            "worker_threads",
+            "zlib",
+          ]
+
+          // Create regex pattern for all builtins (including subpaths like fs/promises)
+          const builtinsRegex = new RegExp(`^(${nodeBuiltins.join("|")})(\\/.*)?$`)
+
+          build.onResolve({ filter: builtinsRegex }, (args) => {
+            // Skip if already has node: prefix
+            if (args.path.startsWith("node:")) return null
+            // Rewrite to node: prefixed version
+            return { path: `node:${args.path}`, external: true }
+          })
+        },
+      },
+
+      // Shim native and Bun-specific modules that aren't available in Deno
+      {
+        name: "native-modules-shim",
+        setup(build) {
+          // Match @parcel/watcher and any subpaths
+          build.onResolve({ filter: /^@parcel\/watcher/ }, () => {
+            return { path: "@parcel/watcher", namespace: "native-shim" }
+          })
+
+          build.onResolve({ filter: /^bun-pty/ }, () => {
+            return { path: "bun-pty", namespace: "native-shim" }
+          })
+
+          build.onResolve({ filter: /^fsevents/ }, () => {
+            return { path: "fsevents", namespace: "native-shim" }
+          })
+
+          // Bun-specific modules
+          build.onResolve({ filter: /^bun:ffi$/ }, () => {
+            return { path: "bun:ffi", namespace: "native-shim" }
+          })
+
+          build.onResolve({ filter: /^bun:sqlite$/ }, () => {
+            return { path: "bun:sqlite", namespace: "native-shim" }
+          })
+
+          build.onResolve({ filter: /^bun:test$/ }, () => {
+            return { path: "bun:test", namespace: "native-shim" }
+          })
+
+          build.onLoad({ filter: /.*/, namespace: "native-shim" }, (args) => {
+            if (args.path === "@parcel/watcher") {
+              return {
+                contents: `
+                  // @parcel/watcher shim for Deno
+                  // The file watcher functionality uses chokidar as fallback
+                  export const subscribe = async () => {
+                    console.warn("@parcel/watcher is not available in Deno, using fallback");
+                    return { unsubscribe: () => {} };
+                  };
+                  export const unsubscribe = () => {};
+                  export const createWrapper = () => ({
+                    writeSnapshot: async () => "",
+                    getEventsSince: async () => [],
+                    subscribe: async () => ({ unsubscribe: () => {} }),
+                    unsubscribe: () => {},
+                  });
+                  export default { subscribe, unsubscribe, createWrapper };
+                `,
+                loader: "js",
+              }
+            }
+            if (args.path === "bun-pty") {
+              return {
+                contents: `
+                  // bun-pty shim for Deno
+                  export const spawn = () => {
+                    throw new Error("bun-pty is not available in Deno");
+                  };
+                  export default { spawn };
+                `,
+                loader: "js",
+              }
+            }
+            if (args.path === "fsevents") {
+              return {
+                contents: `
+                  // fsevents shim for Deno (macOS only, not needed)
+                  export default null;
+                `,
+                loader: "js",
+              }
+            }
+            if (args.path === "bun:ffi") {
+              return {
+                contents: `
+                  // bun:ffi shim for Deno
+                  export const dlopen = () => { throw new Error("bun:ffi is not available in Deno"); };
+                  export const ptr = (val) => val;
+                  export const toArrayBuffer = (ptr, offset, size) => new ArrayBuffer(size || 0);
+                  export const JSCallback = class { constructor() { throw new Error("bun:ffi is not available in Deno"); } };
+                  export default { dlopen, ptr, toArrayBuffer, JSCallback };
+                `,
+                loader: "js",
+              }
+            }
+            if (args.path === "bun:sqlite") {
+              return {
+                contents: `
+                  // bun:sqlite shim for Deno
+                  export class Database {
+                    constructor() { throw new Error("bun:sqlite is not available in Deno"); }
+                  }
+                  export default { Database };
+                `,
+                loader: "js",
+              }
+            }
+            if (args.path === "bun:test") {
+              return {
+                contents: `
+                  // bun:test shim for Deno
+                  export const test = () => {};
+                  export const describe = () => {};
+                  export const expect = () => ({});
+                  export const beforeAll = () => {};
+                  export const afterAll = () => {};
+                  export default { test, describe, expect, beforeAll, afterAll };
+                `,
+                loader: "js",
+              }
+            }
+            return { contents: "export default null;", loader: "js" }
+          })
+        },
+      },
+
+      solidPlugin({ solid: { generate: "dom" } }),
+
+      // Handle WASM imports with type: "wasm" or type: "file" (Bun-specific)
+      // Copy WASM files to output and export runtime-resolvable path
+      {
+        name: "wasm-import-handler",
+        setup(build) {
+          // Intercept .wasm imports with type: "wasm" or type: "file" attribute
+          build.onResolve({ filter: /\.wasm$/ }, (args) => {
+            // Check if this is a Bun-specific import assertion
+            if (args.with?.type === "wasm" || args.with?.type === "file") {
+              // Resolve the WASM file path
+              let wasmPath: string | null = null
+
+              // Try to find the WASM file
+              if (args.path.includes("web-tree-sitter") && args.path.includes("tree-sitter.wasm")) {
+                wasmPath = path.join(projectDir, "node_modules/web-tree-sitter/tree-sitter.wasm")
+              } else if (args.path.includes("tree-sitter-bash")) {
+                wasmPath = path.join(projectDir, "node_modules/tree-sitter-bash/tree-sitter-bash.wasm")
+              } else {
+                // Relative path resolution (for @opentui/core WASM imports)
+                const resolvedPath = path.resolve(path.dirname(args.importer), args.path)
+                if (fs.existsSync(resolvedPath)) {
+                  wasmPath = resolvedPath
+                } else {
+                  // Generic module resolution
+                  try {
+                    const resolved = require.resolve(args.path, { paths: [path.dirname(args.importer)] })
+                    wasmPath = resolved
+                  } catch {
+                    wasmPath = resolvedPath
+                  }
+                }
+              }
+
+              if (wasmPath && fs.existsSync(wasmPath)) {
+                return { path: wasmPath, namespace: "wasm-asset" }
+              } else {
+                console.warn(`   ⚠️  WASM file not found: ${args.path} (resolved: ${wasmPath})`)
+              }
+            }
+            return null
+          })
+
+          build.onLoad({ filter: /.*/, namespace: "wasm-asset" }, async (args) => {
+            const wasmFileName = path.basename(args.path)
+
+            // Copy WASM file to output directory
+            const destPath = path.join(outDir, wasmFileName)
+            if (!fs.existsSync(destPath)) {
+              fs.copyFileSync(args.path, destPath)
+              console.log(`   📦 Copied WASM: ${wasmFileName}`)
+            }
+
+            // Export a path that will be resolved at runtime relative to the bundle
+            // For Deno, we need to use import.meta.url to get the script location
+            return {
+              contents: `
+                // WASM file: ${wasmFileName}
+                // Will be loaded at runtime from same directory as the bundle
+                const wasmFileName = ${JSON.stringify(wasmFileName)};
+                let wasmPath;
+                if (typeof Deno !== 'undefined') {
+                  // Deno: resolve relative to current script
+                  const scriptUrl = new URL(import.meta.url);
+                  wasmPath = new URL(wasmFileName, scriptUrl).pathname;
+                  // On Windows, remove leading slash from /C:/path/to/file
+                  if (wasmPath.match(/^\\/[a-zA-Z]:/)) {
+                    wasmPath = wasmPath.slice(1);
+                  }
+                } else if (typeof __dirname !== 'undefined') {
+                  // Node/Bun with CommonJS
+                  const path = require('path');
+                  wasmPath = path.join(__dirname, wasmFileName);
+                } else {
+                  // ESM: use import.meta.url
+                  const { fileURLToPath } = await import('url');
+                  const { dirname, join } = await import('path');
+                  const __filename = fileURLToPath(import.meta.url);
+                  const __dirname = dirname(__filename);
+                  wasmPath = join(__dirname, wasmFileName);
+                }
+                export default wasmPath;
+              `,
+              loader: "js",
+            }
+          })
+        },
+      },
+
+      // Handle type: "file" imports for non-WASM files (Bun-specific)
+      {
+        name: "file-import-handler",
+        setup(build) {
+          // Handle .scm and other text asset files with type: "file"
+          build.onResolve({ filter: /\.scm$/ }, (args) => {
+            if (args.with?.type === "file") {
+              const resolvedPath = path.resolve(path.dirname(args.importer), args.path)
+              return { path: resolvedPath, namespace: "file-asset" }
+            }
+            return null
+          })
+
+          build.onLoad({ filter: /.*/, namespace: "file-asset" }, async (args) => {
+            // Embed text content (like .scm query files)
+            try {
+              const content = fs.readFileSync(args.path, "utf-8")
+              return {
+                contents: `export default ${JSON.stringify(content)};`,
+                loader: "js",
+              }
+            } catch {
+              return {
+                contents: `export default "";`,
+                loader: "js",
+              }
+            }
+          })
+        },
+      },
+
+      // Resolve workspace packages
+      {
+        name: "workspace-resolver",
+        setup(build) {
+          // @opencode-ai/* packages
+          build.onResolve({ filter: /^@opencode-ai\// }, (args) => {
+            const pkgPath = args.path.replace("@opencode-ai/", "")
+            const parts = pkgPath.split("/")
+            const basePkg = parts[0]
+            const subPath = parts.slice(1).join("/")
+
+            // Try direct subpath first
+            if (subPath) {
+              const directPath = path.join(projectDir, "..", basePkg, "src", subPath)
+              const resolved = resolveWithExtensions(directPath)
+              if (resolved) return resolved
+            }
+
+            // Try index
+            const indexPath = path.join(projectDir, "..", basePkg, "src", "index.ts")
+            if (fs.existsSync(indexPath)) {
+              return { path: indexPath }
+            }
+
+            return null
+          })
+
+          // @/ alias
+          build.onResolve({ filter: /^@\// }, (args) => {
+            const resolvedPath = path.join(projectDir, "src", args.path.slice(2))
+            return resolveWithExtensions(resolvedPath)
+          })
+
+          // @tui/ alias
+          build.onResolve({ filter: /^@tui\// }, (args) => {
+            const resolvedPath = path.join(projectDir, "src/cli/cmd/tui", args.path.slice(5))
+            return resolveWithExtensions(resolvedPath)
+          })
+        },
+      },
+
+      // Stub "bun" import
+      {
+        name: "bun-shim",
+        setup(build) {
+          build.onResolve({ filter: /^bun$/ }, () => {
+            return { path: "bun", namespace: "bun-shim" }
+          })
+
+          build.onLoad({ filter: /.*/, namespace: "bun-shim" }, () => {
+            return {
+              contents: `
+                // Bun shim for Deno compatibility
+                // These are stubs - the actual functionality comes from @opencode-ai/runtime
+                
+                export const $ = async (...args) => {
+                  throw new Error("Bun.$ is not available in Deno. Use Shell.$ from @opencode-ai/runtime instead.")
+                }
+                
+                export const file = (path) => ({
+                  text: async () => { throw new Error("Use File.read from @opencode-ai/runtime") },
+                  exists: async () => { throw new Error("Use File.exists from @opencode-ai/runtime") },
+                  arrayBuffer: async () => { throw new Error("Use File.read from @opencode-ai/runtime") },
+                })
+                
+                export const write = async () => { throw new Error("Use File.write from @opencode-ai/runtime") }
+                export const spawn = () => { throw new Error("Use Process.spawn from @opencode-ai/runtime") }
+                export const spawnSync = () => { throw new Error("Use Process.spawnSync from @opencode-ai/runtime") }
+                export const sleep = async (ms) => new Promise(r => setTimeout(r, ms))
+                export const gc = () => {}
+                export const version = "0.0.0-deno-shim"
+                export const env = {
+                  get: (key) => typeof Deno !== 'undefined' ? Deno.env.get(key) : process.env[key],
+                  set: (key, val) => { if (typeof Deno !== 'undefined') Deno.env.set(key, val); else process.env[key] = val },
+                  toObject: () => typeof Deno !== 'undefined' ? Object.fromEntries(Deno.env.entries()) : { ...process.env },
+                }
+                
+                export default { $, file, write, spawn, spawnSync, sleep, gc, version, env }
+              `,
+              loader: "js",
+            }
+          })
+        },
+      },
     ],
-    cwd: projectDir,
-    stdout: "inherit",
-    stderr: "inherit",
+
+    // Banner for Deno compatibility
+    banner: {
+      js: `
+// OpenCode - Built for Deno runtime
+// Version: ${pkg.version}
+// Built: ${new Date().toISOString()}
+
+// Deno compatibility shims
+if (typeof globalThis.Deno !== 'undefined') {
+  // Running in Deno
+  globalThis.process = globalThis.process || {
+    env: Object.fromEntries(Deno.env.entries()),
+    cwd: () => Deno.cwd(),
+    platform: Deno.build.os,
+    arch: Deno.build.arch,
+    exit: (code) => Deno.exit(code),
+    stdout: { write: (s) => Deno.stdout.writeSync(new TextEncoder().encode(s)) },
+    stderr: { write: (s) => Deno.stderr.writeSync(new TextEncoder().encode(s)) },
+    argv: ['deno', 'opencode', ...Deno.args],
+  };
+  
+  // Bun global stub
+  globalThis.Bun = {
+    version: '0.0.0-deno',
+    env: {
+      get: (k) => Deno.env.get(k),
+      set: (k, v) => Deno.env.set(k, v),
+      toObject: () => Object.fromEntries(Deno.env.entries()),
+    },
+    gc: () => {},
+    sleep: (ms) => new Promise(r => setTimeout(r, ms)),
+  };
+}
+`,
+    },
   })
 
-  const result = await cmd.output()
+  const stats = fs.statSync(bundleOutFile)
+  const sizeMB = (stats.size / 1024 / 1024).toFixed(2)
+  console.log(`   ✅ Bundle created: ${bundleOutFile} (${sizeMB} MB)`)
 
-  if (!result.success) {
-    console.error(`Failed to build ${name}`)
+  if (result.warnings.length > 0) {
+    console.log(`   ⚠️  ${result.warnings.length} warnings`)
+    for (const w of result.warnings.slice(0, 3)) {
+      console.log(`      - ${w.text.slice(0, 100)}`)
+    }
+  }
+} catch (error) {
+  console.error("❌ Bundle failed:")
+  console.error(error)
+  process.exit(1)
+}
+
+if (bundleOnly || skipCompile) {
+  console.log("\n⏭️  Skipping Deno compile step")
+  console.log("   Run the bundle with: deno run --allow-all dist-deno/opencode.mjs")
+  process.exit(0)
+}
+
+// Step 2: Compile with Deno
+console.log("\n🔧 Step 2: Compiling with Deno...")
+
+const denoPath = process.env.DENO_PATH || path.join(process.env.HOME || "", ".deno/bin/deno")
+
+// Check if Deno is available
+try {
+  const proc = Bun.spawnSync([denoPath, "--version"])
+  if (proc.exitCode !== 0) {
+    throw new Error("Deno not found")
+  }
+  const version = proc.stdout.toString().split("\n")[0]
+  console.log(`   Using ${version}`)
+} catch {
+  console.error("❌ Deno not found. Install with: curl -fsSL https://deno.land/install.sh | sh")
+  console.log("   Bundle is available at: dist-deno/opencode.mjs")
+  process.exit(1)
+}
+
+for (const target of targets) {
+  const binaryName = target.os === "windows" ? "opencode.exe" : "opencode"
+  const targetDir = path.join(outDir, `opencode-${target.os}-${target.arch}`, "bin")
+  const binaryPath = path.join(targetDir, binaryName)
+
+  fs.mkdirSync(targetDir, { recursive: true })
+
+  console.log(`\n   Building ${target.os}-${target.arch}...`)
+
+  const proc = Bun.spawnSync(
+    [denoPath, "compile", "--allow-all", "--target", target.denoTarget, "--output", binaryPath, bundleOutFile],
+    {
+      cwd: projectDir,
+      stdout: "pipe",
+      stderr: "pipe",
+    },
+  )
+
+  if (proc.exitCode !== 0) {
+    console.error(`   ❌ Failed: ${proc.stderr.toString()}`)
     continue
   }
 
+  const stats = fs.statSync(binaryPath)
+  const sizeMB = (stats.size / 1024 / 1024).toFixed(1)
+  console.log(`   ✅ ${target.os}-${target.arch}: ${sizeMB} MB`)
+
   // Write package.json for npm distribution
-  await Deno.writeTextFile(
-    path.join(distDir, name, "package.json"),
+  fs.writeFileSync(
+    path.join(outDir, `opencode-${target.os}-${target.arch}`, "package.json"),
     JSON.stringify(
       {
-        name,
-        version,
-        os: [os],
-        cpu: [arch],
+        name: `opencode-${target.os}-${target.arch}`,
+        version: pkg.version,
+        os: [target.os],
+        cpu: [target.arch === "x86_64" ? "x64" : "arm64"],
         runtime: "deno",
       },
       null,
       2,
     ),
   )
-
-  console.log(`✓ Built ${name}`)
 }
 
-console.log("\nBuild complete!")
-console.log(`Output: ${distDir}`)
+console.log("\n✨ Build complete!")
+console.log(`   Output: ${outDir}`)

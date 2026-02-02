@@ -3,7 +3,8 @@ import { Config } from "../config/config"
 import { Bus } from "../bus/index"
 import { Log } from "../util/log"
 import { createOpencodeClient } from "@opencode-ai/sdk"
-import { Server } from "../server/server"
+// NOTE: Server is imported dynamically below to avoid circular dependency:
+// bootstrap.ts → plugin/index.ts → server/server.ts → bootstrap.ts
 import { BunProc } from "../bun/index"
 import { Instance } from "../project/instance"
 import { Flag } from "../flag/flag"
@@ -23,6 +24,9 @@ export namespace Plugin {
 
   const state = Instance.state(
     async () => {
+      // Dynamic import to avoid circular dependency:
+      // bootstrap.ts → plugin/index.ts → server/server.ts → bootstrap.ts
+      const { Server } = await import("../server/server")
       const client = createOpencodeClient({
         baseUrl: "http://localhost:4096",
         // @ts-ignore - fetch type incompatibility

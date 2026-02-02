@@ -36,14 +36,18 @@ export namespace State {
 
     let disposalFinished = false
 
-    setTimeout(() => {
+    const timer = setTimeout(() => {
       if (!disposalFinished) {
         log.warn(
           "state disposal is taking an unusually long time - if it does not complete in a reasonable time, please report this as a bug",
           { key },
         )
       }
-    }, 10000).unref()
+    }, 10000)
+    // unref() prevents the timer from keeping the process alive (Node.js/Bun specific)
+    if (typeof timer === "object" && timer && "unref" in timer) {
+      timer.unref()
+    }
 
     const tasks: Promise<void>[] = []
     for (const [init, entry] of entries) {

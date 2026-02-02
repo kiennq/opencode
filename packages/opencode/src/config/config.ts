@@ -20,7 +20,8 @@ import {
   printParseErrorCode,
 } from "jsonc-parser"
 import { Instance } from "../project/instance"
-import { LSPServer } from "../lsp/server"
+// NOTE: LSPServer is imported dynamically below to avoid circular dependency:
+// config.ts → lsp/server.ts → ... → bootstrap.ts → plugin/index.ts → config.ts
 import { BunProc } from "@/bun"
 import { Installation } from "@/installation"
 import { ConfigMarkdown } from "./markdown"
@@ -1064,7 +1065,47 @@ export namespace Config {
           (data) => {
             if (!data) return true
             if (typeof data === "boolean") return true
-            const serverIds = new Set(Object.values(LSPServer).map((s) => s.id))
+            // Static list of built-in LSP server IDs to avoid circular dependency
+            // (config.ts → lsp/server.ts → ... → bootstrap.ts → plugin/index.ts → config.ts)
+            // If adding a new LSP server, add its ID here
+            const serverIds = new Set([
+              "astro",
+              "bash",
+              "biome",
+              "clangd",
+              "clojure-lsp",
+              "csharp",
+              "dart",
+              "deno",
+              "dockerfile",
+              "elixir-ls",
+              "eslint",
+              "fsharp",
+              "gleam",
+              "gopls",
+              "haskell-language-server",
+              "jdtls",
+              "kotlin-ls",
+              "lua-ls",
+              "nixd",
+              "ocaml-lsp",
+              "oxlint",
+              "php intelephense",
+              "prisma",
+              "pyright",
+              "ruby-lsp",
+              "rust",
+              "sourcekit-lsp",
+              "svelte",
+              "terraform",
+              "texlab",
+              "tinymist",
+              "ty",
+              "typescript",
+              "vue",
+              "yaml-ls",
+              "zls",
+            ])
 
             return Object.entries(data).every(([id, config]) => {
               if (config.disabled) return true

@@ -130,7 +130,11 @@ export function startRefreshInterval() {
   if (intervalId) return
   // Initial refresh on startup
   ModelsDev.refresh()
-  intervalId = setInterval(() => ModelsDev.refresh(), 60 * 1000 * 60).unref()
+  intervalId = setInterval(() => ModelsDev.refresh(), 60 * 1000 * 60)
+  // unref() prevents the timer from keeping the process alive (Node.js/Bun specific)
+  if (typeof intervalId === "object" && intervalId && "unref" in intervalId) {
+    ;(intervalId as NodeJS.Timeout).unref()
+  }
 
   // Register exit handler only once to prevent multiple registrations
   if (!exitHandlerRegistered) {
@@ -146,5 +150,8 @@ export function stopRefreshInterval() {
   }
 }
 
-// Auto-start the interval on module load
-startRefreshInterval()
+// NOTE: Do NOT auto-start at module load - this causes hangs in Deno
+// because fetch() during ESM initialization blocks the module graph.
+// Instead, startRefreshInterval() should be called explicitly after
+// the runtime is fully initialized.
+// startRefreshInterval()

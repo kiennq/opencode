@@ -65,6 +65,8 @@
   "devDependencies": {
     "@actions/artifact": "5.0.1",
     "@tsconfig/bun": "catalog:",
+    "esbuild": "0.27.2",
+    "esbuild-plugin-solid": "0.6.0",
     "husky": "9.1.7",
     "prettier": "3.6.2",
     "semver": "^7.6.0",

@@ -48,7 +48,10 @@ export namespace Scheduler {
     const timer = setInterval(() => {
       void run(task)
     }, task.interval)
-    timer.unref()
+    // unref() prevents the timer from keeping the process alive (Node.js/Bun specific)
+    if (typeof timer === "object" && timer && "unref" in timer) {
+      timer.unref()
+    }
     entry.timers.set(task.id, timer)
   }
 

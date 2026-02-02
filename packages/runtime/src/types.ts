@@ -200,13 +200,19 @@ export interface RuntimeAdapter {
  * Detect the current runtime environment
  */
 export function detectRuntime(): "bun" | "node" | "deno" {
-  // @ts-ignore - Bun global
-  if (typeof Bun !== "undefined") {
-    return "bun"
-  }
+  // Check for Deno first - we may have a Bun stub when running in Deno
   // @ts-ignore - Deno global
   if (typeof Deno !== "undefined") {
     return "deno"
+  }
+  // @ts-ignore - Bun global
+  if (typeof Bun !== "undefined") {
+    // Check if this is a stub (our Deno build sets version to "0.0.0-deno")
+    // @ts-ignore
+    if (Bun.version && Bun.version.includes("deno")) {
+      return "deno"
+    }
+    return "bun"
   }
   return "node"
 }

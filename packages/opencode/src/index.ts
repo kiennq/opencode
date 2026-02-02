@@ -28,9 +28,14 @@ import { WebCommand } from "./cli/cmd/web"
 import { PrCommand } from "./cli/cmd/pr"
 import { SessionCommand } from "./cli/cmd/session"
 import { Instance } from "./project/instance"
+import { startRefreshInterval } from "./provider/models"
 
 // Initialize the runtime adapter (auto-detects Bun or Deno)
 await Runtime.init()
+
+// Start model refresh interval after runtime is initialized
+// (moved from module-level to avoid blocking during ESM initialization in Deno)
+startRefreshInterval()
 
 // Track whether cleanup has been performed to avoid duplicate cleanup
 let cleanupPerformed = false
