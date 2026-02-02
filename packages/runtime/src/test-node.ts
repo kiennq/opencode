@@ -3,7 +3,7 @@
  * Run with: node --experimental-strip-types src/test-node.ts
  */
 
-import { NodeAdapter } from "./adapters/node.ts"
+import { NodeAdapter } from "./adapters/node"
 import path from "node:path"
 import { fileURLToPath } from "node:url"
 

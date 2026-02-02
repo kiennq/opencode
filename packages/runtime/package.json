@@ -16,12 +16,13 @@
     "typecheck": "tsc --noEmit",
     "test": "bun test",
     "test:deno": "deno test --allow-all",
-    "test:node": "node --experimental-strip-types src/test-node.ts"
+    "test:node": "npx tsx src/test-node.ts"
   },
   "devDependencies": {
     "typescript": "catalog:",
     "@types/bun": "catalog:",
-    "@types/node": "catalog:"
+    "@types/node": "catalog:",
+    "tsx": "^4.21.0"
   },
   "optionalDependencies": {
     "fast-glob": "^3.3.2",
