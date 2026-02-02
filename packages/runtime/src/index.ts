@@ -34,3 +34,4 @@ export { Runtime, autoInit } from "./adapter"
 // Re-export adapters for direct use
 export { BunAdapter } from "./adapters/bun"
 export { DenoAdapter } from "./adapters/deno"
+export { NodeAdapter } from "./adapters/node"

@@ -82,8 +82,8 @@ async function loadAdapter(runtime: "bun" | "node" | "deno"): Promise<RuntimeAda
       return DenoAdapter
     }
     case "node": {
-      // Node adapter not yet implemented
-      throw new Error("Node.js adapter is not yet implemented. Use Bun or Deno runtime.")
+      const { NodeAdapter } = await import("./adapters/node")
+      return NodeAdapter
     }
     default:
       throw new Error(`Unknown runtime: ${runtime}`)
