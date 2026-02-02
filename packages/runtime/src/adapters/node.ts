@@ -20,6 +20,11 @@ import type {
 import fs from "node:fs/promises"
 import { spawn as nodeSpawn, spawnSync as nodeSpawnSync, execSync } from "node:child_process"
 import path from "node:path"
+import { createRequire } from "node:module"
+import http from "node:http"
+
+// Create require function for loading CJS modules
+const require = createRequire(import.meta.url)
 
 /**
  * Node.js runtime adapter - uses native Node.js APIs
@@ -176,13 +181,14 @@ export const NodeAdapter: RuntimeAdapter = {
 
     spawnSync(command: string[], options?: SpawnOptions): SpawnResult {
       const [cmd, ...args] = command
+      // Default to "pipe" for stdout/stderr to capture output (most common use case)
       const proc = nodeSpawnSync(cmd!, args, {
         cwd: options?.cwd,
         env: { ...process.env, ...options?.env } as NodeJS.ProcessEnv,
         stdio: [
           options?.stdin === "pipe" ? "pipe" : options?.stdin === "inherit" ? "inherit" : "ignore",
-          options?.stdout === "pipe" ? "pipe" : options?.stdout === "inherit" ? "inherit" : "ignore",
-          options?.stderr === "pipe" ? "pipe" : options?.stderr === "inherit" ? "inherit" : "ignore",
+          options?.stdout === "inherit" ? "inherit" : options?.stdout === "ignore" ? "ignore" : "pipe",
+          options?.stderr === "inherit" ? "inherit" : options?.stderr === "ignore" ? "ignore" : "pipe",
         ],
         shell: options?.shell,
         timeout: options?.timeout,
@@ -285,12 +291,9 @@ export const NodeAdapter: RuntimeAdapter = {
 
     *scanSync(pattern: string, options?: GlobOptions): Iterable<string> {
       // Use fast-glob sync for Node.js
-      const { createRequire } = require("node:module")
-      const req = createRequire(import.meta.url)
-
       let fg: any
       try {
-        fg = req("fast-glob")
+        fg = require("fast-glob")
       } catch {
         throw new Error("No glob implementation available. Install fast-glob package.")
       }
@@ -312,16 +315,13 @@ export const NodeAdapter: RuntimeAdapter = {
 
     match(pattern: string, filePath: string): boolean {
       // Use micromatch or picomatch for pattern matching
-      const { createRequire } = require("node:module")
-      const req = createRequire(import.meta.url)
-
       let matcher: any
       try {
-        matcher = req("micromatch")
+        matcher = require("micromatch")
         return matcher.isMatch(filePath, pattern)
       } catch {
         try {
-          matcher = req("picomatch")
+          matcher = require("picomatch")
           return matcher(pattern)(filePath)
         } catch {
           // Simple fallback - just check if pattern equals path
@@ -335,9 +335,8 @@ export const NodeAdapter: RuntimeAdapter = {
 
   server: {
     serve<T>(options: ServeOptions<T>): ServerHandle {
-      // For Node.js, we need to use http module
+      // For Node.js, we use the http module imported at the top
       // This is a simplified implementation - production would need more work
-      const http = require("node:http")
 
       const server = http.createServer(async (req: any, res: any) => {
         // Convert Node.js request to Fetch API Request
@@ -371,7 +370,8 @@ export const NodeAdapter: RuntimeAdapter = {
 
       server.listen(port, hostname)
 
-      const actualPort = server.address()?.port ?? port
+      const address = server.address()
+      const actualPort = typeof address === "object" && address ? address.port : port
 
       return {
         port: actualPort,
