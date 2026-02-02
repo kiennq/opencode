@@ -15,11 +15,16 @@
   "scripts": {
     "typecheck": "tsc --noEmit",
     "test": "bun test",
-    "test:deno": "deno test --allow-all"
+    "test:deno": "deno test --allow-all",
+    "test:node": "node --experimental-strip-types src/test-node.ts"
   },
   "devDependencies": {
     "typescript": "catalog:",
     "@types/bun": "catalog:",
     "@types/node": "catalog:"
+  },
+  "optionalDependencies": {
+    "fast-glob": "^3.3.2",
+    "micromatch": "^4.0.8"
   }
 }
