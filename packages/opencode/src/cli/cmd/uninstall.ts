@@ -267,9 +267,7 @@ async function getShellConfigFile(): Promise<string | null> {
       .catch(() => false)
     if (!exists) continue
 
-    const content = await Bun.file(file)
-      .text()
-      .catch(() => "")
+    const content = await fs.readFile(file, "utf-8").catch(() => "")
     if (content.includes("# opencode") || content.includes(".opencode/bin")) {
       return file
     }
@@ -279,7 +277,7 @@ async function getShellConfigFile(): Promise<string | null> {
 }
 
 async function cleanShellConfig(file: string) {
-  const content = await Bun.file(file).text()
+  const content = await fs.readFile(file, "utf-8")
   const lines = content.split("\n")
 
   const filtered: string[] = []

@@ -39,7 +39,7 @@ export namespace Storage {
             cwd: path.join(project, projectDir),
             absolute: true,
           })) {
-            const json = await Bun.file(msgFile).json()
+            const json = JSON.parse(await fs.readFile(msgFile, "utf-8"))
             worktree = json.path?.root
             if (worktree) break
           }
@@ -83,7 +83,7 @@ export namespace Storage {
               sessionFile,
               dest,
             })
-            const session = await Bun.file(sessionFile).json()
+            const session = JSON.parse(await fs.readFile(sessionFile, "utf-8"))
             await Bun.write(dest, JSON.stringify(session))
             log.info(`migrating messages for session ${session.id}`)
             for await (const msgFile of new Bun.Glob(`storage/session/message/${session.id}/*.json`).scan({
@@ -95,7 +95,7 @@ export namespace Storage {
                 msgFile,
                 dest,
               })
-              const message = await Bun.file(msgFile).json()
+              const message = JSON.parse(await fs.readFile(msgFile, "utf-8"))
               await Bun.write(dest, JSON.stringify(message))
 
               log.info(`migrating parts for message ${message.id}`)
@@ -106,7 +106,7 @@ export namespace Storage {
                 },
               )) {
                 const dest = path.join(dir, "part", message.id, path.basename(partFile))
-                const part = await Bun.file(partFile).json()
+                const part = JSON.parse(await fs.readFile(partFile, "utf-8"))
                 log.info("copying", {
                   partFile,
                   dest,
@@ -123,7 +123,7 @@ export namespace Storage {
         cwd: dir,
         absolute: true,
       })) {
-        const session = await Bun.file(item).json()
+        const session = JSON.parse(await fs.readFile(item, "utf-8"))
         if (!session.projectID) continue
         if (!session.summary?.diffs) continue
         const { diffs } = session.summary
@@ -143,8 +143,8 @@ export namespace Storage {
 
   const state = lazy(async () => {
     const dir = path.join(Global.Path.data, "storage")
-    const migration = await Bun.file(path.join(dir, "migration"))
-      .json()
+    const migration = await fs
+      .readFile(path.join(dir, "migration"), "utf-8")
       .then((x) => parseInt(x))
       .catch(() => 0)
     for (let index = migration; index < MIGRATIONS.length; index++) {
@@ -171,7 +171,7 @@ export namespace Storage {
     const target = path.join(dir, ...key) + ".json"
     return withErrorHandling(async () => {
       using _ = await Lock.read(target)
-      const result = await Bun.file(target).json()
+      const result = JSON.parse(await fs.readFile(target, "utf-8"))
       return result as T
     })
   }
@@ -181,7 +181,7 @@ export namespace Storage {
     const target = path.join(dir, ...key) + ".json"
     return withErrorHandling(async () => {
       using _ = await Lock.write(target)
-      const content = await Bun.file(target).json()
+      const content = JSON.parse(await fs.readFile(target, "utf-8"))
       fn(content)
       await Bun.write(target, JSON.stringify(content))
       return content as T

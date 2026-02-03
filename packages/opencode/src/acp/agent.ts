@@ -1,3 +1,4 @@
+import fs from "fs/promises"
 import {
   RequestError,
   type Agent as ACPAgent,
@@ -159,7 +160,7 @@ export namespace ACP {
                 const filepath = typeof metadata["filepath"] === "string" ? metadata["filepath"] : ""
                 const diff = typeof metadata["diff"] === "string" ? metadata["diff"] : ""
 
-                const content = await Bun.file(filepath).text()
+                const content = await fs.readFile(filepath, "utf-8")
                 const newContent = getNewContent(content, diff)
 
                 if (newContent) {

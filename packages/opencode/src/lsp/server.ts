@@ -857,7 +857,7 @@ export namespace LSPServer {
         // Stop at filesystem root
         const cargoTomlPath = path.join(currentDir, "Cargo.toml")
         try {
-          const cargoTomlContent = await Bun.file(cargoTomlPath).text()
+          const cargoTomlContent = await fs.readFile(cargoTomlPath, "utf-8")
           if (cargoTomlContent.includes("[workspace]")) {
             return currentDir
           }

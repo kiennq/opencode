@@ -1,4 +1,5 @@
 import type { Argv } from "yargs"
+import fs from "fs/promises"
 import { Session } from "../../session"
 import { cmd } from "./cmd"
 import { bootstrap } from "../bootstrap"
@@ -66,8 +67,10 @@ export const ImportCommand = cmd({
           }),
         }
       } else {
-        const file = Bun.file(args.file)
-        exportData = await file.json().catch(() => {})
+        exportData = await fs
+          .readFile(args.file, "utf-8")
+          .then((content) => JSON.parse(content))
+          .catch(() => {})
         if (!exportData) {
           process.stdout.write(`File not found: ${args.file}`)
           process.stdout.write(EOL)
