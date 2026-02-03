@@ -14,13 +14,12 @@ import PROMPT_EXPLORE from "./prompt/explore.txt"
 import PROMPT_SUMMARY from "./prompt/summary.txt"
 import PROMPT_TITLE from "./prompt/title.txt"
 import { PermissionNext } from "@/permission/next"
-import { Skill } from "../skill/skill"
+import { Skill } from "../skill"
 import { ConfigMarkdown } from "../config/markdown"
 import { mergeDeep, pipe, sortBy, values } from "remeda"
 import { Global } from "@/global"
 import path from "path"
 import { Plugin } from "@/plugin"
-import { Skill } from "../skill"
 
 export namespace Agent {
   export const Info = z

@@ -1,5 +1,6 @@
 import z from "zod"
 import * as fs from "fs"
+import * as fsp from "fs/promises"
 import * as path from "path"
 import { Tool } from "./tool"
 import { LSP } from "../lsp"
@@ -109,7 +110,10 @@ export const ReadTool = Tool.define("read", {
       const isBinary = await isBinaryFile(filepath, file)
       if (isBinary) throw new Error(`Cannot read binary file: ${filepath}`)
 
-      const lines = await file.text().then((text) => text.split("\n"))
+      // Use Node.js fs.readFile instead of Bun.file().text() to avoid memory leak
+      // See: https://github.com/oven-sh/bun/issues/15020
+      const text = await fsp.readFile(filepath, "utf-8")
+      const lines = text.split("\n")
 
       const raw: string[] = []
       let bytes = 0
@@ -248,7 +252,7 @@ async function isBinaryFile(filepath: string, file: Bun.BunFile): Promise<boolea
       break
   }
 
-  const stat = await file.stat()
+  const stat = await fsp.stat(filepath)
   const fileSize = stat.size
   if (fileSize === 0) return false
 

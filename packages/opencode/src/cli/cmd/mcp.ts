@@ -14,6 +14,7 @@ import path from "path"
 import { Global } from "../../global"
 import { modify, applyEdits } from "jsonc-parser"
 import { Bus } from "../../bus"
+import { Filesystem } from "../../util/filesystem"
 
 function getAuthStatusIcon(status: MCP.AuthStatus): string {
   switch (status) {
@@ -388,7 +389,7 @@ async function resolveConfigPath(baseDir: string, global = false) {
   }
 
   for (const candidate of candidates) {
-    if (await Bun.file(candidate).exists()) {
+    if (await Filesystem.exists(candidate)) {
       return candidate
     }
   }

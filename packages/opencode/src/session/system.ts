@@ -3,6 +3,7 @@ import { Global } from "../global"
 import { Filesystem } from "../util/filesystem"
 import { Config } from "../config/config"
 import { Log } from "../util/log"
+import fs from "fs/promises"
 
 import { Instance } from "../project/instance"
 import path from "path"
@@ -110,7 +111,7 @@ export namespace SystemPrompt {
     }
 
     for (const globalRuleFile of GLOBAL_RULE_FILES) {
-      if (await Bun.file(globalRuleFile).exists()) {
+      if (await Filesystem.exists(globalRuleFile)) {
         paths.add(globalRuleFile)
         break
       }
@@ -143,8 +144,8 @@ export namespace SystemPrompt {
     }
 
     const foundFiles = Array.from(paths).map((p) =>
-      Bun.file(p)
-        .text()
+      fs
+        .readFile(p, "utf-8")
         .catch(() => "")
         .then((x) => "Instructions from: " + p + "\n" + x),
     )

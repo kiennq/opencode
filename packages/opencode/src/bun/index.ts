@@ -69,8 +69,10 @@ export namespace BunProc {
   )
 
   async function readPackageJson(): Promise<PackageJson> {
-    const pkgJsonPath = path.join(Global.Path.cache, "package.json")
-    return JSON.parse(await fs.readFile(pkgJsonPath, "utf-8")).catch(() => ({}))
+    return fs
+      .readFile(path.join(Global.Path.cache, "package.json"), "utf-8")
+      .then((content) => JSON.parse(content))
+      .catch(() => ({}))
   }
 
   async function writePackageJson(parsed: PackageJson) {

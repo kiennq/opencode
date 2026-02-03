@@ -63,8 +63,8 @@ export namespace Project {
         const gitBinary = Bun.which("git")
 
         // cached id calculation
-        let id = await Bun.file(path.join(git, "opencode"))
-          .text()
+        let id = await fs
+          .readFile(path.join(git, "opencode"), "utf-8")
           .then((x) => x.trim())
           .catch(() => undefined)
 

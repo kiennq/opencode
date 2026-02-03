@@ -1,16 +1,17 @@
 import { realpathSync } from "fs"
+import fs from "fs/promises"
 import { dirname, join, relative } from "path"
 
 export namespace Filesystem {
   export const exists = (p: string) =>
-    Bun.file(p)
-      .stat()
+    fs
+      .access(p)
       .then(() => true)
       .catch(() => false)
 
   export const isDir = (p: string) =>
-    Bun.file(p)
-      .stat()
+    fs
+      .stat(p)
       .then((s) => s.isDirectory())
       .catch(() => false)
   /**
