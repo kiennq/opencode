@@ -42,8 +42,8 @@ export namespace SessionProcessor {
     // Helper to trigger periodic GC during streaming
     const maybeGC = () => {
       writeCount++
-      if (writeCount % GC_INTERVAL === 0 && global.gc) {
-        global.gc(true) // Force synchronous GC
+      if (writeCount % GC_INTERVAL === 0) {
+        Bun.gc(true) // Force synchronous GC
       }
     }
 
@@ -113,7 +113,7 @@ export namespace SessionProcessor {
                     await Session.updatePart(part)
                     delete reasoningMap[value.id]
                     // Force GC after large reasoning blocks to reclaim memory
-                    if (global.gc) global.gc(true)
+                    Bun.gc(true)
                   }
                   break
 
@@ -436,7 +436,7 @@ export namespace SessionProcessor {
           input.assistantMessage.time.completed = Date.now()
           await Session.updateMessage(input.assistantMessage)
           // Force GC after processing to reclaim memory from streaming
-          if (global.gc) global.gc(true)
+          Bun.gc(true)
           if (needsCompaction) return "compact"
           if (blocked) return "stop"
           if (input.assistantMessage.error) return "stop"

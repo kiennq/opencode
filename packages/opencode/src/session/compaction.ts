@@ -541,7 +541,7 @@ ${p.output.slice(0, 8000)}${p.output.length > 8000 ? "\n... (truncated)" : ""}
     Bus.publish(Event.Compacted, { sessionID: input.sessionID })
     // Aggressively clean up old messages to free memory
     await cleanupCompactedMessages(input.sessionID, input.messages)
-    if (global.gc) global.gc(true)
+    Bun.gc(true)
     return "continue"
   }
 

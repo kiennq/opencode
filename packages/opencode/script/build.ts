@@ -146,6 +146,7 @@ for (const item of targets) {
     tsconfig: "./tsconfig.json",
     plugins: [solidPlugin],
     sourcemap: "external",
+    minify: true,
     compile: {
       autoloadBunfig: false,
       autoloadDotenv: false,

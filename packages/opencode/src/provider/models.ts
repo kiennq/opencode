@@ -1,6 +1,7 @@
 import { Global } from "../global"
 import { Log } from "../util/log"
 import path from "path"
+import fs from "fs/promises"
 import z from "zod"
 import { Installation } from "../installation"
 import { Flag } from "../flag/flag"
@@ -85,8 +86,10 @@ export namespace ModelsDev {
   }
 
   export const Data = lazy(async () => {
-    const file = Bun.file(Flag.OPENCODE_MODELS_PATH ?? filepath)
-    const result = await file.json().catch(() => {})
+    const result = await fs
+      .readFile(Flag.OPENCODE_MODELS_PATH ?? filepath, "utf-8")
+      .then((content) => JSON.parse(content))
+      .catch(() => {})
     if (result) return result
     // @ts-ignore
     const snapshot = await import("./models-snapshot")

@@ -5,6 +5,7 @@ import type { BunFile } from "bun"
 import { formatPatch, structuredPatch } from "diff"
 import path from "path"
 import fs from "fs"
+import fsp from "fs/promises"
 import ignore from "ignore"
 import { Log } from "../util/log"
 import { Filesystem } from "../util/filesystem"
@@ -385,7 +386,7 @@ export namespace File {
       const untrackedFiles = untrackedOutput.trim().split("\n")
       for (const filepath of untrackedFiles) {
         try {
-          const content = await Bun.file(path.join(Instance.directory, filepath)).text()
+          const content = await fsp.readFile(path.join(Instance.directory, filepath), "utf-8")
           const lines = content.split("\n").length
           changedFiles.push({
             path: filepath,
