@@ -26,6 +26,11 @@ export namespace Server {
         adapter = BunAdapter.server
         break
       }
+      case "node": {
+        const { NodeAdapter } = require("./adapters/node")
+        adapter = NodeAdapter.server
+        break
+      }
       case "deno": {
         throw new Error("Server.serve requires async initialization for Deno. Call Runtime.init() first.")
       }

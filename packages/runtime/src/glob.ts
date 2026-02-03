@@ -27,6 +27,11 @@ export namespace Glob {
         adapter = BunAdapter.glob
         break
       }
+      case "node": {
+        const { NodeAdapter } = require("./adapters/node")
+        adapter = NodeAdapter.glob
+        break
+      }
       case "deno": {
         throw new Error("Glob.scanSync/match requires async initialization for Deno. Call Runtime.init() first.")
       }
@@ -46,6 +51,11 @@ export namespace Glob {
           case "bun": {
             const { BunAdapter } = await import("./adapters/bun")
             adapter = BunAdapter.glob
+            break
+          }
+          case "node": {
+            const { NodeAdapter } = await import("./adapters/node")
+            adapter = NodeAdapter.glob
             break
           }
           case "deno": {

@@ -27,6 +27,11 @@ export namespace Util {
         adapter = BunAdapter.util
         break
       }
+      case "node": {
+        const { NodeAdapter } = require("./adapters/node")
+        adapter = NodeAdapter.util
+        break
+      }
       case "deno": {
         throw new Error("Util sync methods require async initialization for Deno. Call Runtime.init() first.")
       }
@@ -46,6 +51,11 @@ export namespace Util {
           case "bun": {
             const { BunAdapter } = await import("./adapters/bun")
             adapter = BunAdapter.util
+            break
+          }
+          case "node": {
+            const { NodeAdapter } = await import("./adapters/node")
+            adapter = NodeAdapter.util
             break
           }
           case "deno": {

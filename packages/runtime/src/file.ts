@@ -34,6 +34,11 @@ export namespace File {
             adapter = DenoAdapter.file
             break
           }
+          case "node": {
+            const { NodeAdapter } = await import("./adapters/node")
+            adapter = NodeAdapter.file
+            break
+          }
           default:
             throw new Error(`Unsupported runtime: ${runtime}`)
         }

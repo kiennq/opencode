@@ -36,6 +36,11 @@ export namespace Process {
         adapter = BunAdapter.process
         break
       }
+      case "node": {
+        const { NodeAdapter } = require("./adapters/node")
+        adapter = NodeAdapter.process
+        break
+      }
       case "deno": {
         throw new Error("Process.spawn/spawnSync requires async initialization for Deno. Call Runtime.init() first.")
       }
@@ -55,6 +60,11 @@ export namespace Process {
           case "bun": {
             const { BunAdapter } = await import("./adapters/bun")
             adapter = BunAdapter.process
+            break
+          }
+          case "node": {
+            const { NodeAdapter } = await import("./adapters/node")
+            adapter = NodeAdapter.process
             break
           }
           case "deno": {
