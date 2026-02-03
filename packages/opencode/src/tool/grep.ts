@@ -1,4 +1,5 @@
 import z from "zod"
+import fs from "fs/promises"
 import { Tool } from "./tool"
 import { Ripgrep } from "../file/ripgrep"
 
@@ -91,9 +92,7 @@ export const GrepTool = Tool.define("grep", {
 
     const results = await Promise.all(
       parsed.map(async (item) => {
-        const stats = await Bun.file(item.path)
-          .stat()
-          .catch(() => null)
+        const stats = await fs.stat(item.path).catch(() => null)
         if (!stats) return null
         return {
           ...item,

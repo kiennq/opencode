@@ -1,5 +1,6 @@
 import type { Argv } from "yargs"
 import path from "path"
+import fs from "fs/promises"
 import { UI } from "../ui"
 import { cmd } from "./cmd"
 import { Flag } from "../../flag/flag"
@@ -289,19 +290,13 @@ export const RunCommand = cmd({
 
       for (const filePath of list) {
         const resolvedPath = path.resolve(process.cwd(), filePath)
-        const file = Bun.file(resolvedPath)
-        const stats = await file.stat().catch(() => {})
+        const stats = await fs.stat(resolvedPath).catch(() => {})
         if (!stats) {
           UI.error(`File not found: ${filePath}`)
           process.exit(1)
         }
-        if (!(await file.exists())) {
-          UI.error(`File not found: ${filePath}`)
-          process.exit(1)
-        }
 
-        const stat = await file.stat()
-        const mime = stat.isDirectory() ? "application/x-directory" : "text/plain"
+        const mime = stats.isDirectory() ? "application/x-directory" : "text/plain"
 
         files.push({
           type: "file",

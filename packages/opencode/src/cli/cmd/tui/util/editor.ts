@@ -1,5 +1,5 @@
 import { defer } from "@/util/defer"
-import { rm } from "node:fs/promises"
+import { readFile, rm } from "node:fs/promises"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
 import { CliRenderer } from "@opentui/core"
@@ -23,7 +23,7 @@ export namespace Editor {
       stderr: "inherit",
     })
     await proc.exited
-    const content = await Bun.file(filepath).text()
+    const content = await readFile(filepath, "utf-8")
     opts.renderer.currentRenderBuffer.clear()
     opts.renderer.resume()
     opts.renderer.requestRender()

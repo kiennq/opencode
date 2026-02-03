@@ -1,4 +1,5 @@
 import path from "path"
+import fs from "fs/promises"
 import { Global } from "../global"
 import z from "zod"
 
@@ -42,8 +43,10 @@ export namespace Auth {
   }
 
   export async function all(): Promise<Record<string, Info>> {
-    const file = Bun.file(filepath)
-    const data = await file.json().catch(() => ({}) as Record<string, unknown>)
+    const data = await fs
+      .readFile(filepath, "utf-8")
+      .then((content) => JSON.parse(content) as Record<string, unknown>)
+      .catch(() => ({}) as Record<string, unknown>)
     return Object.entries(data).reduce(
       (acc, [key, value]) => {
         const parsed = Info.safeParse(value)

@@ -162,7 +162,8 @@ export namespace Ripgrep {
           })
       }
       if (config.extension === "zip") {
-        const zipFileReader = new ZipReader(new BlobReader(new Blob([await Bun.file(archivePath).arrayBuffer()])))
+        const buffer = await fs.readFile(archivePath)
+        const zipFileReader = new ZipReader(new BlobReader(new Blob([new Uint8Array(buffer)])))
         const entries = await zipFileReader.getEntries()
         let rgEntry: any
         for (const entry of entries) {
