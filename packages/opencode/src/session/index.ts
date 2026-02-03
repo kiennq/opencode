@@ -383,7 +383,7 @@ export namespace Session {
         info: session,
       })
       // Force GC after session deletion to reclaim memory
-      if (global.gc) global.gc(true)
+      Bun.gc(true)
     } catch (e) {
       log.error(e)
     }

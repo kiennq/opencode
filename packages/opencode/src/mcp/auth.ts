@@ -1,4 +1,5 @@
 import path from "path"
+import fs from "fs/promises"
 import z from "zod"
 import { Global } from "../global"
 
@@ -53,8 +54,10 @@ export namespace McpAuth {
   }
 
   export async function all(): Promise<Record<string, Entry>> {
-    const file = Bun.file(filepath)
-    return file.json().catch(() => ({}))
+    return fs
+      .readFile(filepath, "utf-8")
+      .then((content) => JSON.parse(content))
+      .catch(() => ({}))
   }
 
   export async function set(mcpName: string, entry: Entry, serverUrl?: string): Promise<void> {

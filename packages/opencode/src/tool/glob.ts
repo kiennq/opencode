@@ -1,5 +1,6 @@
 import z from "zod"
 import path from "path"
+import fs from "fs/promises"
 import { Tool } from "./tool"
 import DESCRIPTION from "./glob.txt"
 import { Ripgrep } from "../file/ripgrep"
@@ -49,8 +50,8 @@ export const GlobTool = Tool.define("glob", {
     const files = await Promise.all(
       paths.map(async (full) => ({
         path: full,
-        mtime: await Bun.file(full)
-          .stat()
+        mtime: await fs
+          .stat(full)
           .then((x) => x.mtime.getTime())
           .catch(() => 0),
       })),
