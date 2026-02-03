@@ -18,12 +18,95 @@ export namespace BunProc {
     }
   }
 
+  // Cache the package manager command
+  let cachedPkgManager: string | null = null
+
+  /**
+   * Get the package manager command to use.
+   * Returns "bun" if running under Bun, otherwise falls back to "npm".
+   */
+  function getPackageManager(): string {
+    if (cachedPkgManager) return cachedPkgManager
+    // Check if we're running under Bun
+    if (typeof Bun !== "undefined") {
+      cachedPkgManager = process.execPath
+    } else {
+      // On Node.js, use npm
+      cachedPkgManager = "npm"
+    }
+    return cachedPkgManager
+  }
+
+  /**
+   * Translate bun commands to npm equivalents when running on Node.js
+   */
+  function translateCommand(cmd: string[]): string[] {
+    if (typeof Bun !== "undefined") return cmd
+
+    // Translate bun commands to npm
+    const result: string[] = []
+    let i = 0
+
+    // Get the subcommand
+    const subCmd = cmd[i++]
+
+    switch (subCmd) {
+      case "add": {
+        // bun add pkg -> npm install pkg
+        result.push("install")
+        while (i < cmd.length) {
+          const arg = cmd[i++]
+          if (arg === "--force" || arg === "--exact" || arg === "--no-cache") {
+            // Skip bun-specific flags
+            continue
+          } else if (arg === "--cwd") {
+            // Convert --cwd to --prefix
+            result.push("--prefix", cmd[i++])
+          } else {
+            result.push(arg)
+          }
+        }
+        break
+      }
+      case "remove": {
+        // bun remove pkg -> npm uninstall pkg
+        result.push("uninstall")
+        while (i < cmd.length) {
+          const arg = cmd[i++]
+          if (arg === "--cwd") {
+            result.push("--prefix", cmd[i++])
+          } else {
+            result.push(arg)
+          }
+        }
+        break
+      }
+      case "install": {
+        result.push("install")
+        while (i < cmd.length) {
+          const arg = cmd[i++]
+          if (arg === "--cwd") {
+            result.push("--prefix", cmd[i++])
+          } else {
+            result.push(arg)
+          }
+        }
+        break
+      }
+      default:
+        return cmd
+    }
+    return result
+  }
+
   export async function run(cmd: string[], options?: { cwd?: string; env?: Record<string, string> }) {
+    const pkgManager = getPackageManager()
+    const translatedCmd = translateCommand(cmd)
     log.info("running", {
-      cmd: [which(), ...cmd],
+      cmd: [pkgManager, ...translatedCmd],
       ...options,
     })
-    const proc = Process.spawn([which(), ...cmd], {
+    const proc = Process.spawn([pkgManager, ...translatedCmd], {
       ...options,
       stdout: "pipe",
       stderr: "pipe",
@@ -48,7 +131,7 @@ export namespace BunProc {
   }
 
   export function which() {
-    return process.execPath
+    return getPackageManager()
   }
 
   export const InstallFailedError = NamedError.create(

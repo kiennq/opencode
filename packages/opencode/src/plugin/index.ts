@@ -14,6 +14,31 @@ import { Session } from "../session/index"
 import { NamedError } from "@opencode-ai/util/error"
 import { CopilotAuthPlugin } from "./copilot"
 import { $ } from "@opencode-ai/runtime"
+import { pathToFileURL } from "node:url"
+import path from "node:path"
+import { File } from "@opencode-ai/runtime"
+
+/**
+ * Resolve a module path to a file:// URL suitable for dynamic import.
+ * On Node.js, directory imports don't auto-resolve package.json main/module,
+ * so we need to manually resolve the entry point.
+ */
+async function resolveModuleImportPath(modulePath: string): Promise<string> {
+  if (modulePath.startsWith("file://")) return modulePath
+
+  // Check if it's a directory with a package.json
+  const pkgJsonPath = path.join(modulePath, "package.json")
+  try {
+    const pkgJson = JSON.parse(await File.read(pkgJsonPath))
+    // Prefer module > main > index.js
+    const entry = pkgJson.module || pkgJson.main || "index.js"
+    const entryPath = path.join(modulePath, entry)
+    return pathToFileURL(entryPath).href
+  } catch {
+    // Not a package directory, just convert the path
+    return pathToFileURL(modulePath).href
+  }
+}
 
 export namespace Plugin {
   const log = Log.create({ service: "plugin" })
@@ -83,7 +108,9 @@ export namespace Plugin {
           })
           if (!plugin) continue
         }
-        const mod = await import(plugin)
+        // Resolve module path to file:// URL for Node.js compatibility
+        const importPath = await resolveModuleImportPath(plugin)
+        const mod = await import(importPath)
         // Prevent duplicate initialization when plugins export the same function
         // as both a named export and default export (e.g., `export const X` and `export default X`).
         // Object.entries(mod) would return both entries pointing to the same function reference.

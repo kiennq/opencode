@@ -16,6 +16,9 @@ import { Flag } from "../flag/flag"
 import { iife } from "@/util/iife"
 import { createLruCache } from "@/util/cache"
 import { createHash } from "node:crypto"
+import { pathToFileURL } from "node:url"
+import nodePath from "node:path"
+import { File } from "@opencode-ai/runtime"
 
 // Type imports only (no runtime cost)
 import type { AmazonBedrockProviderSettings } from "@ai-sdk/amazon-bedrock"
@@ -33,6 +36,28 @@ const GITLAB_PROVIDER_VERSION = (() => {
 })()
 import { ProviderTransform } from "./transform"
 import { Installation } from "../installation"
+
+/**
+ * Resolve a module path to a file:// URL suitable for dynamic import.
+ * On Node.js, directory imports don't auto-resolve package.json main/module,
+ * so we need to manually resolve the entry point.
+ */
+async function resolveModuleImportPath(modulePath: string): Promise<string> {
+  if (modulePath.startsWith("file://")) return modulePath
+
+  // Check if it's a directory with a package.json
+  const pkgJsonPath = nodePath.join(modulePath, "package.json")
+  try {
+    const pkgJson = JSON.parse(await File.read(pkgJsonPath))
+    // Prefer module > main > index.js
+    const entry = pkgJson.module || pkgJson.main || "index.js"
+    const entryPath = nodePath.join(modulePath, entry)
+    return pathToFileURL(entryPath).href
+  } catch {
+    // Not a package directory, just convert the path
+    return pathToFileURL(modulePath).href
+  }
+}
 
 // Lazy provider loaders - only import when first used
 type ProviderFactory = (options: any) => any
@@ -231,7 +256,8 @@ export namespace Provider {
       // Only use credential chain if no bearer token exists
       // Bearer token takes precedence over credential chain (profiles, access keys, IAM roles, web identity tokens)
       if (!awsBearerToken) {
-        const { fromNodeProviderChain } = await import(await BunProc.install("@aws-sdk/credential-providers"))
+        const awsCredPath = await BunProc.install("@aws-sdk/credential-providers")
+        const { fromNodeProviderChain } = await import(await resolveModuleImportPath(awsCredPath))
 
         // Build credential provider options (only pass profile if specified)
         const credentialProviderOptions = profile ? { profile } : {}
@@ -1077,7 +1103,9 @@ export namespace Provider {
         installedPath = model.api.npm
       }
 
-      const mod = await import(installedPath)
+      // Resolve module path to file:// URL for Node.js compatibility
+      const importPath = await resolveModuleImportPath(installedPath)
+      const mod = await import(importPath)
 
       const fn = mod[Object.keys(mod).find((key) => key.startsWith("create"))!]
       const loaded = fn({

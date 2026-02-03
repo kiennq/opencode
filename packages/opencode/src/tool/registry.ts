@@ -17,6 +17,7 @@ import { Instance } from "../project/instance"
 import { instanceState } from "@/project/instance-state"
 import { Config } from "../config/config"
 import path from "node:path"
+import { pathToFileURL } from "node:url"
 import { type ToolContext as PluginToolContext, type ToolDefinition } from "@opencode-ai/plugin"
 import z from "zod"
 import { Plugin } from "../plugin/index"
@@ -44,7 +45,9 @@ export namespace ToolRegistry {
         dot: true,
       })) {
         const namespace = path.basename(match, path.extname(match))
-        const mod = await import(match)
+        // Convert file paths to file:// URLs for Node.js compatibility on Windows
+        const importPath = match.startsWith("file://") ? match : pathToFileURL(match).href
+        const mod = await import(importPath)
         for (const [id, def] of Object.entries<ToolDefinition>(mod)) {
           custom.push(fromPlugin(id === "default" ? namespace : `${namespace}_${id}`, def))
         }
