@@ -7895,8 +7895,9 @@
                 "model": {
                   "type": "string"
                 },
-                "mcp": {
-                  "type": "boolean"
+                "source": {
+                  "type": "string",
+                  "enum": ["command", "mcp", "skill"]
                 },
                 "template": {
                   "type": "string"
