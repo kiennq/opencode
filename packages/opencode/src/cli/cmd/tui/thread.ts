@@ -129,6 +129,7 @@ export const TuiThreadCommand = cmd({
     // --- Worker recycling infrastructure ---
     const handlers = new Set<(event: Event) => void>()
     const busy = new Set<string>()
+    const compacted = new Set<string>()
     let recycling: Promise<void> | undefined
     let stale = false
     let exiting = false
@@ -137,6 +138,7 @@ export const TuiThreadCommand = cmd({
       if (exiting) return
       Log.Default.info("worker crashed, respawning", { parent: process.pid, code })
       busy.clear()
+      compacted.clear()
       stale = false
       if (!recycling)
         recycling = respawn().finally(() => {
@@ -146,10 +148,26 @@ export const TuiThreadCommand = cmd({
 
     function wire() {
       pool.client.on<Event>("event", (event) => {
+        if (event.type === "session.compacted") {
+          const props = event.properties as { sessionID: string }
+          compacted.add(props.sessionID)
+          Log.Default.info("session compacted", { parent: process.pid, sessionID: props.sessionID })
+        }
         if (event.type === "session.status") {
           const props = event.properties as { sessionID: string; status: { type: string } }
-          if (props.status.type === "idle") busy.delete(props.sessionID)
-          else busy.add(props.sessionID)
+          if (props.status.type === "idle") {
+            busy.delete(props.sessionID)
+            if (compacted.delete(props.sessionID)) {
+              Log.Default.info("compacted session idle, recycling", {
+                parent: process.pid,
+                sessionID: props.sessionID,
+              })
+              if (!recycling)
+                recycling = recycleAndResume(props.sessionID).finally(() => {
+                  recycling = undefined
+                })
+            }
+          } else busy.add(props.sessionID)
         }
         for (const handler of handlers) handler(event)
       })
@@ -175,6 +193,26 @@ export const TuiThreadCommand = cmd({
       await pool.shutdown()
       await respawn()
       Log.Default.info("recycle complete", { parent: process.pid })
+    }
+
+    async function recycleAndResume(sessionID: string) {
+      Log.Default.info("recycling worker after compaction", { parent: process.pid, sessionID })
+      await pool.shutdown()
+      await respawn()
+      Log.Default.info("resuming session in new worker", { parent: process.pid, sessionID })
+      pool.client
+        .call("fetch", {
+          url: `http://opencode.internal/session/${sessionID}/resume`,
+          method: "POST",
+          headers: { "content-type": "application/json" },
+        })
+        .catch((e: unknown) => {
+          Log.Default.error("failed to resume session after recycle", {
+            parent: process.pid,
+            sessionID,
+            error: e instanceof Error ? e.message : e,
+          })
+        })
     }
 
     // Initial worker spawn

@@ -543,7 +543,7 @@ ${p.output.slice(0, 8000)}${p.output.length > 8000 ? "\n... (truncated)" : ""}
     // Aggressively clean up old messages to free memory
     await cleanupCompactedMessages(input.sessionID, input.messages)
     if (global.gc) global.gc(true)
-    return "continue"
+    return input.auto ? "recycle" : "continue"
   }
 
   // ============================================================================
