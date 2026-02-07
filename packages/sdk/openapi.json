@@ -7898,8 +7898,9 @@
                 "model": {
                   "type": "string"
                 },
-                "mcp": {
-                  "type": "boolean"
+                "source": {
+                  "type": "string",
+                  "enum": ["command", "mcp", "skill"]
                 },
                 "template": {
                   "type": "string"
@@ -10032,6 +10033,12 @@
               },
               "mcp_timeout": {
                 "description": "Timeout in milliseconds for model context protocol (MCP) requests",
+                "type": "integer",
+                "exclusiveMinimum": 0,
+                "maximum": 9007199254740991
+              },
+              "memory_threshold": {
+                "description": "RSS memory threshold in megabytes at which the worker process is recycled to reclaim leaked memory (default: 4096)",
                 "type": "integer",
                 "exclusiveMinimum": 0,
                 "maximum": 9007199254740991

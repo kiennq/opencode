@@ -753,7 +753,7 @@ export type EventCommandUpdated = {
     description?: string
     agent?: string
     model?: string
-    mcp?: boolean
+    source?: "command" | "mcp" | "skill"
     template: string
     subtask?: boolean
     hints: Array<string>
@@ -1894,6 +1894,10 @@ export type Config = {
      * Timeout in milliseconds for model context protocol (MCP) requests
      */
     mcp_timeout?: number
+    /**
+     * RSS memory threshold in megabytes at which the worker process is recycled to reclaim leaked memory (default: 4096)
+     */
+    memory_threshold?: number
   }
 }
 
