@@ -518,6 +518,7 @@ export namespace SessionPrompt {
           auto: task.auto,
         })
         if (result === "stop") break
+        if (result === "recycle") break
         continue
       }
 
