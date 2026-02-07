@@ -28,7 +28,7 @@ interface WorkerManager {
   shutdown: () => Promise<void>
 }
 
-function createWorkerManager(env: Record<string, string>): WorkerManager {
+function createWorkerManager(env: Record<string, string>, onCrash?: (code: number | null) => void): WorkerManager {
   const log = Log.create({ service: "worker" })
   log.info("spawning worker", { parent: process.pid, args: args.join(" "), dev })
   const bridge = Rpc.ipc()
@@ -42,11 +42,19 @@ function createWorkerManager(env: Record<string, string>): WorkerManager {
   })
   const transport = bridge.transport((msg) => proc.send(msg))
   log.info("worker spawned", { parent: process.pid, child: proc.pid })
-  proc.exited.then((code) => log.info("worker exited", { parent: process.pid, child: proc.pid, code }))
+  let stopped = false
   const client = Rpc.client<typeof rpc>(transport)
+  proc.exited.then((code) => {
+    log.info("worker exited", { parent: process.pid, child: proc.pid, code, stopped })
+    if (!stopped) {
+      client.invalidate()
+      onCrash?.(code)
+    }
+  })
   return {
     client,
     async shutdown() {
+      stopped = true
       log.info("worker shutdown requested", { parent: process.pid, child: proc.pid })
       try {
         await client.call("shutdown", undefined)
@@ -91,7 +99,7 @@ export const TuiThreadCommand = cmd({
     const env = Object.fromEntries(
       Object.entries(process.env).filter((entry): entry is [string, string] => entry[1] !== undefined),
     )
-    let pool = createWorkerManager(env)
+    let pool: WorkerManager = undefined!
 
     process.on("uncaughtException", (e) => {
       Log.Default.error(e)
@@ -123,6 +131,18 @@ export const TuiThreadCommand = cmd({
     const busy = new Set<string>()
     let recycling: Promise<void> | undefined
     let stale = false
+    let exiting = false
+
+    function onCrash(code: number | null) {
+      if (exiting) return
+      Log.Default.info("worker crashed, respawning", { parent: process.pid, code })
+      busy.clear()
+      stale = false
+      if (!recycling)
+        recycling = respawn().finally(() => {
+          recycling = undefined
+        })
+    }
 
     function wire() {
       pool.client.on<Event>("event", (event) => {
@@ -134,7 +154,17 @@ export const TuiThreadCommand = cmd({
         for (const handler of handlers) handler(event)
       })
     }
-    wire()
+
+    async function respawn() {
+      Log.Default.info("respawning worker", { parent: process.pid })
+      pool = createWorkerManager(env, onCrash)
+      wire()
+      if (shouldStartServer) {
+        await pool.client.call("server", networkOpts)
+      }
+      stale = false
+      Log.Default.info("respawn complete", { parent: process.pid })
+    }
 
     async function recycle() {
       if (busy.size > 0) {
@@ -143,14 +173,13 @@ export const TuiThreadCommand = cmd({
       }
       Log.Default.info("recycling worker", { parent: process.pid, reason: "memory threshold exceeded" })
       await pool.shutdown()
-      pool = createWorkerManager(env)
-      wire()
-      if (shouldStartServer) {
-        await pool.client.call("server", networkOpts)
-      }
-      stale = false
+      await respawn()
       Log.Default.info("recycle complete", { parent: process.pid })
     }
+
+    // Initial worker spawn
+    pool = createWorkerManager(env, onCrash)
+    wire()
 
     const recycleFetch = (async (input: RequestInfo | URL, init?: RequestInit): Promise<Response> => {
       if (stale && busy.size === 0) {
@@ -244,6 +273,7 @@ export const TuiThreadCommand = cmd({
         fork: args.fork,
       },
       onExit: async () => {
+        exiting = true
         clearInterval(monitor)
         await pool.shutdown()
       },
