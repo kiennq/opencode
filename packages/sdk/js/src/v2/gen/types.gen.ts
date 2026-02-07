@@ -753,7 +753,7 @@ export type EventCommandUpdated = {
     description?: string
     agent?: string
     model?: string
-    mcp?: boolean
+    source?: "command" | "mcp" | "skill"
     template: string
     subtask?: boolean
     hints: Array<string>
@@ -1894,6 +1894,10 @@ export type Config = {
      * Timeout in milliseconds for model context protocol (MCP) requests
      */
     mcp_timeout?: number
+    /**
+     * RSS memory threshold in megabytes at which the worker process is recycled to reclaim leaked memory (default: 4096)
+     */
+    memory_threshold?: number
   }
 }
 
@@ -3389,6 +3393,42 @@ export type SessionSummarizeResponses = {
 }
 
 export type SessionSummarizeResponse = SessionSummarizeResponses[keyof SessionSummarizeResponses]
+
+export type SessionResumeData = {
+  body?: never
+  path: {
+    /**
+     * Session ID
+     */
+    sessionID: string
+  }
+  query?: {
+    directory?: string
+  }
+  url: "/session/{sessionID}/resume"
+}
+
+export type SessionResumeErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+  /**
+   * Not found
+   */
+  404: NotFoundError
+}
+
+export type SessionResumeError = SessionResumeErrors[keyof SessionResumeErrors]
+
+export type SessionResumeResponses = {
+  /**
+   * Resumed session
+   */
+  200: boolean
+}
+
+export type SessionResumeResponse = SessionResumeResponses[keyof SessionResumeResponses]
 
 export type SessionMessagesData = {
   body?: never
