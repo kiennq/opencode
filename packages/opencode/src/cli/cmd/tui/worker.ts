@@ -20,6 +20,8 @@ await Log.init({
   })(),
 })
 
+Log.Default.info("worker starting", { pid: process.pid, hasSend: typeof process.send })
+
 process.on("unhandledRejection", (e) => {
   Log.Default.error("rejection", {
     e: e instanceof Error ? e.message : e,
@@ -32,9 +34,11 @@ process.on("uncaughtException", (e) => {
   })
 })
 
+const transport = Rpc.process()
+
 // Subscribe to global events and forward them via RPC
 const globalBusHandler = (event: { directory?: string; payload: any }) => {
-  Rpc.emit("global.event", event)
+  Rpc.emit("global.event", event, transport)
 }
 GlobalBus.on("event", globalBusHandler)
 
@@ -89,7 +93,7 @@ const startEventStream = (directory: string) => {
       backoff = 250
 
       for await (const event of events.stream) {
-        Rpc.emit("event", event as Event)
+        Rpc.emit("event", event as Event, transport)
       }
 
       if (!signal.aborted) {
@@ -154,9 +158,13 @@ export const rpc = {
     const mem = process.memoryUsage()
     return { rss: mem.rss, heapUsed: mem.heapUsed, heapTotal: mem.heapTotal }
   },
+  async config() {
+    const config = await Config.global()
+    return { memory_threshold: config.experimental?.memory_threshold }
+  },
 }
 
-Rpc.listen(rpc)
+Rpc.listen(rpc, transport)
 
 function getAuthorizationHeader(): string | undefined {
   const password = Flag.OPENCODE_SERVER_PASSWORD
