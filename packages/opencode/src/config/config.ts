@@ -1238,6 +1238,14 @@ export namespace Config {
             .positive()
             .optional()
             .describe("Timeout in milliseconds for model context protocol (MCP) requests"),
+          memory_threshold: z
+            .number()
+            .int()
+            .positive()
+            .optional()
+            .describe(
+              "RSS memory threshold in megabytes at which the worker process is recycled to reclaim leaked memory (default: 4096)",
+            ),
         })
         .optional(),
     })

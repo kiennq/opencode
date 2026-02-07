@@ -10,68 +10,52 @@ import { withNetworkOptions, resolveNetworkOptions } from "@/cli/network"
 import type { Event } from "@opencode-ai/sdk/v2"
 import type { EventSource } from "./context/sdk"
 
-declare global {
-  const OPENCODE_WORKER_PATH: string
-}
-
 type RpcClient = ReturnType<typeof Rpc.client<typeof rpc>>
 
-// Memory check interval (60 seconds)
 const MEMORY_CHECK_INTERVAL = 60_000
+const MEMORY_RECYCLE_THRESHOLD_DEFAULT = 4096
+
+// Build the args to re-launch the process as a worker.
+// Compiled binary: [binary, ...execArgv] — the binary IS the entrypoint.
+// Dev mode: [bun, ...execArgv, scriptPath] — need the script path explicitly.
+// Compiled binaries use bunfs paths (B:/~BUN/ or /$bunfs/) which we skip.
+const script = process.argv[1]
+const dev = script && /\.[cm]?[jt]sx?$/.test(script) && !script.includes("~BUN") && !script.includes("$bunfs")
+const args = dev ? [process.execPath, ...process.execArgv, script] : [process.execPath, ...process.execArgv]
 
 interface WorkerManager {
   client: RpcClient
-  worker: Worker
   shutdown: () => Promise<void>
 }
 
-function createWorkerManager(workerPath: string | URL, env: Record<string, string>): WorkerManager {
+function createWorkerManager(env: Record<string, string>): WorkerManager {
   const log = Log.create({ service: "worker" })
-
-  const worker = new Worker(workerPath, { env })
-  worker.onerror = (e) => log.error("worker error", { error: e })
-  const client = Rpc.client<typeof rpc>(worker)
-
+  log.info("spawning worker", { parent: process.pid, args: args.join(" "), dev })
+  const bridge = Rpc.ipc()
+  const proc = Bun.spawn(args, {
+    env: { ...env, OPENCODE_WORKER_MODE: "1" },
+    stdio: ["ignore", "inherit", "inherit"],
+    serialization: "json",
+    ipc(msg) {
+      bridge.dispatch(msg)
+    },
+  })
+  const transport = bridge.transport((msg) => proc.send(msg))
+  log.info("worker spawned", { parent: process.pid, child: proc.pid })
+  proc.exited.then((code) => log.info("worker exited", { parent: process.pid, child: proc.pid, code }))
+  const client = Rpc.client<typeof rpc>(transport)
   return {
     client,
-    worker,
     async shutdown() {
+      log.info("worker shutdown requested", { parent: process.pid, child: proc.pid })
       try {
         await client.call("shutdown", undefined)
       } catch {
-        // Ignore
+        /* Ignore */
       }
       client.invalidate()
-      worker.terminate()
-    },
-  }
-}
-
-function createWorkerFetch(pool: WorkerManager): typeof fetch {
-  const fn = async (input: RequestInfo | URL, init?: RequestInit): Promise<Response> => {
-    const request = new Request(input, init)
-    const body = request.body ? await request.text() : undefined
-    const result = await pool.client.call("fetch", {
-      url: request.url,
-      method: request.method,
-      headers: Object.fromEntries(request.headers.entries()),
-      body,
-    })
-    return new Response(result.body, {
-      status: result.status,
-      headers: result.headers,
-    })
-  }
-  return fn as typeof fetch
-}
-
-function createEventSource(pool: WorkerManager): EventSource {
-  return {
-    on: (handler) => {
-      const unsub = pool.client.on<Event>("event", handler)
-      return () => {
-        unsub()
-      }
+      proc.kill()
+      log.info("worker killed", { parent: process.pid, child: proc.pid })
     },
   }
 }
@@ -81,64 +65,33 @@ export const TuiThreadCommand = cmd({
   describe: "start opencode tui",
   builder: (yargs) =>
     withNetworkOptions(yargs)
-      .positional("project", {
-        type: "string",
-        describe: "path to start opencode in",
-      })
-      .option("model", {
-        type: "string",
-        alias: ["m"],
-        describe: "model to use in the format of provider/model",
-      })
-      .option("continue", {
-        alias: ["c"],
-        describe: "continue the last session",
-        type: "boolean",
-      })
-      .option("session", {
-        alias: ["s"],
-        type: "string",
-        describe: "session id to continue",
-      })
+      .positional("project", { type: "string", describe: "path to start opencode in" })
+      .option("model", { type: "string", alias: ["m"], describe: "model to use in the format of provider/model" })
+      .option("continue", { alias: ["c"], describe: "continue the last session", type: "boolean" })
+      .option("session", { alias: ["s"], type: "string", describe: "session id to continue" })
       .option("fork", {
         type: "boolean",
         describe: "fork the session when continuing (use with --continue or --session)",
       })
-      .option("prompt", {
-        type: "string",
-        describe: "prompt to use",
-      })
-      .option("agent", {
-        type: "string",
-        describe: "agent to use",
-      }),
+      .option("prompt", { type: "string", describe: "prompt to use" })
+      .option("agent", { type: "string", describe: "agent to use" }),
   handler: async (args) => {
     if (args.fork && !args.continue && !args.session) {
       UI.error("--fork requires --continue or --session")
       process.exit(1)
     }
-
-    // Resolve relative paths against PWD to preserve behavior when using --cwd flag
     const baseCwd = process.env.PWD ?? process.cwd()
     const cwd = args.project ? path.resolve(baseCwd, args.project) : process.cwd()
-    const localWorker = new URL("./worker.ts", import.meta.url)
-    const distWorker = new URL("./cli/cmd/tui/worker.js", import.meta.url)
-    const workerPath = await iife(async () => {
-      if (typeof OPENCODE_WORKER_PATH !== "undefined") return OPENCODE_WORKER_PATH
-      if (await Bun.file(distWorker).exists()) return distWorker
-      return localWorker
-    })
     try {
       process.chdir(cwd)
     } catch {
       UI.error("Failed to change directory to " + cwd)
       return
     }
-
     const env = Object.fromEntries(
       Object.entries(process.env).filter((entry): entry is [string, string] => entry[1] !== undefined),
     )
-    const pool = createWorkerManager(workerPath, env)
+    let pool = createWorkerManager(env)
 
     process.on("uncaughtException", (e) => {
       Log.Default.error(e)
@@ -156,7 +109,6 @@ export const TuiThreadCommand = cmd({
       return piped ? piped + "\n" + args.prompt : args.prompt
     })
 
-    // Check if server should be started (port or hostname explicitly set in CLI or config)
     const networkOpts = await resolveNetworkOptions(args)
     const shouldStartServer =
       process.argv.includes("--port") ||
@@ -166,31 +118,116 @@ export const TuiThreadCommand = cmd({
       networkOpts.port !== 0 ||
       networkOpts.hostname !== "127.0.0.1"
 
+    // --- Worker recycling infrastructure ---
+    const handlers = new Set<(event: Event) => void>()
+    const busy = new Set<string>()
+    let recycling: Promise<void> | undefined
+    let stale = false
+
+    function wire() {
+      pool.client.on<Event>("event", (event) => {
+        if (event.type === "session.status") {
+          const props = event.properties as { sessionID: string; status: { type: string } }
+          if (props.status.type === "idle") busy.delete(props.sessionID)
+          else busy.add(props.sessionID)
+        }
+        for (const handler of handlers) handler(event)
+      })
+    }
+    wire()
+
+    async function recycle() {
+      if (busy.size > 0) {
+        Log.Default.info("recycle deferred", { parent: process.pid, busy: busy.size })
+        return
+      }
+      Log.Default.info("recycling worker", { parent: process.pid, reason: "memory threshold exceeded" })
+      await pool.shutdown()
+      pool = createWorkerManager(env)
+      wire()
+      if (shouldStartServer) {
+        await pool.client.call("server", networkOpts)
+      }
+      stale = false
+      Log.Default.info("recycle complete", { parent: process.pid })
+    }
+
+    const recycleFetch = (async (input: RequestInfo | URL, init?: RequestInit): Promise<Response> => {
+      if (stale && busy.size === 0) {
+        Log.Default.info("recycleFetch triggering recycle", { parent: process.pid })
+        if (!recycling)
+          recycling = recycle().finally(() => {
+            recycling = undefined
+          })
+        await recycling
+      }
+      const request = new Request(input, init)
+      const body = request.body ? await request.text() : undefined
+      const result = await pool.client.call("fetch", {
+        url: request.url,
+        method: request.method,
+        headers: Object.fromEntries(request.headers.entries()),
+        body,
+      })
+      return new Response(result.body, { status: result.status, headers: result.headers })
+    }) as typeof fetch
+
+    const stableEvents: EventSource = {
+      on: (handler) => {
+        handlers.add(handler)
+        return () => {
+          handlers.delete(handler)
+        }
+      },
+    }
+
     let url: string
     let customFetch: typeof fetch | undefined
     let events: EventSource | undefined
 
     if (shouldStartServer) {
-      // Start HTTP server for external access
       const server = await pool.client.call("server", networkOpts)
       url = server.url
     } else {
-      // Use direct RPC communication (no HTTP)
       url = "http://opencode.internal"
-      customFetch = createWorkerFetch(pool)
-      events = createEventSource(pool)
+      customFetch = recycleFetch
+      events = stableEvents
     }
 
-    // Memory monitoring for diagnostics (logging only, no restart)
-    // This helps track Bun's native memory leak (see: https://github.com/oven-sh/bun/issues/15020)
-    const memoryMonitorInterval = setInterval(async () => {
+    const monitor = setInterval(async () => {
       try {
         const mem = await pool.client.call("memory", undefined)
+        const config = await pool.client.call("config", undefined)
+        const thresholdMB = config.memory_threshold ?? MEMORY_RECYCLE_THRESHOLD_DEFAULT
+        const threshold = thresholdMB * 1024 * 1024
+        const was = stale
+        if (mem.rss > threshold) stale = true
         const rssMB = (mem.rss / 1024 / 1024).toFixed(0)
         const heapMB = (mem.heapUsed / 1024 / 1024).toFixed(0)
-        Log.Default.info("worker memory", { rss: rssMB + " MB", heap: heapMB + " MB" })
-      } catch {
-        // Ignore errors during memory check
+        Log.Default.info("worker memory", {
+          parent: process.pid,
+          rss: rssMB + " MB",
+          heap: heapMB + " MB",
+          threshold: thresholdMB + " MB",
+          stale,
+          busy: busy.size,
+        })
+        if (!was && stale)
+          Log.Default.info("worker marked stale", {
+            parent: process.pid,
+            rss: rssMB + " MB",
+            threshold: thresholdMB + " MB",
+          })
+        if (stale && busy.size === 0) {
+          Log.Default.info("monitor triggering recycle", { parent: process.pid })
+          if (!recycling)
+            recycling = recycle().finally(() => {
+              recycling = undefined
+            })
+          await recycling
+        }
+      } catch (e) {
+        Log.Default.error("worker memory check failed", { error: e instanceof Error ? e.message : e })
       }
     }, MEMORY_CHECK_INTERVAL)
 
@@ -207,7 +244,7 @@ export const TuiThreadCommand = cmd({
         fork: args.fork,
       },
       onExit: async () => {
-        clearInterval(memoryMonitorInterval)
+        clearInterval(monitor)
         await pool.shutdown()
       },
     })
@@ -215,7 +252,6 @@ export const TuiThreadCommand = cmd({
     setTimeout(() => {
       pool.client.call("checkUpgrade", { directory: cwd }).catch(() => {})
     }, 1000)
-
     await tuiPromise
   },
 })
