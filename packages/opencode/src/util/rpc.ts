@@ -3,53 +3,81 @@ export namespace Rpc {
     [method: string]: (input: any) => any
   }
 
-  export function listen(rpc: Definition) {
-    onmessage = async (evt) => {
-      const parsed = JSON.parse(evt.data)
-      if (parsed.type === "rpc.request") {
-        const result = await rpc[parsed.method](parsed.input)
-        postMessage(JSON.stringify({ type: "rpc.result", result, id: parsed.id }))
-      }
+  export interface Transport {
+    send(msg: any): void
+    receive(handler: (msg: any) => void): void
+  }
+
+  export function process(): Transport {
+    return {
+      send(msg) {
+        globalThis.process.send!(msg)
+      },
+      receive(handler) {
+        globalThis.process.on("message", handler)
+      },
     }
   }
 
-  export function emit(event: string, data: unknown) {
-    postMessage(JSON.stringify({ type: "rpc.event", event, data }))
+  export function ipc() {
+    const handlers = new Set<(msg: any) => void>()
+    return {
+      transport(send: (msg: any) => void): Transport {
+        return {
+          send,
+          receive(handler) {
+            handlers.add(handler)
+          },
+        }
+      },
+      dispatch(msg: any) {
+        for (const handler of handlers) handler(msg)
+      },
+    }
   }
 
-  export function client<T extends Definition>(target: {
-    postMessage: (data: string) => void | null
-    onmessage: ((this: Worker, ev: MessageEvent<any>) => any) | null
-  }) {
+  export function listen(rpc: Definition, transport: Transport) {
+    transport.receive(async (msg) => {
+      if (msg.type === "rpc.request") {
+        const result = await rpc[msg.method](msg.input)
+        transport.send({ type: "rpc.result", result, id: msg.id })
+      }
+    })
+  }
+
+  export function emit(event: string, data: unknown, transport: Transport) {
+    transport.send({ type: "rpc.event", event, data })
+  }
+
+  export function client<T extends Definition>(transport: Transport) {
     const pending = new Map<number, { resolve: (result: any) => void; reject: (error: Error) => void }>()
     const listeners = new Map<string, Set<(data: any) => void>>()
     let id = 0
     let invalidated = false
-    target.onmessage = async (evt) => {
-      const parsed = JSON.parse(evt.data)
-      if (parsed.type === "rpc.result") {
-        const p = pending.get(parsed.id)
+    transport.receive((msg) => {
+      if (msg.type === "rpc.result") {
+        const p = pending.get(msg.id)
         if (p) {
-          p.resolve(parsed.result)
-          pending.delete(parsed.id)
+          p.resolve(msg.result)
+          pending.delete(msg.id)
         }
       }
-      if (parsed.type === "rpc.event") {
-        const handlers = listeners.get(parsed.event)
+      if (msg.type === "rpc.event") {
+        const handlers = listeners.get(msg.event)
         if (handlers) {
           for (const handler of handlers) {
-            handler(parsed.data)
+            handler(msg.data)
           }
         }
       }
-    }
+    })
     return {
       call<Method extends keyof T>(method: Method, input: Parameters<T[Method]>[0]): Promise<ReturnType<T[Method]>> {
         if (invalidated) return Promise.reject(new Error("client invalidated"))
         const requestId = id++
         return new Promise((resolve, reject) => {
           pending.set(requestId, { resolve, reject })
-          target.postMessage(JSON.stringify({ type: "rpc.request", method, input, id: requestId }))
+          transport.send({ type: "rpc.request", method, input, id: requestId })
         })
       },
       on<Data>(event: string, handler: (data: Data) => void) {
