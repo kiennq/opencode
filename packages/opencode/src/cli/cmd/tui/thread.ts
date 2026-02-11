@@ -131,19 +131,45 @@ export const TuiThreadCommand = cmd({
     const busy = new Set<string>()
     const compacted = new Set<string>()
     let recycling: Promise<void> | undefined
+    let prelaunching: Promise<void> | undefined
+    let successor: WorkerManager | undefined
     let stale = false
     let exiting = false
 
-    function onCrash(code: number | null) {
+    function onWorkerCrash(worker: WorkerManager, code: number | null) {
       if (exiting) return
-      Log.Default.info("worker crashed, respawning", { parent: process.pid, code })
-      busy.clear()
-      compacted.clear()
-      stale = false
-      if (!recycling)
-        recycling = respawn().finally(() => {
-          recycling = undefined
-        })
+      if (worker === pool) {
+        Log.Default.info("active worker crashed, respawning", { parent: process.pid, code })
+        busy.clear()
+        compacted.clear()
+        stale = false
+        prelaunching = undefined
+        if (!recycling)
+          recycling = respawn().finally(() => {
+            recycling = undefined
+          })
+        return
+      }
+      if (worker === successor) {
+        Log.Default.info("successor worker crashed, discarding", { parent: process.pid, code })
+        successor = undefined
+        prelaunching = undefined
+      }
+    }
+
+    async function prelaunch() {
+      if (successor || exiting) return
+      Log.Default.info("pre-launching successor worker", { parent: process.pid })
+      const next = createWorkerManager(env, (code) => onWorkerCrash(next, code))
+      if (shouldStartServer) {
+        await next.client.call("server", networkOpts)
+      }
+      if (exiting) {
+        await next.shutdown()
+        return
+      }
+      successor = next
+      Log.Default.info("successor worker ready", { parent: process.pid })
     }
 
     function wire() {
@@ -175,12 +201,20 @@ export const TuiThreadCommand = cmd({
 
     async function respawn() {
       Log.Default.info("respawning worker", { parent: process.pid })
-      pool = createWorkerManager(env, onCrash)
-      wire()
-      if (shouldStartServer) {
-        await pool.client.call("server", networkOpts)
+      if (successor) {
+        Log.Default.info("using pre-launched successor", { parent: process.pid })
+        pool = successor
+        successor = undefined
+      } else {
+        const fresh = createWorkerManager(env, (code) => onWorkerCrash(fresh, code))
+        pool = fresh
+        if (shouldStartServer) {
+          await pool.client.call("server", networkOpts)
+        }
       }
+      wire()
       stale = false
+      prelaunching = undefined
       Log.Default.info("respawn complete", { parent: process.pid })
     }
 
@@ -190,6 +224,7 @@ export const TuiThreadCommand = cmd({
         return
       }
       Log.Default.info("recycling worker", { parent: process.pid, reason: "memory threshold exceeded" })
+      if (prelaunching) await prelaunching
       await pool.shutdown()
       await respawn()
       Log.Default.info("recycle complete", { parent: process.pid })
@@ -197,6 +232,7 @@ export const TuiThreadCommand = cmd({
 
     async function recycleAndResume(sessionID: string) {
       Log.Default.info("recycling worker after compaction", { parent: process.pid, sessionID })
+      if (prelaunching) await prelaunching
       await pool.shutdown()
       await respawn()
       Log.Default.info("resuming session in new worker", { parent: process.pid, sessionID })
@@ -216,7 +252,8 @@ export const TuiThreadCommand = cmd({
     }
 
     // Initial worker spawn
-    pool = createWorkerManager(env, onCrash)
+    const initial = createWorkerManager(env, (code) => onWorkerCrash(initial, code))
+    pool = initial
     wire()
 
     const recycleFetch = (async (input: RequestInfo | URL, init?: RequestInit): Promise<Response> => {
@@ -279,12 +316,18 @@ export const TuiThreadCommand = cmd({
           stale,
           busy: busy.size,
         })
-        if (!was && stale)
+        if (!was && stale) {
           Log.Default.info("worker marked stale", {
             parent: process.pid,
             rss: rssMB + " MB",
             threshold: thresholdMB + " MB",
           })
+          if (!prelaunching)
+            prelaunching = prelaunch().catch((e) => {
+              Log.Default.error("prelaunch failed", { error: e instanceof Error ? e.message : e })
+              prelaunching = undefined
+            })
+        }
         if (stale && busy.size === 0) {
           Log.Default.info("monitor triggering recycle", { parent: process.pid })
           if (!recycling)
@@ -313,7 +356,7 @@ export const TuiThreadCommand = cmd({
       onExit: async () => {
         exiting = true
         clearInterval(monitor)
-        await pool.shutdown()
+        await Promise.all([pool.shutdown(), successor?.shutdown()])
       },
     })
 
