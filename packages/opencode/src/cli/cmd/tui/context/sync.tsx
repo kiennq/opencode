@@ -382,6 +382,10 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
 
     async function bootstrap() {
       console.log("bootstrapping")
+      fullSyncedSessions.clear()
+      // Clear stale permission/question dialogs — backend state is gone after worker recycle/crash
+      setStore("permission", reconcile({}))
+      setStore("question", reconcile({}))
       const start = Date.now() - 30 * 24 * 60 * 60 * 1000
       const sessionListPromise = sdk.client.session
         .list({ start: start })
@@ -455,6 +459,8 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
             sdk.client.provider.auth().then((x) => setStore("provider_auth", reconcile(x.data ?? {}))),
             sdk.client.vcs.get().then((x) => setStore("vcs", reconcile(x.data))),
             sdk.client.path.get().then((x) => setStore("path", reconcile(x.data!))),
+            // Re-sync messages for sessions that were previously loaded (e.g. after worker recycle)
+            ...Object.keys(store.message).map((id) => result.session.sync(id).catch(() => {})),
           ]).then(() => {
             setStore("status", "complete")
           })

@@ -541,6 +541,40 @@ export const SessionRoutes = lazy(() =>
         return c.json(true)
       },
     )
+    .post(
+      "/:sessionID/resume",
+      describeRoute({
+        summary: "Resume session",
+        description: "Resume processing a session that has pending messages without creating a new user message.",
+        operationId: "session.resume",
+        responses: {
+          200: {
+            description: "Resumed session",
+            content: {
+              "application/json": {
+                schema: resolver(z.boolean()),
+              },
+            },
+          },
+          ...errors(400, 404),
+        },
+      }),
+      validator(
+        "param",
+        z.object({
+          sessionID: z.string().meta({ description: "Session ID" }),
+        }),
+      ),
+      async (c) => {
+        const sessionID = c.req.valid("param").sessionID
+        c.status(200)
+        c.header("Content-Type", "application/json")
+        return stream(c, async (stream) => {
+          const msg = await SessionPrompt.loop({ sessionID })
+          stream.write(JSON.stringify(msg))
+        })
+      },
+    )
     .get(
       "/:sessionID/message",
       describeRoute({
@@ -569,7 +603,10 @@ export const SessionRoutes = lazy(() =>
         "query",
         z.object({
           limit: z.coerce.number().optional().meta({ description: "Maximum number of messages to return" }),
-          offset: z.coerce.number().optional().meta({ description: "Number of messages to skip from the start (oldest messages)" }),
+          offset: z.coerce
+            .number()
+            .optional()
+            .meta({ description: "Number of messages to skip from the start (oldest messages)" }),
         }),
       ),
       async (c) => {

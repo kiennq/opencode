@@ -548,7 +548,10 @@ When constructing the summary, try to stick to this template:
       model,
     })
 
-    if (result === "continue" && input.auto) {
+    if (input.auto) {
+      // Always create the synthetic continue message for auto-compaction,
+      // even if the compaction LLM errored. The compaction summary is
+      // best-effort; we still want to resume the original task.
       const continueMsg = await Session.updateMessage({
         id: Identifier.ascending("message"),
         role: "user",
@@ -572,12 +575,12 @@ When constructing the summary, try to stick to this template:
         },
       })
     }
-    if (processor.message.error) return "stop"
+    if (processor.message.error && !input.auto) return "stop"
     Bus.publish(Event.Compacted, { sessionID: input.sessionID })
     // Aggressively clean up old messages to free memory
     await cleanupCompactedMessages(input.sessionID, input.messages)
     if (global.gc) global.gc(true)
-    return "continue"
+    return input.auto ? "recycle" : "continue"
   }
 
   // ============================================================================
