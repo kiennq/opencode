@@ -19,7 +19,10 @@ const opencode = await createOpencode({
 })
 console.log("✅ Opencode server ready")
 
-const sessions = new Map<string, { client: any; server: any; sessionId: string; channel: string; thread: string; lastUsed: number }>()
+const sessions = new Map<
+  string,
+  { client: any; server: any; sessionId: string; channel: string; thread: string; lastUsed: number }
+>()
 
 // Session cleanup: remove sessions older than 1 hour
 const SESSION_TIMEOUT_MS = 60 * 60 * 1000
@@ -37,7 +40,6 @@ function cleanupOldSessions() {
 
 // Run cleanup periodically
 setInterval(cleanupOldSessions, 5 * 60 * 1000) // Every 5 minutes
-
 ;(async () => {
   const events = await opencode.client.event.subscribe()
   for await (const event of events.stream) {

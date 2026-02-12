@@ -64,7 +64,10 @@ export namespace Log {
       options.dev ? "dev.log" : new Date().toISOString().split(".")[0].replace(/:/g, "") + ".log",
     )
     const logfile = Bun.file(logpath)
-    await fs.truncate(logpath).catch(() => {})
+    // Only truncate timestamped logs (one process per file).
+    // Dev mode uses a shared dev.log — truncating would wipe the
+    // parent's logs when the worker calls Log.init() second.
+    if (!options.dev) await fs.truncate(logpath).catch(() => {})
     const writer = logfile.writer()
     write = async (msg: any) => {
       const num = writer.write(msg)
