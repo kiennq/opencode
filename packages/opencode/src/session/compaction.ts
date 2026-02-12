@@ -577,7 +577,7 @@ When constructing the summary, try to stick to this template:
     // Aggressively clean up old messages to free memory
     await cleanupCompactedMessages(input.sessionID, input.messages)
     if (global.gc) global.gc(true)
-    return "continue"
+    return input.auto ? "recycle" : "continue"
   }
 
   // ============================================================================
