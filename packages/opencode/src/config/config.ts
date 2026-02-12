@@ -1189,6 +1189,17 @@ export namespace Config {
             .positive()
             .optional()
             .describe("Minimum number of messages to wait before next compaction (default: 5)"),
+          models: z
+            .record(
+              z.string(),
+              z.object({
+                token_threshold: z.number().int().positive().optional(),
+                context_threshold: z.number().gt(0).lte(1).optional(),
+                min_messages: z.number().int().positive().optional(),
+              }),
+            )
+            .optional()
+            .describe("Model-specific compaction thresholds (key: provider/model)"),
         })
         .optional(),
       pruning: z
@@ -1246,6 +1257,14 @@ export namespace Config {
             .positive()
             .optional()
             .describe("Timeout in milliseconds for model context protocol (MCP) requests"),
+          memory_threshold: z
+            .number()
+            .int()
+            .positive()
+            .optional()
+            .describe(
+              "RSS memory threshold in megabytes at which the worker process is recycled to reclaim leaked memory (default: 4096)",
+            ),
         })
         .optional(),
     })
