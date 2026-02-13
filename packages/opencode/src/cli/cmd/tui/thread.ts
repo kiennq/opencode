@@ -63,7 +63,15 @@ function createWorkerManager(env: Record<string, string>, onCrash?: (code: numbe
         /* Ignore */
       }
       client.invalidate()
-      proc.kill()
+      // Kill the entire process tree to prevent orphaned child processes
+      // (e.g. plugins that spawn `opencode --version` via execSync)
+      if (process.platform === "win32") {
+        Bun.spawnSync(["taskkill", "/F", "/T", "/PID", String(proc.pid)], {
+          stdio: ["ignore", "ignore", "ignore"],
+        })
+      } else {
+        proc.kill()
+      }
       log.info("worker killed", { parent: process.pid, child: proc.pid })
     },
   }
