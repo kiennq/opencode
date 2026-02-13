@@ -622,6 +622,33 @@ export type EventTuiSessionSelect = {
   }
 }
 
+export type EventRlmToggled = {
+  type: "rlm.toggled"
+  properties: {
+    sessionID: string
+    active: boolean
+  }
+}
+
+export type RlmOverflowRequest = {
+  id: string
+  sessionID: string
+}
+
+export type EventRlmOverflowAsked = {
+  type: "rlm.overflow.asked"
+  properties: RlmOverflowRequest
+}
+
+export type EventRlmOverflowReplied = {
+  type: "rlm.overflow.replied"
+  properties: {
+    sessionID: string
+    requestID: string
+    choice: "compact" | "rlm"
+  }
+}
+
 export type SessionStatus =
   | {
       type: "idle"
@@ -970,6 +997,9 @@ export type Event =
   | EventTuiCommandExecute
   | EventTuiToastShow
   | EventTuiSessionSelect
+  | EventRlmToggled
+  | EventRlmOverflowAsked
+  | EventRlmOverflowReplied
   | EventSessionStatus
   | EventSessionIdle
   | EventQuestionAsked
@@ -1092,6 +1122,10 @@ export type KeybindsConfig = {
    * Compact the session
    */
   session_compact?: string
+  /**
+   * Toggle RLM mode for current session
+   */
+  rlm_toggle?: string
   /**
    * Scroll messages up by one page
    */
@@ -1486,6 +1520,17 @@ export type AgentConfig = {
    */
   maxSteps?: number
   permission?: PermissionConfig
+  /**
+   * Enable RLM mode for this agent. Set to true or provide config overrides.
+   */
+  rlm?:
+    | boolean
+    | {
+        enabled?: boolean
+        max_iterations?: number
+        max_depth?: number
+        sub_model?: string
+      }
   [key: string]:
     | unknown
     | string
@@ -1510,6 +1555,13 @@ export type AgentConfig = {
     | "info"
     | number
     | PermissionConfig
+    | boolean
+    | {
+        enabled?: boolean
+        max_iterations?: number
+        max_depth?: number
+        sub_model?: string
+      }
     | undefined
 }
 
@@ -1937,6 +1989,31 @@ export type Config = {
      */
     protectedTools?: Array<string>
   }
+  /**
+   * RLM (Recursive Language Model) configuration for iterative REPL-based reasoning
+   */
+  rlm?: {
+    /**
+     * Enable RLM (Recursive Language Model) mode globally (default: false)
+     */
+    enabled?: boolean
+    /**
+     * Maximum number of RLM iterations before forcing a final answer (default: 30)
+     */
+    max_iterations?: number
+    /**
+     * Maximum recursion depth for nested RLM calls (default: 1)
+     */
+    max_depth?: number
+    /**
+     * Model to use for sub-LLM queries inside the REPL environment, in provider/model format. Defaults to the main model.
+     */
+    sub_model?: string
+    /**
+     * Enable verbose RLM logging (default: false)
+     */
+    verbose?: boolean
+  }
   experimental?: {
     disable_paste_summary?: boolean
     /**
@@ -2305,6 +2382,14 @@ export type Agent = {
     [key: string]: unknown
   }
   steps?: number
+  rlm?:
+    | boolean
+    | {
+        enabled?: boolean
+        max_iterations?: number
+        max_depth?: number
+        sub_model?: string
+      }
 }
 
 export type LspStatus = {
@@ -3494,6 +3579,86 @@ export type SessionResumeResponses = {
 }
 
 export type SessionResumeResponse = SessionResumeResponses[keyof SessionResumeResponses]
+
+export type SessionRlmToggleData = {
+  body?: never
+  path: {
+    /**
+     * Session ID
+     */
+    sessionID: string
+  }
+  query?: {
+    directory?: string
+  }
+  url: "/session/{sessionID}/rlm/toggle"
+}
+
+export type SessionRlmToggleErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+  /**
+   * Not found
+   */
+  404: NotFoundError
+}
+
+export type SessionRlmToggleError = SessionRlmToggleErrors[keyof SessionRlmToggleErrors]
+
+export type SessionRlmToggleResponses = {
+  /**
+   * RLM mode toggled
+   */
+  200: {
+    active: boolean
+  }
+}
+
+export type SessionRlmToggleResponse = SessionRlmToggleResponses[keyof SessionRlmToggleResponses]
+
+export type SessionRlmOverflowReplyData = {
+  body?: {
+    choice: "compact" | "rlm"
+  }
+  path: {
+    /**
+     * Session ID
+     */
+    sessionID: string
+    /**
+     * Overflow request ID
+     */
+    requestID: string
+  }
+  query?: {
+    directory?: string
+  }
+  url: "/session/{sessionID}/rlm/overflow/{requestID}"
+}
+
+export type SessionRlmOverflowReplyErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+  /**
+   * Not found
+   */
+  404: NotFoundError
+}
+
+export type SessionRlmOverflowReplyError = SessionRlmOverflowReplyErrors[keyof SessionRlmOverflowReplyErrors]
+
+export type SessionRlmOverflowReplyResponses = {
+  /**
+   * Overflow reply accepted
+   */
+  200: boolean
+}
+
+export type SessionRlmOverflowReplyResponse = SessionRlmOverflowReplyResponses[keyof SessionRlmOverflowReplyResponses]
 
 export type SessionMessagesData = {
   body?: never

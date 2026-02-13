@@ -126,6 +126,10 @@ import type {
   SessionResumeResponses,
   SessionRevertErrors,
   SessionRevertResponses,
+  SessionRlmOverflowReplyErrors,
+  SessionRlmOverflowReplyResponses,
+  SessionRlmToggleErrors,
+  SessionRlmToggleResponses,
   SessionShareErrors,
   SessionShareResponses,
   SessionShellErrors,
@@ -1452,6 +1456,79 @@ export class Session extends HeyApiClient {
       url: "/session/{sessionID}/resume",
       ...options,
       ...params,
+    })
+  }
+
+  /**
+   * Toggle RLM mode
+   *
+   * Toggle Recursive Language Model mode for a session.
+   */
+  public rlmToggle<ThrowOnError extends boolean = false>(
+    parameters: {
+      sessionID: string
+      directory?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "path", key: "sessionID" },
+            { in: "query", key: "directory" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).post<SessionRlmToggleResponses, SessionRlmToggleErrors, ThrowOnError>({
+      url: "/session/{sessionID}/rlm/toggle",
+      ...options,
+      ...params,
+    })
+  }
+
+  /**
+   * Reply to RLM overflow prompt
+   *
+   * Reply to a context overflow prompt with a choice of compact or RLM mode.
+   */
+  public rlmOverflowReply<ThrowOnError extends boolean = false>(
+    parameters: {
+      sessionID: string
+      requestID: string
+      directory?: string
+      choice?: "compact" | "rlm"
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "path", key: "sessionID" },
+            { in: "path", key: "requestID" },
+            { in: "query", key: "directory" },
+            { in: "body", key: "choice" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).post<
+      SessionRlmOverflowReplyResponses,
+      SessionRlmOverflowReplyErrors,
+      ThrowOnError
+    >({
+      url: "/session/{sessionID}/rlm/overflow/{requestID}",
+      ...options,
+      ...params,
+      headers: {
+        "Content-Type": "application/json",
+        ...options?.headers,
+        ...params.headers,
+      },
     })
   }
 

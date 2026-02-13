@@ -19,6 +19,7 @@ import { Config } from "@/config/config"
 import { ProviderTransform } from "@/provider/transform"
 import { generateObject } from "ai"
 
+
 export namespace SessionCompaction {
   const log = Log.create({ service: "session.compaction" })
 
@@ -502,6 +503,19 @@ ${p.output.slice(0, 8000)}${p.output.length > 8000 ? "\n... (truncated)" : ""}
       { sessionID: input.sessionID },
       { context: [], prompt: undefined },
     )
+
+    // Find the last compaction summary from the full message history
+    let lastSummary: string | undefined
+    for await (const m of MessageV2.stream(input.sessionID)) {
+      if (m.info.role !== "assistant") continue
+      if (!(m.info as MessageV2.Assistant).summary) continue
+      if (m.info.id === msg.id) continue
+      const text = m.parts.find((p) => p.type === "text")?.text
+      if (text) {
+        lastSummary = text
+        break // stream yields newest first, so first match is the latest
+      }
+    }
     const defaultPrompt = `Provide a detailed prompt for continuing our conversation above.
 Focus on information that would be helpful for continuing the conversation, including what we did, what we're doing, which files we're working on, and what we're going to do next.
 The summary that you construct will be used so that another agent can read it and continue the work.
@@ -530,7 +544,12 @@ When constructing the summary, try to stick to this template:
 [Construct a structured list of relevant files that have been read, edited, or created that pertain to the task at hand. If all the files in a directory are relevant, include the path to the directory.]
 ---`
 
-    const promptText = compacting.prompt ?? [defaultPrompt, ...compacting.context].join("\n\n")
+    // Include the last compaction summary so accumulated knowledge carries forward
+    const summarySection = lastSummary
+      ? `\n\n## Previous Compaction Summary\n\nThe following is the most recent compaction summary. You MUST incorporate ALL important information from this summary into your new summary so nothing is lost across compactions:\n\n${lastSummary}`
+      : ""
+
+    const promptText = compacting.prompt ?? [defaultPrompt + summarySection, ...compacting.context].join("\n\n")
     const result = await processor.process({
       user: userMessage,
       agent,
