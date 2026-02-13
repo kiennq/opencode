@@ -1885,6 +1885,16 @@ export type Config = {
      * Minimum number of messages to wait before next compaction (default: 5)
      */
     min_messages?: number
+    /**
+     * Model-specific compaction thresholds (key: provider/model)
+     */
+    models?: {
+      [key: string]: {
+        token_threshold?: number
+        context_threshold?: number
+        min_messages?: number
+      }
+    }
   }
   /**
    * Smart pruning configuration for tiered tool output management
