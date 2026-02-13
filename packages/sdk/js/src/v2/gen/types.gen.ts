@@ -622,33 +622,6 @@ export type EventTuiSessionSelect = {
   }
 }
 
-export type EventRlmToggled = {
-  type: "rlm.toggled"
-  properties: {
-    sessionID: string
-    active: boolean
-  }
-}
-
-export type RlmOverflowRequest = {
-  id: string
-  sessionID: string
-}
-
-export type EventRlmOverflowAsked = {
-  type: "rlm.overflow.asked"
-  properties: RlmOverflowRequest
-}
-
-export type EventRlmOverflowReplied = {
-  type: "rlm.overflow.replied"
-  properties: {
-    sessionID: string
-    requestID: string
-    choice: "compact" | "rlm"
-  }
-}
-
 export type SessionStatus =
   | {
       type: "idle"
@@ -761,6 +734,14 @@ export type EventFileWatcherUpdated = {
   properties: {
     file: string
     event: "add" | "change" | "unlink"
+  }
+}
+
+export type EventRlmContextUpdated = {
+  type: "rlm.context.updated"
+  properties: {
+    sessionID: string
+    count: number
   }
 }
 
@@ -997,9 +978,6 @@ export type Event =
   | EventTuiCommandExecute
   | EventTuiToastShow
   | EventTuiSessionSelect
-  | EventRlmToggled
-  | EventRlmOverflowAsked
-  | EventRlmOverflowReplied
   | EventSessionStatus
   | EventSessionIdle
   | EventQuestionAsked
@@ -1007,6 +985,7 @@ export type Event =
   | EventQuestionRejected
   | EventSessionCompacted
   | EventFileWatcherUpdated
+  | EventRlmContextUpdated
   | EventTodoUpdated
   | EventMcpToolsChanged
   | EventMcpBrowserOpenFailed
@@ -3579,86 +3558,6 @@ export type SessionResumeResponses = {
 }
 
 export type SessionResumeResponse = SessionResumeResponses[keyof SessionResumeResponses]
-
-export type SessionRlmToggleData = {
-  body?: never
-  path: {
-    /**
-     * Session ID
-     */
-    sessionID: string
-  }
-  query?: {
-    directory?: string
-  }
-  url: "/session/{sessionID}/rlm/toggle"
-}
-
-export type SessionRlmToggleErrors = {
-  /**
-   * Bad request
-   */
-  400: BadRequestError
-  /**
-   * Not found
-   */
-  404: NotFoundError
-}
-
-export type SessionRlmToggleError = SessionRlmToggleErrors[keyof SessionRlmToggleErrors]
-
-export type SessionRlmToggleResponses = {
-  /**
-   * RLM mode toggled
-   */
-  200: {
-    active: boolean
-  }
-}
-
-export type SessionRlmToggleResponse = SessionRlmToggleResponses[keyof SessionRlmToggleResponses]
-
-export type SessionRlmOverflowReplyData = {
-  body?: {
-    choice: "compact" | "rlm"
-  }
-  path: {
-    /**
-     * Session ID
-     */
-    sessionID: string
-    /**
-     * Overflow request ID
-     */
-    requestID: string
-  }
-  query?: {
-    directory?: string
-  }
-  url: "/session/{sessionID}/rlm/overflow/{requestID}"
-}
-
-export type SessionRlmOverflowReplyErrors = {
-  /**
-   * Bad request
-   */
-  400: BadRequestError
-  /**
-   * Not found
-   */
-  404: NotFoundError
-}
-
-export type SessionRlmOverflowReplyError = SessionRlmOverflowReplyErrors[keyof SessionRlmOverflowReplyErrors]
-
-export type SessionRlmOverflowReplyResponses = {
-  /**
-   * Overflow reply accepted
-   */
-  200: boolean
-}
-
-export type SessionRlmOverflowReplyResponse = SessionRlmOverflowReplyResponses[keyof SessionRlmOverflowReplyResponses]
 
 export type SessionMessagesData = {
   body?: never

@@ -22,14 +22,7 @@ import { Log } from "@/util/log"
 import { LocalREPL } from "./environment"
 import { findCodeBlocks, findFinalAnswerAsync, formatIteration } from "./parsing"
 import { RLM_SYSTEM_PROMPT, buildRLMSystemPrompt, buildUserPrompt } from "./prompts"
-import type {
-  CodeBlock,
-  RLMChatCompletion,
-  RLMConfig,
-  RLMIteration,
-  REPLResult,
-  UsageSummary,
-} from "./types"
+import type { CodeBlock, RLMChatCompletion, RLMConfig, RLMIteration, REPLResult, UsageSummary } from "./types"
 import { buildQueryMetadata, DEFAULT_RLM_CONFIG, emptyUsageSummary, mergeUsageSummaries } from "./types"
 
 const log = Log.create({ service: "rlm" })
@@ -183,11 +176,13 @@ export async function rlmCompletion(input: RLMCompletionInput): Promise<RLMCompl
 
   // Create and start the REPL environment, or use the provided one
   const externalRepl = !!input.repl
-  const repl = input.repl ?? new LocalREPL({
-    llmQueryHandler,
-    llmQueryBatchedHandler,
-    contextPayload: input.prompt as string | Record<string, unknown> | unknown[],
-  })
+  const repl =
+    input.repl ??
+    new LocalREPL({
+      llmQueryHandler,
+      llmQueryBatchedHandler,
+      contextPayload: input.prompt as string | Record<string, unknown> | unknown[],
+    })
 
   try {
     if (!externalRepl) {
@@ -199,10 +194,7 @@ export async function rlmCompletion(input: RLMCompletionInput): Promise<RLMCompl
 
     // Build initial message history
     const queryMetadata = buildQueryMetadata(input.prompt)
-    let messageHistory = buildRLMSystemPrompt(
-      config.customSystemPrompt ?? RLM_SYSTEM_PROMPT,
-      queryMetadata,
-    )
+    let messageHistory = buildRLMSystemPrompt(config.customSystemPrompt ?? RLM_SYSTEM_PROMPT, queryMetadata)
 
     const hooks = input.hooks
 
@@ -215,10 +207,7 @@ export async function rlmCompletion(input: RLMCompletionInput): Promise<RLMCompl
       await hooks?.onIterationStart?.(i)
 
       // Build current prompt
-      const currentPrompt = [
-        ...messageHistory,
-        buildUserPrompt(input.rootPrompt, i, repl.getContextCount()),
-      ]
+      const currentPrompt = [...messageHistory, buildUserPrompt(input.rootPrompt, i, repl.getContextCount())]
 
       // Single completion turn (with hooks for fine-grained observation)
       const iteration = await completionTurn({
@@ -232,12 +221,8 @@ export async function rlmCompletion(input: RLMCompletionInput): Promise<RLMCompl
           totalUsage = u
         },
         hooks: {
-          onLLMResponse: hooks?.onLLMResponse
-            ? (response) => hooks.onLLMResponse!(i, response)
-            : undefined,
-          onCodeExecuted: hooks?.onCodeExecuted
-            ? (code, result) => hooks.onCodeExecuted!(i, code, result)
-            : undefined,
+          onLLMResponse: hooks?.onLLMResponse ? (response) => hooks.onLLMResponse!(i, response) : undefined,
+          onCodeExecuted: hooks?.onCodeExecuted ? (code, result) => hooks.onCodeExecuted!(i, code, result) : undefined,
         },
       })
 
@@ -248,10 +233,7 @@ export async function rlmCompletion(input: RLMCompletionInput): Promise<RLMCompl
         finalAnswer = repl.getFinalAnswer()
         repl.resetFinalAnswer()
       } else {
-        finalAnswer = await findFinalAnswerAsync(
-          iteration.response,
-          (code) => repl.executeCode(code),
-        )
+        finalAnswer = await findFinalAnswerAsync(iteration.response, (code) => repl.executeCode(code))
       }
       iteration.finalAnswer = finalAnswer
 

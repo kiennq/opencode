@@ -130,7 +130,6 @@ export interface RLMConfig {
   customSystemPrompt?: string
   /** Enable verbose logging */
   verbose: boolean
-
 }
 
 export const DEFAULT_RLM_CONFIG: RLMConfig = {

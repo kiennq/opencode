@@ -68,10 +68,7 @@ export async function ask(sessionID: string): Promise<OverflowChoice> {
 /**
  * Reply to an overflow request. Resolves the blocking promise from ask().
  */
-export async function reply(input: {
-  requestID: string
-  choice: OverflowChoice
-}): Promise<void> {
+export async function reply(input: { requestID: string; choice: OverflowChoice }): Promise<void> {
   const s = await state()
   const existing = s.pending[input.requestID]
   if (!existing) {

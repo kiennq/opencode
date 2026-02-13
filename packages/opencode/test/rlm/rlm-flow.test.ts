@@ -151,9 +151,7 @@ async function simulateRLMLoop(opts: {
 
 describe("full RLM loop", () => {
   test("single iteration: FINAL() without code execution", async () => {
-    const model = createMockLanguageModel([
-      "After thinking about it, the answer is clear.\nFINAL(42)",
-    ])
+    const model = createMockLanguageModel(["After thinking about it, the answer is clear.\nFINAL(42)"])
 
     const result = await simulateRLMLoop({ prompt: "What is 6*7?", model })
     expect(result.finalAnswer).toBe("42")
@@ -164,7 +162,7 @@ describe("full RLM loop", () => {
   test("two iterations: code execution then FINAL()", async () => {
     const model = createMockLanguageModel([
       // Iteration 1: execute some code
-      'Let me compute this.\n```repl\nx = 6 * 7\nconsole.log(`Result: ${x}`)\n```',
+      "Let me compute this.\n```repl\nx = 6 * 7\nconsole.log(`Result: ${x}`)\n```",
       // Iteration 2: use the result and give final answer
       "Based on the computation, the answer is:\nFINAL(The result of 6*7 is 42)",
     ])
@@ -221,7 +219,7 @@ describe("full RLM loop", () => {
 
   test("multiple code blocks in a single iteration", async () => {
     const model = createMockLanguageModel([
-      'Let me do two things.\n```repl\na = 10\nconsole.log(`a = ${a}`)\n```\n\nAnd also:\n```repl\nb = 20\nconsole.log(`b = ${b}`)\n```',
+      "Let me do two things.\n```repl\na = 10\nconsole.log(`a = ${a}`)\n```\n\nAnd also:\n```repl\nb = 20\nconsole.log(`b = ${b}`)\n```",
       "Now I know both values.\nFINAL(a=10, b=20)",
     ])
 
@@ -243,9 +241,7 @@ describe("full RLM loop", () => {
     ])
 
     // Sub-model responds to llm_query()
-    const subModel = createMockLanguageModel([
-      "Paris",
-    ])
+    const subModel = createMockLanguageModel(["Paris"])
 
     const result = await simulateRLMLoop({
       prompt: "Use llm_query to find the capital of France",
@@ -261,7 +257,7 @@ describe("full RLM loop", () => {
 
   test("context is accessible in REPL via context_0", async () => {
     const model = createMockLanguageModel([
-      '```repl\nconsole.log(`Context: ${context_0}`)\nconsole.log(`Also: ${context}`)\n```',
+      "```repl\nconsole.log(`Context: ${context_0}`)\nconsole.log(`Also: ${context}`)\n```",
       "FINAL(Context was accessible)",
     ])
 
@@ -279,7 +275,7 @@ describe("full RLM loop", () => {
       // First block: define variables
       '```repl\nx = 42\ny = "hello"\n```',
       // Second block: SHOW_VARS() can now see them
-      '```repl\nconsole.log(SHOW_VARS())\n```',
+      "```repl\nconsole.log(SHOW_VARS())\n```",
       "FINAL(Variables shown)",
     ])
 

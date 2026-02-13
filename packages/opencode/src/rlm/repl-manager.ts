@@ -35,10 +35,7 @@ const aliases = new Map<string, string>()
  * If the session already has a REPL, returns it.
  * Otherwise creates a new one with the provided options and starts it.
  */
-export async function getOrCreate(
-  sessionID: string,
-  options: LocalREPLOptions,
-): Promise<LocalREPL> {
+export async function getOrCreate(sessionID: string, options: LocalREPLOptions): Promise<LocalREPL> {
   const existing = repls.get(sessionID)
   if (existing) return existing
 

@@ -9,7 +9,5 @@
 
 export * as RLMContext from "./context"
 export { LocalREPL, type LocalREPLOptions, type LLMQueryHandler, type LLMQueryBatchedHandler } from "./environment"
-export type {
-  REPLResult,
-} from "./types"
+export type { REPLResult } from "./types"
 export { emptyREPLResult } from "./types"

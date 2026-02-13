@@ -164,11 +164,12 @@ export class LocalREPL {
 
     // Inject helper functions
     sandbox.llm_query = (prompt: string, model?: string) => this.llmQueryHandler(prompt, model)
-    sandbox.llm_query_batched = (prompts: string[], model?: string) =>
-      this.llmQueryBatchedHandler(prompts, model)
+    sandbox.llm_query_batched = (prompts: string[], model?: string) => this.llmQueryBatchedHandler(prompts, model)
 
     sandbox.FINAL_VAR = (variableName: string): string => {
-      const name = String(variableName).trim().replace(/^["']|["']$/g, "")
+      const name = String(variableName)
+        .trim()
+        .replace(/^["']|["']$/g, "")
       if (this.ctx && name in this.ctx && !INTERNAL_NAMES.has(name)) {
         const value = String(this.ctx[name])
         this.finalCalled = true

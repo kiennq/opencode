@@ -17,11 +17,7 @@
  * only handles the LanguageModelV2 interface and stream part emission.
  */
 
-import type {
-  LanguageModelV2,
-  LanguageModelV2CallOptions,
-  LanguageModelV2StreamPart,
-} from "@ai-sdk/provider"
+import type { LanguageModelV2, LanguageModelV2CallOptions, LanguageModelV2StreamPart } from "@ai-sdk/provider"
 import { Provider } from "@/provider/provider"
 import { formatExecutionResult } from "./parsing"
 import { rlmCompletion } from "./rlm"
@@ -319,7 +315,7 @@ function serializeToolOutput(output: unknown): string {
   if (o.type === "json" || o.type === "error-json") return JSON.stringify(o.value)
   if (o.type === "content" && Array.isArray(o.value)) {
     return o.value
-      .map((item: { type?: string; text?: string }) => (item.type === "text" ? item.text ?? "" : ""))
+      .map((item: { type?: string; text?: string }) => (item.type === "text" ? (item.text ?? "") : ""))
       .join("\n")
   }
   return JSON.stringify(output)

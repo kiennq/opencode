@@ -61,7 +61,7 @@ query sub-LLMs recursively, and build up answers incrementally.
 
 ## Detailed Engine Flow
 
-```
+````
   rlmCompletion(input)
          |
          v
@@ -214,7 +214,7 @@ query sub-LLMs recursively, and build up answers incrementally.
          |
          v
      Return result
-```
+````
 
 ## JavaScript REPL Execution Model
 
@@ -352,6 +352,7 @@ properties on the vm context object, making them visible in
 ```
 
 The transformation:
+
 - Only operates at brace depth 0 (top-level)
 - Tracks brace depth across lines, skipping braces in strings/comments
 - Handles simple, multiple declarators, array/object destructuring
@@ -530,6 +531,7 @@ The transformation:
 ```
 
 In the OpenCode UI:
+
 - **Reasoning pane**: shows all iteration content (LLM thinking + REPL execution results)
 - **Text output**: shows only the final answer
 
@@ -554,7 +556,7 @@ In the OpenCode UI:
 
 ## Example Session Trace
 
-```
+````
   User: "What is the 15th Fibonacci number? Use code to compute it."
 
   ┌─────────────────────────────────────────────────────┐
@@ -602,7 +604,7 @@ In the OpenCode UI:
                          |
                          v
               Output: "The 15th Fibonacci number is 610"
-```
+````
 
 ## Key Design Decisions
 

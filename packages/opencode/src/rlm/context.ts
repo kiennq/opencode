@@ -295,18 +295,17 @@ export function fromMessage(msg: {
         if (part.state?.status === "completed" || part.state?.status === "error") {
           entries.push({
             role: "tool-call",
-            content: typeof part.state.input === "string"
-              ? part.state.input
-              : JSON.stringify(part.state.input ?? {}),
+            content: typeof part.state.input === "string" ? part.state.input : JSON.stringify(part.state.input ?? {}),
             toolName: part.tool,
             toolCallId: part.callID,
             time,
           })
           entries.push({
             role: "tool-result",
-            content: typeof part.state.output === "string"
-              ? part.state.output?.slice(0, 5000) ?? ""
-              : JSON.stringify(part.state.output ?? {}).slice(0, 5000),
+            content:
+              typeof part.state.output === "string"
+                ? (part.state.output?.slice(0, 5000) ?? "")
+                : JSON.stringify(part.state.output ?? {}).slice(0, 5000),
             toolName: part.tool,
             toolCallId: part.callID,
             time,

@@ -139,7 +139,11 @@ export function formatExecutionResult(result: REPLResult): string {
   const importantVars: string[] = []
   for (const [key, value] of Object.entries(result.locals)) {
     if (!key.startsWith("_") && !["__builtins__", "__name__", "__doc__"].includes(key)) {
-      if (["string", "number", "boolean"].includes(typeof value) || Array.isArray(value) || (value && typeof value === "object")) {
+      if (
+        ["string", "number", "boolean"].includes(typeof value) ||
+        Array.isArray(value) ||
+        (value && typeof value === "object")
+      ) {
         importantVars.push(key)
       }
     }

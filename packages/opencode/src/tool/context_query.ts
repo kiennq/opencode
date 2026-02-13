@@ -15,10 +15,7 @@ export const ContextQueryTool = Tool.define("context_query", {
   async execute(params, ctx) {
     const result = await RLMContext.execute(ctx.sessionID, params.code)
 
-    const output = [
-      result.stdout ? result.stdout.trim() : "",
-      result.stderr ? `[stderr] ${result.stderr.trim()}` : "",
-    ]
+    const output = [result.stdout ? result.stdout.trim() : "", result.stderr ? `[stderr] ${result.stderr.trim()}` : ""]
       .filter(Boolean)
       .join("\n")
 

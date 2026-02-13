@@ -34,8 +34,7 @@ function createREPL(overrides?: {
   executionTimeoutMs?: number
 }) {
   repl = new LocalREPL({
-    llmQueryHandler:
-      overrides?.llmQueryHandler ?? (async (prompt) => `echo: ${prompt}`),
+    llmQueryHandler: overrides?.llmQueryHandler ?? (async (prompt) => `echo: ${prompt}`),
     llmQueryBatchedHandler: overrides?.llmQueryBatchedHandler,
     contextPayload: overrides?.contextPayload,
     executionTimeoutMs: overrides?.executionTimeoutMs,
@@ -279,9 +278,7 @@ describe("llm_query round-trips", () => {
     })
     await r.start()
 
-    const result = await r.executeCode(
-      'r1 = await llm_query("q1"); r2 = await llm_query("q2"); console.log(r1, r2)',
-    )
+    const result = await r.executeCode('r1 = await llm_query("q1"); r2 = await llm_query("q2"); console.log(r1, r2)')
     expect(result.stdout).toContain("response-1")
     expect(result.stdout).toContain("response-2")
     expect(callCount).toBe(2)

@@ -123,8 +123,7 @@ export function buildUserPrompt(
   let prompt: string
 
   if (iteration === 0) {
-    prompt =
-      rootPrompt ? USER_PROMPT_WITH_ROOT.replace("{root_prompt}", rootPrompt) : USER_PROMPT
+    prompt = rootPrompt ? USER_PROMPT_WITH_ROOT.replace("{root_prompt}", rootPrompt) : USER_PROMPT
   } else {
     prompt =
       "Continue from your previous REPL interactions above. " +

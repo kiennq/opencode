@@ -19,7 +19,6 @@ import { Config } from "@/config/config"
 import { ProviderTransform } from "@/provider/transform"
 import { generateObject } from "ai"
 
-
 export namespace SessionCompaction {
   const log = Log.create({ service: "session.compaction" })
 
