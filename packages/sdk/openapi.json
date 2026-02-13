@@ -7007,9 +7007,6 @@
           "output": {
             "type": "string"
           },
-          "summary": {
-            "type": "string"
-          },
           "title": {
             "type": "string"
           },
@@ -10164,6 +10161,33 @@
                 "type": "integer",
                 "exclusiveMinimum": 0,
                 "maximum": 9007199254740991
+              },
+              "models": {
+                "description": "Model-specific compaction thresholds (key: provider/model)",
+                "type": "object",
+                "propertyNames": {
+                  "type": "string"
+                },
+                "additionalProperties": {
+                  "type": "object",
+                  "properties": {
+                    "token_threshold": {
+                      "type": "integer",
+                      "exclusiveMinimum": 0,
+                      "maximum": 9007199254740991
+                    },
+                    "context_threshold": {
+                      "type": "number",
+                      "exclusiveMinimum": 0,
+                      "maximum": 1
+                    },
+                    "min_messages": {
+                      "type": "integer",
+                      "exclusiveMinimum": 0,
+                      "maximum": 9007199254740991
+                    }
+                  }
+                }
               }
             }
           },
