@@ -6,6 +6,7 @@ import { createOpencodeClient } from "@opencode-ai/sdk"
 import { Server } from "../server/server"
 import { BunProc } from "../bun"
 import { Instance } from "../project/instance"
+import { Installation } from "../installation"
 import { Flag } from "../flag/flag"
 import { CodexAuthPlugin } from "./codex"
 import { Session } from "../session"
@@ -37,6 +38,7 @@ export namespace Plugin {
         worktree: Instance.worktree,
         directory: Instance.directory,
         serverUrl: Server.url(),
+        version: Installation.VERSION,
         $: Bun.$,
       }
 
