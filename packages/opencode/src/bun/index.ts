@@ -100,6 +100,31 @@ export namespace BunProc {
       await Bun.write(pkgJsonPath, "{}")
     }
 
+    // github:user/repo — the module name is the package.json "name" from the
+    // repo, not the repo name. Look up by dependency value to find the cached name.
+    if (pkg.startsWith("github:")) {
+      const parsed = await readPackageJson()
+      const deps = parsed.dependencies ?? {}
+      const name = Object.keys(deps).find((k) => deps[k] === pkg)
+      if (name) {
+        const mod = path.join(Global.Path.cache, "node_modules", name)
+        if (await Filesystem.exists(mod)) {
+          if (provider) await track(provider, pkg)
+          return mod
+        }
+      }
+      const args = ["add", "--force", "--exact", ...(proxied() ? ["--no-cache"] : []), "--cwd", Global.Path.cache, pkg]
+      log.info("installing package", { pkg })
+      await BunProc.run(args, { cwd: Global.Path.cache }).catch((e) => {
+        throw new InstallFailedError({ pkg, version })
+      })
+      const installed = await readPackageJson()
+      const resolved = Object.keys(installed.dependencies ?? {}).find((k) => installed.dependencies![k] === pkg)
+      if (!resolved) throw new InstallFailedError({ pkg, version })
+      if (provider) await track(provider, pkg)
+      return path.join(Global.Path.cache, "node_modules", resolved)
+    }
+
     const mod = path.join(Global.Path.cache, "node_modules", pkg)
     const parsed = await readPackageJson()
     const oldPkg = provider ? parsed.opencode?.providers?.[provider] : undefined
