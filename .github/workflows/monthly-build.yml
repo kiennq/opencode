@@ -24,6 +24,7 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       version: ${{ steps.calc.outputs.version }}
+      original_version: ${{ steps.calc.outputs.original_version }}
       tag: ${{ steps.calc.outputs.tag }}
     steps:
       - uses: actions/checkout@v4
@@ -32,16 +33,15 @@ jobs:
         run: |
           if [ -n "${{ inputs.version_override }}" ]; then
             VERSION="${{ inputs.version_override }}"
+            ORIGINAL_VERSION="$VERSION"
           else
-            CURRENT=$(curl -s https://registry.npmjs.org/opencode-ai/latest | jq -r '.version')
-            MAJOR=$(echo "$CURRENT" | cut -d. -f1)
-            MINOR=$(echo "$CURRENT" | cut -d. -f2)
-            COMMIT_SHA=$(git rev-parse --short=7 HEAD)
-            VERSION="${MAJOR}.${MINOR}.${{ github.run_number }}.${COMMIT_SHA}"
+            ORIGINAL_VERSION=$(jq -r '.version' packages/opencode/package.json)
+            VERSION="${ORIGINAL_VERSION}.${{ github.run_number }}"
           fi
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "original_version=$ORIGINAL_VERSION" >> "$GITHUB_OUTPUT"
           echo "tag=v$VERSION" >> "$GITHUB_OUTPUT"
-          echo "Calculated version: $VERSION"
+          echo "Calculated version: $VERSION (original: $ORIGINAL_VERSION)"
 
   build:
     needs: version
@@ -74,7 +74,7 @@ jobs:
         working-directory: packages/opencode
         run: bun script/build.ts --single
         env:
-          OPENCODE_VERSION: ${{ needs.version.outputs.version }}
+          OPENCODE_VERSION: ${{ needs.version.outputs.original_version }}
 
       - name: Create archive (Linux)
         if: matrix.os == 'linux'
