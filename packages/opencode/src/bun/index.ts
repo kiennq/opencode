@@ -27,6 +27,7 @@ export namespace BunProc {
     })
     const result = Bun.spawn([which(), ...cmd], {
       ...options,
+      stdin: "ignore",
       stdout: "pipe",
       stderr: "pipe",
       env: {
@@ -89,6 +90,27 @@ export namespace BunProc {
     await writePackageJson(parsed)
   }
 
+  // github: installs raw source — build if the entry point is missing.
+  async function buildIfNeeded(mod: string) {
+    const pkg = path.join(mod, "package.json")
+    if (!(await Filesystem.exists(pkg))) return
+    const json = JSON.parse(await fs.readFile(pkg, "utf-8"))
+    const entry = json.main ?? json.exports?.["."]?.import ?? json.exports?.["."]
+    if (!entry || !json.scripts?.build) return
+    const entryPath = path.join(mod, entry)
+    if (await Filesystem.exists(entryPath)) return
+    log.info("building github package", { mod, entry })
+    await BunProc.run(["install", "--frozen-lockfile"], { cwd: mod }).catch(() =>
+      BunProc.run(["install"], { cwd: mod }),
+    )
+    // Build may partially succeed (e.g. bundler passes but tsc fails).
+    // Accept the result if the entry point was produced.
+    await BunProc.run(["run", "build"], { cwd: mod }).catch(async () => {
+      if (!(await Filesystem.exists(entryPath))) throw new Error(`build failed and entry point missing: ${entry}`)
+      log.info("build exited non-zero but entry point exists, continuing", { entry })
+    })
+  }
+
   export async function install(pkg: string, version = "latest", provider?: string) {
     using _ = await Lock.write("bun-install")
 
@@ -98,6 +120,41 @@ export namespace BunProc {
     const pkgJsonPath = path.join(Global.Path.cache, "package.json")
     if (!(await Filesystem.exists(pkgJsonPath))) {
       await Bun.write(pkgJsonPath, "{}")
+    }
+
+    // github:user/repo — the module name is the package.json "name" from the
+    // repo, not the repo name. Look up by dependency value to find the cached name.
+    if (pkg.startsWith("github:")) {
+      const parsed = await readPackageJson()
+      const deps = parsed.dependencies ?? {}
+      const name = Object.keys(deps).find((k) => deps[k] === pkg)
+      if (name) {
+        const mod = path.join(Global.Path.cache, "node_modules", name)
+        if (await Filesystem.exists(mod)) {
+          await buildIfNeeded(mod)
+          if (provider) await track(provider, pkg)
+          return mod
+        }
+      }
+      // Remove any existing version of the same package to avoid bun's
+      // DependencyLoop error (e.g. switching from npm to github, or between forks).
+      const repo = pkg.replace("github:", "").split("#")[0].split("/").pop()!
+      if (repo && deps[repo] && deps[repo] !== pkg) {
+        log.info("removing stale package before github install", { pkg: repo, old: deps[repo] })
+        await BunProc.run(["remove", "--cwd", Global.Path.cache, repo]).catch(() => {})
+      }
+      const args = ["add", "--force", "--exact", ...(proxied() ? ["--no-cache"] : []), "--cwd", Global.Path.cache, pkg]
+      log.info("installing package", { pkg })
+      await BunProc.run(args, { cwd: Global.Path.cache }).catch((e) => {
+        throw new InstallFailedError({ pkg, version })
+      })
+      const installed = await readPackageJson()
+      const resolved = Object.keys(installed.dependencies ?? {}).find((k) => installed.dependencies![k] === pkg)
+      if (!resolved) throw new InstallFailedError({ pkg, version })
+      const mod = path.join(Global.Path.cache, "node_modules", resolved)
+      await buildIfNeeded(mod)
+      if (provider) await track(provider, pkg)
+      return mod
     }
 
     const mod = path.join(Global.Path.cache, "node_modules", pkg)
