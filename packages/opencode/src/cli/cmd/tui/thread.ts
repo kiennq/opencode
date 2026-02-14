@@ -168,8 +168,24 @@ export const TuiThreadCommand = cmd({
           prelaunching = undefined
           if (!recycling)
             recycling = respawn()
-              .then(() => {
-                for (const sessionID of pending) resume(sessionID)
+              .then(async () => {
+                // Query DB for sessions that were compacting but never resumed.
+                // This handles the edge case where the worker crashed before the
+                // session.compacted event reached the parent process.
+                const dbPending = await pool.client.call("pendingResume", { directory: cwd }).catch((e: unknown) => {
+                  Log.Default.error("failed to query pending resume sessions", {
+                    parent: process.pid,
+                    error: e instanceof Error ? e.message : e,
+                  })
+                  return [] as string[]
+                })
+                for (const sessionID of dbPending) {
+                  if (!pending.has(sessionID)) {
+                    Log.Default.info("found pending resume session from DB", { parent: process.pid, sessionID })
+                    pending.add(sessionID)
+                  }
+                }
+                for (const sessionID of pending) resumeAndClear(sessionID)
               })
               .finally(() => {
                 recycling = undefined
@@ -218,6 +234,30 @@ export const TuiThreadCommand = cmd({
                   recycling = recycleAndResume(props.sessionID).finally(() => {
                     recycling = undefined
                   })
+              } else {
+                // Race condition: session.status may arrive before session.compacted.
+                // Check DB for time_compacting marker to catch this case.
+                pool.client
+                  .call("pendingResume", { directory: cwd })
+                  .then((pending) => {
+                    if (Array.isArray(pending) && pending.includes(props.sessionID)) {
+                      Log.Default.info("compacted session idle (DB fallback), recycling", {
+                        parent: process.pid,
+                        sessionID: props.sessionID,
+                      })
+                      if (!recycling)
+                        recycling = recycleAndResume(props.sessionID).finally(() => {
+                          recycling = undefined
+                        })
+                    }
+                  })
+                  .catch((e: unknown) => {
+                    Log.Default.error("failed to check pending resume on idle", {
+                      parent: process.pid,
+                      sessionID: props.sessionID,
+                      error: e instanceof Error ? e.message : e,
+                    })
+                  })
               }
             } else busy.add(props.sessionID)
           }
@@ -265,10 +305,25 @@ export const TuiThreadCommand = cmd({
               })
               return false
             })
-          if (ok) return
+          if (ok) return true
           if (attempt < retries - 1) await Bun.sleep(500 * (attempt + 1))
         }
         Log.Default.error("exhausted resume retries", { parent: process.pid, sessionID })
+        return false
+      }
+
+      async function resumeAndClear(sessionID: string) {
+        const ok = await resume(sessionID)
+        if (ok) {
+          // Clear the time_compacting marker now that session has resumed
+          await pool.client.call("clearCompacting", { directory: cwd, sessionID }).catch((e: unknown) => {
+            Log.Default.error("failed to clear compacting marker", {
+              parent: process.pid,
+              sessionID,
+              error: e instanceof Error ? e.message : e,
+            })
+          })
+        }
       }
 
       async function recycle() {
@@ -288,7 +343,7 @@ export const TuiThreadCommand = cmd({
         if (prelaunching) await prelaunching
         await pool.shutdown()
         await respawn()
-        await resume(sessionID)
+        await resumeAndClear(sessionID)
       }
 
       // Initial worker spawn

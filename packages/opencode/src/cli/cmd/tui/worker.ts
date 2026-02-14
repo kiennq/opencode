@@ -10,6 +10,7 @@ import { GlobalBus } from "@/bus/global"
 import { createOpencodeClient, type Event } from "@opencode-ai/sdk/v2"
 import type { BunWebSocketData } from "hono/bun"
 import { Flag } from "@/flag/flag"
+import { Session } from "@/session"
 
 await Log.init({
   print: process.argv.includes("--print-logs"),
@@ -161,6 +162,20 @@ export const rpc = {
   async config() {
     const config = await Config.global()
     return { memory_threshold: config.experimental?.memory_threshold }
+  },
+  async pendingResume(input: { directory: string }) {
+    return Instance.provide({
+      directory: input.directory,
+      init: InstanceBootstrap,
+      fn: () => Session.pendingResume(),
+    })
+  },
+  async clearCompacting(input: { directory: string; sessionID: string }) {
+    return Instance.provide({
+      directory: input.directory,
+      init: InstanceBootstrap,
+      fn: () => Session.setCompacting({ sessionID: input.sessionID, time: undefined }),
+    })
   },
 }
 

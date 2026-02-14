@@ -579,9 +579,15 @@ When constructing the summary, try to stick to this template:
           end: Date.now(),
         },
       })
+      // Mark session as compacting in DB BEFORE publishing event.
+      // If worker crashes before parent receives the event, parent can
+      // query DB on respawn to find sessions needing resume.
+      await Session.setCompacting({ sessionID: input.sessionID, time: Date.now() })
     }
     if (processor.message.error && !input.auto) return "stop"
-    Bus.publish(Event.Compacted, { sessionID: input.sessionID })
+    // Await to ensure the event is delivered BEFORE we return and trigger idle status.
+    // Without await, the idle event can race ahead of compacted event.
+    await Bus.publish(Event.Compacted, { sessionID: input.sessionID })
     // Aggressively clean up old messages to free memory
     await cleanupCompactedMessages(input.sessionID, input.messages)
     if (global.gc) global.gc(true)
