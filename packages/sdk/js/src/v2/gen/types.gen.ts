@@ -387,7 +387,6 @@ export type ToolStateCompleted = {
     [key: string]: unknown
   }
   output: string
-  summary?: string
   title: string
   metadata: {
     [key: string]: unknown

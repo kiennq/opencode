@@ -68,7 +68,10 @@ export namespace Shell {
   const UNIX_SHELLS = new Set(["bash", "sh", "zsh", "fish", "nu"])
 
   export function isUnixLike(shell: string): boolean {
-    const base = path.basename(shell).toLowerCase().replace(/\.exe$/, "")
+    const base = path
+      .basename(shell)
+      .toLowerCase()
+      .replace(/\.exe$/, "")
     return UNIX_SHELLS.has(base)
   }
 

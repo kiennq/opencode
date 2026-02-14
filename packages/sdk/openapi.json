@@ -7007,9 +7007,6 @@
           "output": {
             "type": "string"
           },
-          "summary": {
-            "type": "string"
-          },
           "title": {
             "type": "string"
           },
