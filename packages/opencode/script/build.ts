@@ -2,6 +2,7 @@
 
 import solidPlugin from "@opentui/solid/bun-plugin"
 import path from "path"
+import fs from "fs"
 import { $ } from "bun"
 import { fileURLToPath } from "url"
 
