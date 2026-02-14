@@ -2322,14 +2322,6 @@
               "type": "number"
             },
             "description": "Maximum number of messages to return"
-          },
-          {
-            "in": "query",
-            "name": "offset",
-            "schema": {
-              "type": "number"
-            },
-            "description": "Number of messages to skip from the start (oldest messages)"
           }
         ],
         "summary": "Get session messages",
@@ -7037,6 +7029,9 @@
             "items": {
               "$ref": "#/components/schemas/FilePart"
             }
+          },
+          "summary": {
+            "type": "string"
           }
         },
         "required": ["status", "input", "output", "title", "metadata", "time"]

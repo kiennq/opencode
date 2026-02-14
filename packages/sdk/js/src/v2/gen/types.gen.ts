@@ -397,6 +397,7 @@ export type ToolStateCompleted = {
     compacted?: number
   }
   attachments?: Array<FilePart>
+  summary?: string
 }
 
 export type ToolStateError = {
@@ -3515,10 +3516,6 @@ export type SessionMessagesData = {
      * Maximum number of messages to return
      */
     limit?: number
-    /**
-     * Number of messages to skip from the start (oldest messages)
-     */
-    offset?: number
   }
   url: "/session/{sessionID}/message"
 }
