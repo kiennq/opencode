@@ -406,7 +406,8 @@ export const SessionRoutes = lazy(() =>
       ),
       async (c) => {
         const sessionID = c.req.valid("param").sessionID
-        const { session } = await Session.share(sessionID)
+        await Session.share(sessionID)
+        const session = await Session.get(sessionID)
         return c.json(session)
       },
     )
@@ -600,10 +601,6 @@ export const SessionRoutes = lazy(() =>
         "query",
         z.object({
           limit: z.coerce.number().optional().meta({ description: "Maximum number of messages to return" }),
-          offset: z.coerce
-            .number()
-            .optional()
-            .meta({ description: "Number of messages to skip from the start (oldest messages)" }),
         }),
       ),
       async (c) => {
@@ -611,7 +608,6 @@ export const SessionRoutes = lazy(() =>
         const messages = await Session.messages({
           sessionID: c.req.valid("param").sessionID,
           limit: query.limit,
-          offset: query.offset,
         })
         return c.json(messages)
       },
