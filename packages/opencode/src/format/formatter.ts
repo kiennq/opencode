@@ -3,6 +3,25 @@ import { BunProc } from "../bun"
 import { Instance } from "../project/instance"
 import { Filesystem } from "../util/filesystem"
 import { Flag } from "@/flag/flag"
+import { createLruCache } from "../util/cache"
+
+// LRU cache for package.json reads to avoid duplicate file I/O
+// Limit to 100 entries to prevent unbounded memory growth
+const packageJsonCache = createLruCache<string, any>({ maxEntries: 100 })
+
+async function readPackageJson(filepath: string) {
+  const cached = packageJsonCache.get(filepath)
+  if (cached !== undefined) return cached
+  const json = await Bun.file(filepath)
+    .json()
+    .catch(() => null)
+  packageJsonCache.set(filepath, json)
+  return json
+}
+
+export function clearPackageJsonCache() {
+  packageJsonCache.clear()
+}
 
 export interface Info {
   name: string
@@ -67,9 +86,9 @@ export const prettier: Info = {
   async enabled() {
     const items = await Filesystem.findUp("package.json", Instance.directory, Instance.worktree)
     for (const item of items) {
-      const json = await Bun.file(item).json()
-      if (json.dependencies?.prettier) return true
-      if (json.devDependencies?.prettier) return true
+      const json = await readPackageJson(item)
+      if (json?.dependencies?.prettier) return true
+      if (json?.devDependencies?.prettier) return true
     }
     return false
   },
@@ -86,9 +105,9 @@ export const oxfmt: Info = {
     if (!Flag.OPENCODE_EXPERIMENTAL_OXFMT) return false
     const items = await Filesystem.findUp("package.json", Instance.directory, Instance.worktree)
     for (const item of items) {
-      const json = await Bun.file(item).json()
-      if (json.dependencies?.oxfmt) return true
-      if (json.devDependencies?.oxfmt) return true
+      const json = await readPackageJson(item)
+      if (json?.dependencies?.oxfmt) return true
+      if (json?.devDependencies?.oxfmt) return true
     }
     return false
   },
@@ -348,9 +367,9 @@ export const pint: Info = {
   async enabled() {
     const items = await Filesystem.findUp("composer.json", Instance.directory, Instance.worktree)
     for (const item of items) {
-      const json = await Bun.file(item).json()
-      if (json.require?.["laravel/pint"]) return true
-      if (json["require-dev"]?.["laravel/pint"]) return true
+      const json = await readPackageJson(item)
+      if (json?.require?.["laravel/pint"]) return true
+      if (json?.["require-dev"]?.["laravel/pint"]) return true
     }
     return false
   },
@@ -364,3 +383,31 @@ export const ormolu: Info = {
     return Bun.which("ormolu") !== null
   },
 }
+
+// Explicit list of all formatters for iteration
+export const all: Info[] = [
+  gofmt,
+  mix,
+  prettier,
+  oxfmt,
+  biome,
+  zig,
+  clang,
+  ktlint,
+  ruff,
+  rlang,
+  uvformat,
+  rubocop,
+  standardrb,
+  htmlbeautifier,
+  dart,
+  ocamlformat,
+  terraform,
+  latexindent,
+  gleam,
+  shfmt,
+  nixfmt,
+  rustfmt,
+  pint,
+  ormolu,
+]
