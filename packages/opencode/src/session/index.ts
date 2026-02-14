@@ -455,6 +455,33 @@ export namespace Session {
     })
   })
 
+  export const setCompacting = fn(
+    z.object({
+      sessionID: Identifier.schema("session"),
+      time: z.number().optional(),
+    }),
+    async (input) => {
+      Database.use((db) => {
+        db.update(SessionTable)
+          .set({ time_compacting: input.time ?? null })
+          .where(eq(SessionTable.id, input.sessionID))
+          .run()
+      })
+    },
+  )
+
+  /** Find sessions that were compacting but never resumed (crash recovery) */
+  export function pendingResume(): string[] {
+    const rows = Database.use((db) =>
+      db
+        .select()
+        .from(SessionTable)
+        .where(and(eq(SessionTable.project_id, Instance.project.id), SessionTable.time_compacting))
+        .all(),
+    )
+    return rows.map((row: SessionRow) => row.id)
+  }
+
   export const setSummary = fn(
     z.object({
       sessionID: Identifier.schema("session"),

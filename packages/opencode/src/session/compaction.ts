@@ -579,6 +579,10 @@ When constructing the summary, try to stick to this template:
           end: Date.now(),
         },
       })
+      // Mark session as compacting in DB BEFORE publishing event.
+      // If worker crashes before parent receives the event, parent can
+      // query DB on respawn to find sessions needing resume.
+      await Session.setCompacting({ sessionID: input.sessionID, time: Date.now() })
     }
     if (processor.message.error && !input.auto) return "stop"
     Bus.publish(Event.Compacted, { sessionID: input.sessionID })
