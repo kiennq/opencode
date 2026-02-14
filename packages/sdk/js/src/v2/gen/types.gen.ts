@@ -397,6 +397,7 @@ export type ToolStateCompleted = {
     compacted?: number
   }
   attachments?: Array<FilePart>
+  summary?: string
 }
 
 export type ToolStateError = {
@@ -1965,10 +1966,6 @@ export type Config = {
      * Timeout in milliseconds for model context protocol (MCP) requests
      */
     mcp_timeout?: number
-    /**
-     * RSS memory threshold in megabytes at which the worker process is recycled to reclaim leaked memory (default: 4096)
-     */
-    memory_threshold?: number
   }
 }
 
@@ -3515,10 +3512,6 @@ export type SessionMessagesData = {
      * Maximum number of messages to return
      */
     limit?: number
-    /**
-     * Number of messages to skip from the start (oldest messages)
-     */
-    offset?: number
   }
   url: "/session/{sessionID}/message"
 }
