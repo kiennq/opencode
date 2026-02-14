@@ -1593,14 +1593,12 @@ NOTE: At any point in time through this workflow you should feel free to ask the
       process.platform === "win32" ? path.win32.basename(shell, ".exe") : path.basename(shell)
     ).toLowerCase()
 
-    const sanitizedCommand = Shell.sanitizeNullRedirect(input.command, shell)
-
     const invocations: Record<string, { args: string[] }> = {
       nu: {
-        args: ["-c", sanitizedCommand],
+        args: ["-c", input.command],
       },
       fish: {
-        args: ["-c", sanitizedCommand],
+        args: ["-c", input.command],
       },
       zsh: {
         args: [
@@ -1609,7 +1607,7 @@ NOTE: At any point in time through this workflow you should feel free to ask the
           `
             [[ -f ~/.zshenv ]] && source ~/.zshenv >/dev/null 2>&1 || true
             [[ -f "\${ZDOTDIR:-$HOME}/.zshrc" ]] && source "\${ZDOTDIR:-$HOME}/.zshrc" >/dev/null 2>&1 || true
-            eval ${JSON.stringify(sanitizedCommand)}
+            eval ${JSON.stringify(input.command)}
           `,
         ],
       },
@@ -1620,25 +1618,25 @@ NOTE: At any point in time through this workflow you should feel free to ask the
           `
             shopt -s expand_aliases
             [[ -f ~/.bashrc ]] && source ~/.bashrc >/dev/null 2>&1 || true
-            eval ${JSON.stringify(sanitizedCommand)}
+            eval ${JSON.stringify(input.command)}
           `,
         ],
       },
       // Windows cmd
       cmd: {
-        args: ["/c", sanitizedCommand],
+        args: ["/c", input.command],
       },
       // Windows PowerShell
       powershell: {
-        args: ["-NoProfile", "-Command", sanitizedCommand],
+        args: ["-NoProfile", "-Command", input.command],
       },
       pwsh: {
-        args: ["-NoProfile", "-Command", sanitizedCommand],
+        args: ["-NoProfile", "-Command", input.command],
       },
       // Fallback: any shell that doesn't match those above
       //  - No -l, for max compatibility
       "": {
-        args: ["-c", `${sanitizedCommand}`],
+        args: ["-c", `${input.command}`],
       },
     }
 
