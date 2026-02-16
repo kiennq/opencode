@@ -46,19 +46,34 @@ export namespace Vcs {
       let current = await currentBranch()
       log.info("initialized", { branch: current })
 
+      // Debounce branch checks - only check at most once per 500ms
+      let debounceTimer: ReturnType<typeof setTimeout> | undefined
+      const debouncedCheck = () => {
+        if (debounceTimer) return
+        debounceTimer = setTimeout(async () => {
+          debounceTimer = undefined
+          const next = await currentBranch()
+          if (next !== current) {
+            log.info("branch changed", { from: current, to: next })
+            current = next
+            Bus.publish(Event.BranchUpdated, { branch: next })
+          }
+        }, 500)
+      }
+
       const unsubscribe = Bus.subscribe(FileWatcher.Event.Updated, async (evt) => {
+        // Only check on git-related file changes
+        if (!evt.properties.file.includes(".git")) return
         if (evt.properties.file.endsWith("HEAD")) return
-        const next = await currentBranch()
-        if (next !== current) {
-          log.info("branch changed", { from: current, to: next })
-          current = next
-          Bus.publish(Event.BranchUpdated, { branch: next })
-        }
+        debouncedCheck()
       })
 
       return {
         branch: async () => current,
-        unsubscribe,
+        unsubscribe: () => {
+          unsubscribe()
+          if (debounceTimer) clearTimeout(debounceTimer)
+        },
       }
     },
     async (state) => {

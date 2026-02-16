@@ -12,6 +12,7 @@ export interface ACPSessionState {
   }
   variant?: string
   modeId?: string
+  abortController?: AbortController
 }
 
 export interface ACPConfig {

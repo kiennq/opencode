@@ -342,10 +342,11 @@ export namespace Config {
   }
 
   function rel(item: string, patterns: string[]) {
+    const normalized = Filesystem.normalize(item)
     for (const pattern of patterns) {
-      const index = item.indexOf(pattern)
+      const index = normalized.indexOf(pattern)
       if (index === -1) continue
-      return item.slice(index + pattern.length)
+      return normalized.slice(index + pattern.length)
     }
   }
 
@@ -1180,8 +1181,75 @@ export namespace Config {
             .min(0)
             .optional()
             .describe("Token buffer for compaction. Leaves enough window to avoid overflow during compaction."),
+          token_threshold: z
+            .number()
+            .int()
+            .positive()
+            .optional()
+            .describe("Trigger compaction when total token count exceeds this absolute number"),
+          context_threshold: z
+            .number()
+            .gt(0)
+            .lte(1)
+            .optional()
+            .describe(
+              "Trigger compaction when token usage exceeds this fraction of the model context window (e.g. 0.8 = 80%)",
+            ),
+          min_messages: z
+            .number()
+            .int()
+            .positive()
+            .optional()
+            .describe("Minimum number of messages to wait before next compaction (default: 5)"),
+          models: z
+            .record(
+              z.string(),
+              z.object({
+                token_threshold: z.number().int().positive().optional(),
+                context_threshold: z.number().gt(0).lte(1).optional(),
+                min_messages: z.number().int().positive().optional(),
+              }),
+            )
+            .optional()
+            .describe("Model-specific compaction thresholds (key: provider/model)"),
         })
         .optional(),
+      pruning: z
+        .object({
+          enabled: z.boolean().optional().describe("Enable smart pruning (default: true)"),
+          budgets: z
+            .object({
+              content: z
+                .number()
+                .optional()
+                .describe("Token budget for content tools like read/webfetch (default: 60000)"),
+              navigation: z
+                .number()
+                .optional()
+                .describe("Token budget for navigation tools like grep/glob (default: 15000)"),
+            })
+            .optional(),
+          summarization: z
+            .object({
+              enabled: z.boolean().optional().describe("Enable LLM summarization for content tools (default: true)"),
+              model: z
+                .string()
+                .optional()
+                .describe("Model to use for summarization (default: uses small_model or provider's small model)"),
+            })
+            .optional(),
+          contentTools: z
+            .array(z.string())
+            .optional()
+            .describe("Additional tools to treat as content tools (high priority)"),
+          navigationTools: z
+            .array(z.string())
+            .optional()
+            .describe("Additional tools to treat as navigation tools (low priority)"),
+          protectedTools: z.array(z.string()).optional().describe("Tools that should never be pruned"),
+        })
+        .optional()
+        .describe("Smart pruning configuration for tiered tool output management"),
       experimental: z
         .object({
           disable_paste_summary: z.boolean().optional(),
