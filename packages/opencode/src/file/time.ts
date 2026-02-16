@@ -67,4 +67,10 @@ export namespace FileTime {
       )
     }
   }
+
+  export function clearSession(sessionID: string) {
+    const current = state()
+    delete current.read[sessionID]
+    log.info("cleared session", { sessionID })
+  }
 }

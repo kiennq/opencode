@@ -476,8 +476,7 @@ export const SessionRoutes = lazy(() =>
       ),
       async (c) => {
         const sessionID = c.req.valid("param").sessionID
-        await Session.unshare(sessionID)
-        const session = await Session.get(sessionID)
+        const session = await Session.unshare(sessionID)
         return c.json(session)
       },
     )
@@ -517,8 +516,8 @@ export const SessionRoutes = lazy(() =>
         const sessionID = c.req.valid("param").sessionID
         const body = c.req.valid("json")
         const session = await Session.get(sessionID)
-        await SessionRevert.cleanup(session)
-        const msgs = await Session.messages({ sessionID })
+        const cleanedMsgs = await SessionRevert.cleanup(session)
+        const msgs = cleanedMsgs ?? (await Session.messages({ sessionID }))
         let currentAgent = await Agent.defaultAgent()
         for (let i = msgs.length - 1; i >= 0; i--) {
           const info = msgs[i].info
@@ -538,6 +537,40 @@ export const SessionRoutes = lazy(() =>
         })
         await SessionPrompt.loop({ sessionID })
         return c.json(true)
+      },
+    )
+    .post(
+      "/:sessionID/resume",
+      describeRoute({
+        summary: "Resume session",
+        description: "Resume processing a session that has pending messages without creating a new user message.",
+        operationId: "session.resume",
+        responses: {
+          200: {
+            description: "Resumed session",
+            content: {
+              "application/json": {
+                schema: resolver(z.boolean()),
+              },
+            },
+          },
+          ...errors(400, 404),
+        },
+      }),
+      validator(
+        "param",
+        z.object({
+          sessionID: z.string().meta({ description: "Session ID" }),
+        }),
+      ),
+      async (c) => {
+        const sessionID = c.req.valid("param").sessionID
+        c.status(200)
+        c.header("Content-Type", "application/json")
+        return stream(c, async (stream) => {
+          const msg = await SessionPrompt.loop({ sessionID })
+          stream.write(JSON.stringify(msg))
+        })
       },
     )
     .get(
@@ -567,7 +600,7 @@ export const SessionRoutes = lazy(() =>
       validator(
         "query",
         z.object({
-          limit: z.coerce.number().optional(),
+          limit: z.coerce.number().optional().meta({ description: "Maximum number of messages to return" }),
         }),
       ),
       async (c) => {
