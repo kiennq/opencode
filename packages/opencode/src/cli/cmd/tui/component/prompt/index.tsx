@@ -886,11 +886,14 @@ export function Prompt(props: PromptProps) {
                 }
                 if (store.mode === "normal") autocomplete.onKeyDown(e)
                 if (!autocomplete.visible) {
+                  const historyPrevious = keybind.match("history_previous", e)
+                  const historyNext = keybind.match("history_next", e)
                   if (
-                    (keybind.match("history_previous", e) && input.cursorOffset === 0) ||
-                    (keybind.match("history_next", e) && input.cursorOffset === input.plainText.length)
+                    !keybind.leader &&
+                    ((historyPrevious && input.cursorOffset === 0) ||
+                      (historyNext && input.cursorOffset === input.plainText.length))
                   ) {
-                    const direction = keybind.match("history_previous", e) ? -1 : 1
+                    const direction = historyPrevious ? -1 : 1
                     const item = history.move(direction, input.plainText)
 
                     if (item) {
@@ -905,9 +908,16 @@ export function Prompt(props: PromptProps) {
                     return
                   }
 
-                  if (keybind.match("history_previous", e) && input.visualCursor.visualRow === 0) input.cursorOffset = 0
-                  if (keybind.match("history_next", e) && input.visualCursor.visualRow === input.height - 1)
+                  if (!keybind.leader && historyPrevious && input.visualCursor.visualRow === 0) {
+                    input.cursorOffset = 0
+                    e.preventDefault()
+                    return
+                  }
+                  if (!keybind.leader && historyNext && input.visualCursor.visualRow === input.height - 1) {
                     input.cursorOffset = input.plainText.length
+                    e.preventDefault()
+                    return
+                  }
                 }
               }}
               onSubmit={submit}
