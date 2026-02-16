@@ -6,6 +6,7 @@ import DESCRIPTION from "./grep.txt"
 import { Instance } from "../project/instance"
 import path from "path"
 import { assertExternalDirectory } from "./external-directory"
+import { Filesystem } from "../util/filesystem"
 
 const MAX_LINE_LENGTH = 2000
 
@@ -33,7 +34,7 @@ export const GrepTool = Tool.define("grep", {
     })
 
     let searchPath = params.path ?? Instance.directory
-    searchPath = path.isAbsolute(searchPath) ? searchPath : path.resolve(Instance.directory, searchPath)
+    searchPath = path.isAbsolute(searchPath) ? Filesystem.normalize(searchPath) : Filesystem.resolve(Instance.directory, searchPath)
     await assertExternalDirectory(ctx, searchPath, { kind: "directory" })
 
     const rgPath = await Ripgrep.filepath()
@@ -49,8 +50,10 @@ export const GrepTool = Tool.define("grep", {
       signal: ctx.abort,
     })
 
-    const output = await new Response(proc.stdout).text()
-    const errorOutput = await new Response(proc.stderr).text()
+    const [output, errorOutput] = await Promise.all([
+      Bun.readableStreamToText(proc.stdout),
+      Bun.readableStreamToText(proc.stderr),
+    ])
     const exitCode = await proc.exited
 
     // Exit codes: 0 = matches found, 1 = no matches, 2 = errors (but may still have matches)
@@ -72,7 +75,7 @@ export const GrepTool = Tool.define("grep", {
 
     // Handle both Unix (\n) and Windows (\r\n) line endings
     const lines = output.trim().split(/\r?\n/)
-    const matches = []
+    const parsed = []
 
     for (const line of lines) {
       if (!line) continue
@@ -80,20 +83,26 @@ export const GrepTool = Tool.define("grep", {
       const [filePath, lineNumStr, ...lineTextParts] = line.split("|")
       if (!filePath || !lineNumStr || lineTextParts.length === 0) continue
 
-      const lineNum = parseInt(lineNumStr, 10)
-      const lineText = lineTextParts.join("|")
-
-      const file = Bun.file(filePath)
-      const stats = await file.stat().catch(() => null)
-      if (!stats) continue
-
-      matches.push({
+      parsed.push({
         path: filePath,
-        modTime: stats.mtime.getTime(),
-        lineNum,
-        lineText,
+        lineNum: parseInt(lineNumStr, 10),
+        lineText: lineTextParts.join("|"),
       })
     }
+
+    const results = await Promise.all(
+      parsed.map(async (item) => {
+        const stats = await Bun.file(item.path)
+          .stat()
+          .catch(() => null)
+        if (!stats) return null
+        return {
+          ...item,
+          modTime: stats.mtime.getTime(),
+        }
+      }),
+    )
+    const matches = results.filter((x): x is NonNullable<typeof x> => x !== null)
 
     matches.sort((a, b) => b.modTime - a.modTime)
 
