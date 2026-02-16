@@ -13,6 +13,10 @@ import { proxied } from "@/util/proxied"
 export namespace BunProc {
   const log = Log.create({ service: "bun" })
 
+  export function isGitUrl(pkg: string) {
+    return pkg.startsWith("github:") || pkg.startsWith("git+") || pkg.startsWith("git://")
+  }
+
   interface PackageJson {
     dependencies?: Record<string, string>
     opencode?: {
@@ -122,9 +126,10 @@ export namespace BunProc {
       await Bun.write(pkgJsonPath, "{}")
     }
 
-    // github:user/repo — the module name is the package.json "name" from the
+    // github:user/repo, git+https://..., git://... — the module name is the package.json "name" from the
     // repo, not the repo name. Look up by dependency value to find the cached name.
-    if (pkg.startsWith("github:")) {
+    // Always reinstall git URLs to fetch latest commits
+    if (isGitUrl(pkg)) {
       const parsed = await readPackageJson()
       const deps = parsed.dependencies ?? {}
       const name = Object.keys(deps).find((k) => deps[k] === pkg)
