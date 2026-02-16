@@ -493,7 +493,7 @@ export namespace Provider {
             ...(providerConfig?.options?.featureFlags || {}),
           },
         },
-        async getModel(sdk: ReturnType<typeof createGitLab>, modelID: string) {
+        async getModel(sdk: any, modelID: string) {
           return sdk.agenticChat(modelID, {
             aiGatewayHeaders,
             featureFlags: {
@@ -773,7 +773,6 @@ export namespace Provider {
     const modelLoaders: {
       [providerID: string]: CustomModelLoader
     } = {}
-    const sdk = new Map<number, SDK>()
 
     log.info("init")
 
@@ -1028,7 +1027,7 @@ export namespace Provider {
     return {
       models: languages,
       providers,
-      sdk,
+      sdk: new Map(),
       modelLoaders,
     }
   })
@@ -1122,7 +1121,7 @@ export namespace Provider {
 
       let installedPath: string
       if (!model.api.npm.startsWith("file://")) {
-        installedPath = await BunProc.install(model.api.npm, "latest")
+        installedPath = await BunProc.install(model.api.npm, "latest", model.providerID)
       } else {
         log.info("loading local provider", { pkg: model.api.npm })
         installedPath = model.api.npm
