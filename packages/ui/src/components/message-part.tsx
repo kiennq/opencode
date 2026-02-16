@@ -43,7 +43,7 @@ import { DiffChanges } from "./diff-changes"
 import { Markdown } from "./markdown"
 import { ImagePreview } from "./image-preview"
 import { findLast } from "@opencode-ai/util/array"
-import { getDirectory as _getDirectory, getFilename } from "@opencode-ai/util/path"
+import { getDirectory as _getDirectory, getFilename, normalize } from "@opencode-ai/util/path"
 import { checksum } from "@opencode-ai/util/encode"
 import { Tooltip } from "./tooltip"
 import { IconButton } from "./icon-button"
@@ -64,7 +64,8 @@ function getDiagnostics(
   filePath: string | undefined,
 ): Diagnostic[] {
   if (!diagnosticsByFile || !filePath) return []
-  const diagnostics = diagnosticsByFile[filePath] ?? []
+  const normalized = normalize(filePath)
+  const diagnostics = diagnosticsByFile[normalized] ?? diagnosticsByFile[filePath] ?? []
   return diagnostics.filter((d) => d.severity === 1).slice(0, 3)
 }
 
@@ -224,6 +225,12 @@ export function getToolInfo(tool: string, input: any = {}): ToolInfo {
       return {
         icon: "console",
         title: i18n.t("ui.tool.shell"),
+        subtitle: input.description,
+      }
+    case "pwsh":
+      return {
+        icon: "console",
+        title: i18n.t("ui.tool.powershell"),
         subtitle: input.description,
       }
     case "edit":
@@ -1092,6 +1099,29 @@ ToolRegistry.register({
         <div data-component="tool-output" data-scrollable>
           <Markdown
             text={`\`\`\`command\n$ ${props.input.command ?? props.metadata.command ?? ""}${props.output || props.metadata.output ? "\n\n" + stripAnsi(props.output || props.metadata.output) : ""}\n\`\`\``}
+          />
+        </div>
+      </BasicTool>
+    )
+  },
+})
+
+ToolRegistry.register({
+  name: "pwsh",
+  render(props) {
+    const i18n = useI18n()
+    return (
+      <BasicTool
+        {...props}
+        icon="console"
+        trigger={{
+          title: i18n.t("ui.tool.powershell"),
+          subtitle: props.input.description,
+        }}
+      >
+        <div data-component="tool-output" data-scrollable>
+          <Markdown
+            text={`\`\`\`command\nPS> ${props.input.command ?? props.metadata.command ?? ""}${props.output || props.metadata.output ? "\n\n" + stripAnsi(props.output || props.metadata.output) : ""}\n\`\`\``}
           />
         </div>
       </BasicTool>

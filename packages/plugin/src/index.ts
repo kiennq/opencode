@@ -29,6 +29,7 @@ export type PluginInput = {
   directory: string
   worktree: string
   serverUrl: URL
+  version: string
   $: BunShell
 }
 
@@ -146,6 +147,7 @@ export type AuthOuathResult = { url: string; instructions: string } & (
 )
 
 export interface Hooks {
+  dispose?: () => Promise<void> | void
   event?: (input: { event: Event }) => Promise<void>
   config?: (input: Config) => Promise<void>
   tool?: {
