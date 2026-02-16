@@ -59,7 +59,7 @@ export namespace Agent {
       external_directory: {
         "*": "ask",
         [Truncate.GLOB]: "allow",
-        ...Object.fromEntries(skillDirs.map((dir) => [path.join(dir, "*"), "allow"])),
+        ...Object.fromEntries(skillDirs.map((dir) => [Filesystem.join(dir, "*"), "allow"])),
       },
       question: "deny",
       plan_enter: "deny",
