@@ -105,7 +105,10 @@ export namespace Agent {
             edit: {
               "*": "deny",
               [Filesystem.join(".opencode", "plans", "*.md")]: "allow",
-              [Filesystem.relative(Instance.worktree, Filesystem.join(Global.Path.data, Filesystem.join("plans", "*.md")))]: "allow",
+              [Filesystem.relative(
+                Instance.worktree,
+                Filesystem.join(Global.Path.data, Filesystem.join("plans", "*.md")),
+              )]: "allow",
             },
           }),
           user,
