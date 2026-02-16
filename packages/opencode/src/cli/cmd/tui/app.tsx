@@ -3,7 +3,19 @@ import { Clipboard } from "@tui/util/clipboard"
 import { Selection } from "@tui/util/selection"
 import { MouseButton, TextAttributes } from "@opentui/core"
 import { RouteProvider, useRoute } from "@tui/context/route"
-import { Switch, Match, createEffect, untrack, ErrorBoundary, createSignal, onMount, batch, Show, on } from "solid-js"
+import {
+  Switch,
+  Match,
+  createEffect,
+  untrack,
+  ErrorBoundary,
+  createSignal,
+  onMount,
+  onCleanup,
+  batch,
+  Show,
+  on,
+} from "solid-js"
 import { win32DisableProcessedInput, win32FlushInputBuffer, win32InstallCtrlCGuard } from "./win32"
 import { Installation } from "@/installation"
 import { Flag } from "@/flag/flag"
@@ -53,7 +65,7 @@ async function getTerminalBackgroundColor(): Promise<"dark" | "light"> {
     }
 
     const handler = (data: Buffer) => {
-      const str = data.toString()
+      const str = data.toString("utf8")
       const match = str.match(/\x1b]11;([^\x07\x1b]+)/)
       if (match) {
         cleanup()
@@ -240,6 +252,13 @@ function App() {
     renderer.clearSelection()
   })
 
+  // Handle SIGINT (Ctrl+C) to properly cleanup renderer on Windows
+  // Without this, the 60 FPS render loop continues outputting ANSI sequences
+  onMount(() => {
+    const handleSigint = () => exit()
+    process.on("SIGINT", handleSigint)
+    onCleanup(() => process.off("SIGINT", handleSigint))
+  })
   // Wire up console copy-to-clipboard via opentui's onCopySelection callback
   renderer.console.onCopySelection = async (text: string) => {
     if (!text || text.length === 0) return
@@ -592,11 +611,160 @@ function App() {
       title: "Write heap snapshot",
       category: "System",
       value: "app.heap_snapshot",
-      onSelect: (dialog) => {
-        const path = writeHeapSnapshot()
+      onSelect: async (dialog) => {
+        // Force GC first
+        Bun.gc(true)
+
+        const lines: string[] = []
+        const log = (msg: string) => lines.push(msg)
+
+        log("=== MEMORY STATS ===")
+        log(`Timestamp: ${new Date().toISOString()}`)
+        log(`PID: ${process.pid}`)
+
+        // Get OS-level memory via PowerShell (Windows) or ps (Unix)
+        log("\n--- OS Memory (Task Manager) ---")
+        try {
+          const pid = process.pid
+          const isWindows = process.platform === "win32"
+          const cmd = isWindows
+            ? ["powershell", "-nop", "-c", `(Get-Process -Id ${pid}).WorkingSet64 / 1MB`]
+            : ["ps", "-o", "rss=", "-p", String(pid)]
+          const result = Bun.spawnSync(cmd)
+          const output = result.stdout.toString().trim()
+          if (isWindows) {
+            log(`Working Set: ${parseFloat(output).toFixed(2)} MB`)
+          } else {
+            log(`RSS (ps): ${(parseInt(output) / 1024).toFixed(2)} MB`)
+          }
+        } catch (e) {
+          log(`Could not get OS memory: ${e}`)
+        }
+
+        // Get process memory (RSS = actual memory usage)
+        const memUsage = process.memoryUsage()
+        log("\n--- Process Memory (Node API) ---")
+        log(`RSS: ${(memUsage.rss / 1024 / 1024).toFixed(2)} MB`)
+        log(`Heap total: ${(memUsage.heapTotal / 1024 / 1024).toFixed(2)} MB`)
+        log(`Heap used: ${(memUsage.heapUsed / 1024 / 1024).toFixed(2)} MB`)
+        log(`External: ${(memUsage.external / 1024 / 1024).toFixed(2)} MB`)
+        log(`Array buffers: ${(memUsage.arrayBuffers / 1024 / 1024).toFixed(2)} MB`)
+
+        // Get Bun GC stats
+        const gc = Bun.gc(false)
+        log("\n--- Bun GC Stats ---")
+        log(`Heap size: ${((gc as any).heapSize / 1024 / 1024).toFixed(2)} MB`)
+        log(`Heap capacity: ${((gc as any).heapCapacity / 1024 / 1024).toFixed(2)} MB`)
+        log(`External memory: ${(((gc as any).extraMemorySize ?? 0) / 1024 / 1024).toFixed(2)} MB`)
+        log(`Object count: ${(gc as any).objectCount?.toLocaleString()}`)
+
+        // Log object type counts
+        const typeCounts = (gc as any).objectTypeCounts
+        if (typeCounts) {
+          log("\n--- Top Object Types by Count ---")
+          const sorted = Object.entries(typeCounts)
+            .sort((a, b) => (b[1] as number) - (a[1] as number))
+            .slice(0, 30)
+          for (const [type, count] of sorted) {
+            log(`  ${type}: ${(count as number).toLocaleString()}`)
+          }
+        }
+
+        // Log store sizes
+        log("\n--- Sync Store Sizes ---")
+        const syncData = sync.data
+        log(`Sessions: ${syncData.session.length}`)
+
+        // Session diffs analysis
+        log("\n--- Session Diffs ---")
+        log(`Session diff entries: ${Object.keys(syncData.session_diff).length}`)
+        let totalDiffSize = 0
+        let totalDiffFiles = 0
+        for (const [sid, diffs] of Object.entries(syncData.session_diff)) {
+          let sessionDiffSize = 0
+          for (const diff of diffs) {
+            sessionDiffSize += (diff.before?.length ?? 0) + (diff.after?.length ?? 0)
+          }
+          totalDiffFiles += diffs.length
+          if (sessionDiffSize > 100000) {
+            log(`  ${sid}: ${(sessionDiffSize / 1024 / 1024).toFixed(2)} MB (${diffs.length} files)`)
+          }
+          totalDiffSize += sessionDiffSize
+        }
+        log(`Total: ${totalDiffFiles} files, ${(totalDiffSize / 1024 / 1024).toFixed(2)} MB`)
+
+        // Messages analysis
+        log("\n--- Messages ---")
+        let totalMessages = 0
+        let totalMsgSize = 0
+        let totalSummaryDiffSize = 0
+        for (const [sid, msgs] of Object.entries(syncData.message)) {
+          let sessionMsgSize = 0
+          let sessionSummaryDiffSize = 0
+          for (const msg of msgs) {
+            const msgJson = JSON.stringify(msg)
+            sessionMsgSize += msgJson.length
+            if (msg.role === "user" && msg.summary?.diffs) {
+              for (const diff of msg.summary.diffs) {
+                sessionSummaryDiffSize += (diff.before?.length ?? 0) + (diff.after?.length ?? 0)
+              }
+            }
+          }
+          totalMessages += msgs.length
+          totalMsgSize += sessionMsgSize
+          totalSummaryDiffSize += sessionSummaryDiffSize
+          if (msgs.length > 0 || sessionMsgSize > 100000) {
+            log(
+              `  ${sid}: ${msgs.length} msgs, ${(sessionMsgSize / 1024).toFixed(1)} KB${sessionSummaryDiffSize > 0 ? `, summary diffs: ${(sessionSummaryDiffSize / 1024).toFixed(1)} KB` : ""}`,
+            )
+          }
+        }
+        log(`Total: ${totalMessages} messages, ${(totalMsgSize / 1024 / 1024).toFixed(2)} MB`)
+        log(`Summary diffs content: ${(totalSummaryDiffSize / 1024 / 1024).toFixed(2)} MB`)
+
+        // Parts analysis
+        log("\n--- Parts ---")
+        let totalParts = 0
+        let totalPartSize = 0
+        let largePartCount = 0
+        for (const [mid, parts] of Object.entries(syncData.part)) {
+          for (const part of parts) {
+            const partSize = JSON.stringify(part).length
+            totalPartSize += partSize
+            totalParts++
+            if (partSize > 100000) {
+              largePartCount++
+              log(`  ${mid}/${part.id}: ${(partSize / 1024).toFixed(1)} KB (${part.type})`)
+            }
+          }
+        }
+        log(`Total: ${totalParts} parts, ${(totalPartSize / 1024 / 1024).toFixed(2)} MB`)
+        if (largePartCount > 0) log(`Large parts (>100KB): ${largePartCount}`)
+
+        // Other store entries
+        log("\n--- Other Store Data ---")
+        log(`Providers: ${syncData.provider.length}`)
+        log(`Agents: ${syncData.agent.length}`)
+        log(`Commands: ${syncData.command.length}`)
+        log(`LSP status: ${syncData.lsp.length}`)
+        log(`MCP servers: ${Object.keys(syncData.mcp).length}`)
+        log(`Formatter status: ${syncData.formatter.length}`)
+        log(`Todo lists: ${Object.keys(syncData.todo).length}`)
+        log(`Permission requests: ${Object.keys(syncData.permission).length}`)
+        log(`Question requests: ${Object.keys(syncData.question).length}`)
+
+        // Write snapshot
+        const snapshotPath = writeHeapSnapshot()
+        log(`\n--- Heap Snapshot ---`)
+        log(`Path: ${snapshotPath}`)
+
+        // Write stats to file next to snapshot
+        const statsPath = snapshotPath.replace(".heapsnapshot", ".stats.txt")
+        await Bun.write(statsPath, lines.join("\n"))
+
         toast.show({
           variant: "info",
-          message: `Heap snapshot written to ${path}`,
+          message: `Heap snapshot: ${snapshotPath}`,
           duration: 5000,
         })
         dialog.clear()
@@ -668,66 +836,78 @@ function App() {
     }
   })
 
-  sdk.event.on(TuiEvent.CommandExecute.type, (evt) => {
-    command.trigger(evt.properties.command)
-  })
+  onCleanup(
+    sdk.event.on(TuiEvent.CommandExecute.type, (evt) => {
+      command.trigger(evt.properties.command)
+    }),
+  )
 
-  sdk.event.on(TuiEvent.ToastShow.type, (evt) => {
-    toast.show({
-      title: evt.properties.title,
-      message: evt.properties.message,
-      variant: evt.properties.variant,
-      duration: evt.properties.duration,
-    })
-  })
+  onCleanup(
+    sdk.event.on(TuiEvent.ToastShow.type, (evt) => {
+      toast.show({
+        title: evt.properties.title,
+        message: evt.properties.message,
+        variant: evt.properties.variant,
+        duration: evt.properties.duration,
+      })
+    }),
+  )
 
-  sdk.event.on(TuiEvent.SessionSelect.type, (evt) => {
-    route.navigate({
-      type: "session",
-      sessionID: evt.properties.sessionID,
-    })
-  })
+  onCleanup(
+    sdk.event.on(TuiEvent.SessionSelect.type, (evt) => {
+      route.navigate({
+        type: "session",
+        sessionID: evt.properties.sessionID,
+      })
+    }),
+  )
 
-  sdk.event.on(SessionApi.Event.Deleted.type, (evt) => {
-    if (route.data.type === "session" && route.data.sessionID === evt.properties.info.id) {
-      route.navigate({ type: "home" })
+  onCleanup(
+    sdk.event.on(SessionApi.Event.Deleted.type, (evt) => {
+      if (route.data.type === "session" && route.data.sessionID === evt.properties.info.id) {
+        route.navigate({ type: "home" })
+        toast.show({
+          variant: "info",
+          message: "The current session was deleted",
+        })
+      }
+    }),
+  )
+
+  onCleanup(
+    sdk.event.on(SessionApi.Event.Error.type, (evt) => {
+      const error = evt.properties.error
+      if (error && typeof error === "object" && error.name === "MessageAbortedError") return
+      const message = (() => {
+        if (!error) return "An error occurred"
+
+        if (typeof error === "object") {
+          const data = error.data
+          if ("message" in data && typeof data.message === "string") {
+            return data.message
+          }
+        }
+        return String(error)
+      })()
+
+      toast.show({
+        variant: "error",
+        message,
+        duration: 5000,
+      })
+    }),
+  )
+
+  onCleanup(
+    sdk.event.on(Installation.Event.UpdateAvailable.type, (evt) => {
       toast.show({
         variant: "info",
-        message: "The current session was deleted",
+        title: "Update Available",
+        message: `OpenCode v${evt.properties.version} is available. Run 'opencode upgrade' to update manually.`,
+        duration: 10000,
       })
-    }
-  })
-
-  sdk.event.on(SessionApi.Event.Error.type, (evt) => {
-    const error = evt.properties.error
-    if (error && typeof error === "object" && error.name === "MessageAbortedError") return
-    const message = (() => {
-      if (!error) return "An error occurred"
-
-      if (typeof error === "object") {
-        const data = error.data
-        if ("message" in data && typeof data.message === "string") {
-          return data.message
-        }
-      }
-      return String(error)
-    })()
-
-    toast.show({
-      variant: "error",
-      message,
-      duration: 5000,
-    })
-  })
-
-  sdk.event.on(Installation.Event.UpdateAvailable.type, (evt) => {
-    toast.show({
-      variant: "info",
-      title: "Update Available",
-      message: `OpenCode v${evt.properties.version} is available. Run 'opencode upgrade' to update manually.`,
-      duration: 10000,
-    })
-  })
+    }),
+  )
 
   return (
     <box
