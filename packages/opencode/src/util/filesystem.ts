@@ -1,11 +1,10 @@
-import { chmod, mkdir, readFile, writeFile } from "fs/promises"
-import { createWriteStream, existsSync, statSync } from "fs"
+import { mkdir, readFile, writeFile } from "fs/promises"
+import { existsSync, statSync } from "fs"
 import { lookup } from "mime-types"
 import { realpathSync } from "fs"
-import { dirname, join, relative } from "path"
-import { Readable } from "stream"
-import { pipeline } from "stream/promises"
-import { Glob } from "./glob"
+import { Flag } from "@/flag/flag"
+import path from "path"
+import { normalize as _normalize } from "@opencode-ai/util/path"
 
 export namespace Filesystem {
   // Fast sync version for metadata checks
@@ -42,16 +41,11 @@ export namespace Filesystem {
     return readFile(p)
   }
 
-  export async function readArrayBuffer(p: string): Promise<ArrayBuffer> {
-    const buf = await readFile(p)
-    return buf.buffer.slice(buf.byteOffset, buf.byteOffset + buf.byteLength) as ArrayBuffer
-  }
-
   function isEnoent(e: unknown): e is { code: "ENOENT" } {
     return typeof e === "object" && e !== null && "code" in e && (e as { code: string }).code === "ENOENT"
   }
 
-  export async function write(p: string, content: string | Buffer | Uint8Array, mode?: number): Promise<void> {
+  export async function write(p: string, content: string | Buffer, mode?: number): Promise<void> {
     try {
       if (mode) {
         await writeFile(p, content, { mode })
@@ -76,25 +70,6 @@ export namespace Filesystem {
     return write(p, JSON.stringify(data, null, 2), mode)
   }
 
-  export async function writeStream(
-    p: string,
-    stream: ReadableStream<Uint8Array> | Readable,
-    mode?: number,
-  ): Promise<void> {
-    const dir = dirname(p)
-    if (!existsSync(dir)) {
-      await mkdir(dir, { recursive: true })
-    }
-
-    const nodeStream = stream instanceof ReadableStream ? Readable.fromWeb(stream as any) : stream
-    const writeStream = createWriteStream(p)
-    await pipeline(nodeStream, writeStream)
-
-    if (mode) {
-      await chmod(p, mode)
-    }
-  }
-
   export function mimeType(p: string): string {
     return lookup(p) || "application/octet-stream"
   }
@@ -104,13 +79,38 @@ export namespace Filesystem {
    * This is needed because Windows paths are case-insensitive but LSP servers
    * may return paths with different casing than what we send them.
    */
-  export function normalizePath(p: string): string {
+  export function realpath(p: string): string {
     if (process.platform !== "win32") return p
     try {
-      return realpathSync.native(p)
+      return normalize(realpathSync.native(p))
     } catch {
       return p
     }
+  }
+
+  /**
+   * Normalize a path to use forward slashes on all platforms.
+   * On Windows, also convert MSYS and Cygwin style paths to Windows drive letter paths.
+   */
+  export function normalize(p: string): string {
+    if (process.platform !== "win32") return p
+    return _normalize(p)
+  }
+
+  export function relative(from: string, to: string) {
+    return normalize(path.relative(normalize(from), normalize(to)))
+  }
+
+  export function resolve(...segments: string[]) {
+    return normalize(path.resolve(...segments))
+  }
+
+  export function join(...segments: string[]) {
+    return normalize(path.join(...segments))
+  }
+
+  export function dirname(p: string) {
+    return normalize(path.dirname(p))
   }
 
   export function overlaps(a: string, b: string) {
@@ -120,7 +120,8 @@ export namespace Filesystem {
   }
 
   export function contains(parent: string, child: string) {
-    return !relative(parent, child).startsWith("..")
+    const path = relative(parent, child)
+    return !/^\.\.|.:/.test(path)
   }
 
   export async function findUp(target: string, start: string, stop?: string) {
@@ -157,13 +158,16 @@ export namespace Filesystem {
     const result = []
     while (true) {
       try {
-        const matches = await Glob.scan(pattern, {
+        const glob = new Bun.Glob(pattern)
+        for await (const match of glob.scan({
           cwd: current,
           absolute: true,
-          include: "file",
+          onlyFiles: true,
+          followSymlinks: true,
           dot: true,
-        })
-        result.push(...matches)
+        })) {
+          result.push(match)
+        }
       } catch {
         // Skip invalid glob patterns
       }

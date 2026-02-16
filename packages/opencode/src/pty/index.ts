@@ -174,7 +174,7 @@ export namespace Pty {
     const spawn = await pty()
     const ptyProcess = spawn(command, args, {
       name: "xterm-256color",
-      cwd,
+      cwd: normalizedCwd,
       env,
     })
 
@@ -183,7 +183,7 @@ export namespace Pty {
       title: input.title || `Terminal ${id.slice(-4)}`,
       command,
       args,
-      cwd,
+      cwd: normalizedCwd,
       status: "running",
       pid: ptyProcess.pid,
     } as const

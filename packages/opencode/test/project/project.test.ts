@@ -6,6 +6,7 @@ import path from "path"
 import { tmpdir } from "../fixture/fixture"
 import { Filesystem } from "../../src/util/filesystem"
 import { GlobalBus } from "../../src/bus/global"
+import { Filesystem } from "../../src/util/filesystem"
 
 Log.init({ print: false })
 
@@ -76,7 +77,7 @@ describe("Project.fromDirectory", () => {
     expect(project).toBeDefined()
     expect(project.id).toBe("global")
     expect(project.vcs).toBe("git")
-    expect(project.worktree).toBe(tmp.path)
+    expect(project.worktree).toBe(Filesystem.normalize(tmp.path))
 
     const opencodeFile = path.join(tmp.path, ".git", "opencode")
     const fileExists = await Filesystem.exists(opencodeFile)
@@ -92,7 +93,7 @@ describe("Project.fromDirectory", () => {
     expect(project).toBeDefined()
     expect(project.id).not.toBe("global")
     expect(project.vcs).toBe("git")
-    expect(project.worktree).toBe(tmp.path)
+    expect(project.worktree).toBe(Filesystem.normalize(tmp.path))
 
     const opencodeFile = path.join(tmp.path, ".git", "opencode")
     const fileExists = await Filesystem.exists(opencodeFile)
@@ -144,9 +145,9 @@ describe("Project.fromDirectory with worktrees", () => {
 
     const { project, sandbox } = await p.fromDirectory(tmp.path)
 
-    expect(project.worktree).toBe(tmp.path)
-    expect(sandbox).toBe(tmp.path)
-    expect(project.sandboxes).not.toContain(tmp.path)
+    expect(project.worktree).toBe(Filesystem.normalize(tmp.path))
+    expect(sandbox).toBe(Filesystem.normalize(tmp.path))
+    expect(project.sandboxes).not.toContain(Filesystem.normalize(tmp.path))
   })
 
   test("should set worktree to root when called from a worktree", async () => {
@@ -159,10 +160,10 @@ describe("Project.fromDirectory with worktrees", () => {
 
       const { project, sandbox } = await p.fromDirectory(worktreePath)
 
-      expect(project.worktree).toBe(tmp.path)
-      expect(sandbox).toBe(worktreePath)
-      expect(project.sandboxes).toContain(worktreePath)
-      expect(project.sandboxes).not.toContain(tmp.path)
+      expect(project.worktree).toBe(Filesystem.normalize(tmp.path))
+      expect(sandbox).toBe(Filesystem.normalize(worktreePath))
+      expect(project.sandboxes).toContain(Filesystem.normalize(worktreePath))
+      expect(project.sandboxes).not.toContain(Filesystem.normalize(tmp.path))
     } finally {
       await $`git worktree remove ${worktreePath}`
         .cwd(tmp.path)
@@ -184,10 +185,10 @@ describe("Project.fromDirectory with worktrees", () => {
       await p.fromDirectory(worktree1)
       const { project } = await p.fromDirectory(worktree2)
 
-      expect(project.worktree).toBe(tmp.path)
-      expect(project.sandboxes).toContain(worktree1)
-      expect(project.sandboxes).toContain(worktree2)
-      expect(project.sandboxes).not.toContain(tmp.path)
+      expect(project.worktree).toBe(Filesystem.normalize(tmp.path))
+      expect(project.sandboxes).toContain(Filesystem.normalize(worktree1))
+      expect(project.sandboxes).toContain(Filesystem.normalize(worktree2))
+      expect(project.sandboxes).not.toContain(Filesystem.normalize(tmp.path))
     } finally {
       await $`git worktree remove ${worktree1}`
         .cwd(tmp.path)

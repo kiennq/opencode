@@ -286,124 +286,72 @@ describe("filesystem", () => {
     })
   })
 
-  describe("writeStream()", () => {
-    test("writes from Web ReadableStream", async () => {
-      await using tmp = await tmpdir()
-      const filepath = path.join(tmp.path, "streamed.txt")
-      const content = "Hello from stream!"
-      const encoder = new TextEncoder()
-      const stream = new ReadableStream({
-        start(controller) {
-          controller.enqueue(encoder.encode(content))
-          controller.close()
-        },
-      })
+  test("normalize() normalizes separators to forward slashes", () => {
+    if (process.platform === "win32") {
+      expect(Filesystem.normalize("C:/foo/bar")).toBe("C:/foo/bar")
+      expect(Filesystem.normalize("C:\\foo\\bar")).toBe("C:/foo/bar")
+      expect(Filesystem.normalize("/c/foo/bar")).toBe("C:/foo/bar")
+      expect(Filesystem.normalize("/cygdrive/c/foo/bar")).toBe("C:/foo/bar")
+      expect(Filesystem.normalize("/d/mixed\\path")).toBe("D:/mixed/path")
+    } else {
+      expect(Filesystem.normalize("/foo/bar")).toBe("/foo/bar")
+      expect(Filesystem.normalize("/c/foo/bar")).toBe("/c/foo/bar")
+    }
+  })
 
-      await Filesystem.writeStream(filepath, stream)
+  test("relative() with mixed separators", () => {
+    if (process.platform === "win32") {
+      expect(Filesystem.relative("C:/foo/bar", "C:/foo/baz")).toMatch(/^\.\./)
+      expect(Filesystem.relative("C:\\foo\\bar", "C:\\foo\\bar\\sub")).toMatch(/^sub/)
+      expect(Filesystem.relative("C:/foo", "C:/foo/../../etc")).toMatch(/^\.\./)
+      expect(Filesystem.relative("C:/foo", "D:/bar")).toMatch(/^D:/)
+    } else {
+      expect(Filesystem.relative("/foo/bar", "/foo/baz")).toMatch(/^\.\./)
+      expect(Filesystem.relative("/foo", "/foo/../etc")).toMatch(/^\.\./)
+    }
+  })
 
-      expect(await fs.readFile(filepath, "utf-8")).toBe(content)
-    })
+  test("join() combines path segments", () => {
+    const result = Filesystem.join("foo", "bar", "baz.txt")
+    // Always uses forward slashes now
+    expect(result).toBe("foo/bar/baz.txt")
+  })
 
-    test("writes from Node.js Readable stream", async () => {
-      await using tmp = await tmpdir()
-      const filepath = path.join(tmp.path, "node-streamed.txt")
-      const content = "Hello from Node stream!"
-      const { Readable } = await import("stream")
-      const stream = Readable.from([content])
+  test("dirname() returns parent directory", () => {
+    expect(Filesystem.dirname(".")).toMatch(/^\.\.?$/)
+    if (process.platform === "win32") {
+      // Always uses forward slashes now
+      expect(Filesystem.dirname("\\")).toBe("/")
+      expect(Filesystem.dirname("C:/")).toBe("C:/")
+      expect(Filesystem.dirname("C:/file.txt")).toBe("C:/")
+    } else {
+      expect(Filesystem.dirname("/")).toBe("/")
+    }
+  })
 
-      await Filesystem.writeStream(filepath, stream)
+  test("contains() detects parent-child relationships", () => {
+    if (process.platform === "win32") {
+      expect(Filesystem.contains("C:/foo", "C:/foo/bar")).toBe(true)
+      expect(Filesystem.contains("C:/foo", "D:/foo/bar")).toBe(false)
+      expect(Filesystem.contains("C:/foo", "C:/foo/../etc")).toBe(false)
+    }
+    expect(Filesystem.contains("/foo", "/foo/bar/baz")).toBe(true)
+    expect(Filesystem.contains("/foo", "/bar")).toBe(false)
+  })
 
-      expect(await fs.readFile(filepath, "utf-8")).toBe(content)
-    })
+  test("findUp() finds files in parent directories", async () => {
+    const tmp = await mkdtemp(path.join(os.tmpdir(), "opencode-filesystem-"))
+    const sub = path.join(tmp, "sub", "deep")
 
-    test("writes binary data from Web ReadableStream", async () => {
-      await using tmp = await tmpdir()
-      const filepath = path.join(tmp.path, "binary.dat")
-      const binaryData = new Uint8Array([0x00, 0x01, 0x02, 0x03, 0xff])
-      const stream = new ReadableStream({
-        start(controller) {
-          controller.enqueue(binaryData)
-          controller.close()
-        },
-      })
+    await mkdir(sub, { recursive: true })
+    await Bun.write(path.join(tmp, "config.txt"), "root")
+    await Bun.write(path.join(tmp, "sub", "config.txt"), "sub")
 
-      await Filesystem.writeStream(filepath, stream)
+    const results = await Filesystem.findUp("config.txt", sub)
 
-      const read = await fs.readFile(filepath)
-      expect(Buffer.from(read)).toEqual(Buffer.from(binaryData))
-    })
+    expect(results.length).toBe(2)
+    expect(results.some((r) => r.includes("sub"))).toBe(true)
 
-    test("writes large content in chunks", async () => {
-      await using tmp = await tmpdir()
-      const filepath = path.join(tmp.path, "large.txt")
-      const chunks = ["chunk1", "chunk2", "chunk3", "chunk4", "chunk5"]
-      const stream = new ReadableStream({
-        start(controller) {
-          for (const chunk of chunks) {
-            controller.enqueue(new TextEncoder().encode(chunk))
-          }
-          controller.close()
-        },
-      })
-
-      await Filesystem.writeStream(filepath, stream)
-
-      expect(await fs.readFile(filepath, "utf-8")).toBe(chunks.join(""))
-    })
-
-    test("creates parent directories", async () => {
-      await using tmp = await tmpdir()
-      const filepath = path.join(tmp.path, "nested", "deep", "streamed.txt")
-      const content = "nested stream content"
-      const stream = new ReadableStream({
-        start(controller) {
-          controller.enqueue(new TextEncoder().encode(content))
-          controller.close()
-        },
-      })
-
-      await Filesystem.writeStream(filepath, stream)
-
-      expect(await fs.readFile(filepath, "utf-8")).toBe(content)
-    })
-
-    test("writes with permissions", async () => {
-      await using tmp = await tmpdir()
-      const filepath = path.join(tmp.path, "protected-stream.txt")
-      const content = "secret stream content"
-      const stream = new ReadableStream({
-        start(controller) {
-          controller.enqueue(new TextEncoder().encode(content))
-          controller.close()
-        },
-      })
-
-      await Filesystem.writeStream(filepath, stream, 0o600)
-
-      const stats = await fs.stat(filepath)
-      if (process.platform !== "win32") {
-        expect(stats.mode & 0o777).toBe(0o600)
-      }
-    })
-
-    test("writes executable with permissions", async () => {
-      await using tmp = await tmpdir()
-      const filepath = path.join(tmp.path, "script.sh")
-      const content = "#!/bin/bash\necho hello"
-      const stream = new ReadableStream({
-        start(controller) {
-          controller.enqueue(new TextEncoder().encode(content))
-          controller.close()
-        },
-      })
-
-      await Filesystem.writeStream(filepath, stream, 0o755)
-
-      const stats = await fs.stat(filepath)
-      if (process.platform !== "win32") {
-        expect(stats.mode & 0o777).toBe(0o755)
-      }
-      expect(await fs.readFile(filepath, "utf-8")).toBe(content)
-    })
+    await rm(tmp, { recursive: true, force: true })
   })
 })
