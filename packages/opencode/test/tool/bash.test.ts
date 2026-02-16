@@ -147,7 +147,7 @@ describe("tool.bash permissions", () => {
         const extDirReq = requests.find((r) => r.permission === "external_directory")
         expect(extDirReq).toBeDefined()
         expect(extDirReq!.patterns).toContain(Filesystem.normalize(path.join(tmpdir, "*")))
-      }
+      },
     })
   })
 
