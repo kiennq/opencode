@@ -81,7 +81,7 @@ export namespace Project {
       const dotgit = await matches.next().then((x) => x.value)
       await matches.return()
       if (dotgit) {
-        let sandbox = path.dirname(dotgit)
+        let sandbox = Filesystem.dirname(dotgit)
 
         const gitBinary = Bun.which("git")
 
@@ -143,7 +143,7 @@ export namespace Project {
         const top = await git(["rev-parse", "--show-toplevel"], {
           cwd: sandbox,
         })
-          .then(async (result) => path.resolve(sandbox, (await result.text()).trim()))
+          .then(async (result) => Filesystem.resolve(sandbox, (await result.text()).trim()))
           .catch(() => undefined)
 
         if (!top) {
@@ -161,7 +161,7 @@ export namespace Project {
           cwd: sandbox,
         })
           .then(async (result) => {
-            const dirname = path.dirname((await result.text()).trim())
+            const dirname = Filesystem.dirname((await result.text()).trim())
             if (dirname === ".") return sandbox
             return dirname
           })
