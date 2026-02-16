@@ -14,11 +14,12 @@ import PROMPT_EXPLORE from "./prompt/explore.txt"
 import PROMPT_SUMMARY from "./prompt/summary.txt"
 import PROMPT_TITLE from "./prompt/title.txt"
 import { PermissionNext } from "@/permission/next"
+import { ConfigMarkdown } from "../config/markdown"
 import { mergeDeep, pipe, sortBy, values } from "remeda"
 import { Global } from "@/global"
-import path from "path"
 import { Plugin } from "@/plugin"
 import { Skill } from "../skill"
+import { Filesystem } from "@/util/filesystem"
 
 export namespace Agent {
   export const Info = z
@@ -99,12 +100,12 @@ export namespace Agent {
             question: "allow",
             plan_exit: "allow",
             external_directory: {
-              [path.join(Global.Path.data, "plans", "*")]: "allow",
+              [Filesystem.join(Global.Path.data, "plans", "*")]: "allow",
             },
             edit: {
               "*": "deny",
-              [path.join(".opencode", "plans", "*.md")]: "allow",
-              [path.relative(Instance.worktree, path.join(Global.Path.data, path.join("plans", "*.md")))]: "allow",
+              [Filesystem.join(".opencode", "plans", "*.md")]: "allow",
+              [Filesystem.relative(Instance.worktree, Filesystem.join(Global.Path.data, Filesystem.join("plans", "*.md")))]: "allow",
             },
           }),
           user,
@@ -244,6 +245,23 @@ export namespace Agent {
         result[name].permission,
         PermissionNext.fromConfig({ external_directory: { [Truncate.GLOB]: "allow" } }),
       )
+    }
+
+    for (const skill of await Skill.all()) {
+      if (result[skill.name]) continue
+
+      try {
+        const md = await ConfigMarkdown.parse(skill.location)
+        result[skill.name] = {
+          name: skill.name,
+          description: skill.description,
+          mode: "primary",
+          permission: PermissionNext.merge(defaults, user),
+          prompt: md.content,
+          options: {},
+          native: false,
+        }
+      } catch {}
     }
 
     return result
