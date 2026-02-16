@@ -1,5 +1,4 @@
-import { sep } from "node:path"
-import { Glob } from "../util/glob"
+import { Filesystem } from "../util/filesystem"
 
 export namespace FileIgnore {
   const FOLDERS = new Set([
@@ -54,27 +53,30 @@ export namespace FileIgnore {
     "**/.nyc_output/**",
   ]
 
+  const FILE_GLOBS = FILES.map((p) => new Bun.Glob(p))
+
   export const PATTERNS = [...FILES, ...FOLDERS]
 
   export function match(
     filepath: string,
     opts?: {
-      extra?: string[]
-      whitelist?: string[]
+      extra?: Bun.Glob[]
+      whitelist?: Bun.Glob[]
     },
   ) {
-    for (const pattern of opts?.whitelist || []) {
-      if (Glob.match(pattern, filepath)) return false
+    const normalized = Filesystem.normalize(filepath)
+    for (const glob of opts?.whitelist || []) {
+      if (glob.match(normalized)) return false
     }
 
-    const parts = filepath.split(sep)
+    const parts = normalized.split("/")
     for (let i = 0; i < parts.length; i++) {
       if (FOLDERS.has(parts[i])) return true
     }
 
     const extra = opts?.extra || []
-    for (const pattern of [...FILES, ...extra]) {
-      if (Glob.match(pattern, filepath)) return true
+    for (const glob of [...FILE_GLOBS, ...extra]) {
+      if (glob.match(normalized)) return true
     }
 
     return false

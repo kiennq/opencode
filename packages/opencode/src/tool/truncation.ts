@@ -11,8 +11,8 @@ import { Glob } from "../util/glob"
 export namespace Truncate {
   export const MAX_LINES = 2000
   export const MAX_BYTES = 50 * 1024
-  export const DIR = path.join(Global.Path.data, "tool-output")
-  export const GLOB = path.join(DIR, "*")
+  export const DIR = Filesystem.join(Global.Path.data, "tool-output")
+  export const GLOB = Filesystem.join(DIR, "*")
   const RETENTION_MS = 7 * 24 * 60 * 60 * 1000 // 7 days
   const HOUR_MS = 60 * 60 * 1000
 
@@ -38,7 +38,7 @@ export namespace Truncate {
     const entries = await Glob.scan("tool_*", { cwd: DIR, include: "file" }).catch(() => [] as string[])
     for (const entry of entries) {
       if (Identifier.timestamp(entry) >= cutoff) continue
-      await fs.unlink(path.join(DIR, entry)).catch(() => {})
+      await fs.unlink(Filesystem.join(DIR, entry)).catch(() => {})
     }
   }
 
@@ -91,8 +91,8 @@ export namespace Truncate {
     const preview = out.join("\n")
 
     const id = Identifier.ascending("tool")
-    const filepath = path.join(DIR, id)
-    await Filesystem.write(filepath, text)
+    const filepath = Filesystem.join(DIR, id)
+    await Bun.write(Bun.file(filepath), text)
 
     const hint = hasTaskTool(agent)
       ? `The tool call succeeded but the output was truncated. Full output saved to: ${filepath}\nUse the Task tool to have explore agent process this file with Grep and Read (with offset/limit). Do NOT read the full file yourself - delegate to save context.`

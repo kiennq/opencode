@@ -1,11 +1,11 @@
 import z from "zod"
 import path from "path"
 import { Tool } from "./tool"
-import { Filesystem } from "../util/filesystem"
 import DESCRIPTION from "./glob.txt"
 import { Ripgrep } from "../file/ripgrep"
 import { Instance } from "../project/instance"
 import { assertExternalDirectory } from "./external-directory"
+import { Filesystem } from "../util/filesystem"
 
 export const GlobTool = Tool.define("glob", {
   description: DESCRIPTION,
@@ -29,29 +29,33 @@ export const GlobTool = Tool.define("glob", {
       },
     })
 
-    let search = params.path ?? Instance.directory
-    search = path.isAbsolute(search) ? search : path.resolve(Instance.directory, search)
+    let search = params.path ? Filesystem.normalize(params.path) : Instance.directory
+    search = path.isAbsolute(search) ? search : Filesystem.resolve(Instance.directory, search)
     await assertExternalDirectory(ctx, search, { kind: "directory" })
 
     const limit = 100
-    const files = []
+    const paths = []
     let truncated = false
     for await (const file of Ripgrep.files({
       cwd: search,
       glob: [params.pattern],
       signal: ctx.abort,
     })) {
-      if (files.length >= limit) {
+      if (paths.length >= limit) {
         truncated = true
         break
       }
-      const full = path.resolve(search, file)
-      const stats = Filesystem.stat(full)?.mtime.getTime() ?? 0
-      files.push({
-        path: full,
-        mtime: stats,
-      })
+      paths.push(Filesystem.resolve(search, file))
     }
+    const files = await Promise.all(
+      paths.map(async (full) => ({
+        path: full,
+        mtime: await Bun.file(full)
+          .stat()
+          .then((x) => x.mtime.getTime())
+          .catch(() => 0),
+      })),
+    )
     files.sort((a, b) => b.mtime - a.mtime)
 
     const output = []
@@ -67,7 +71,7 @@ export const GlobTool = Tool.define("glob", {
     }
 
     return {
-      title: path.relative(Instance.worktree, search),
+      title: Filesystem.relative(Instance.worktree, search),
       metadata: {
         count: files.length,
         truncated,

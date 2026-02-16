@@ -23,7 +23,8 @@ export const WriteTool = Tool.define("write", {
     filePath: z.string().describe("The absolute path to the file to write (must be absolute, not relative)"),
   }),
   async execute(params, ctx) {
-    const filepath = path.isAbsolute(params.filePath) ? params.filePath : path.join(Instance.directory, params.filePath)
+    const normalized = Filesystem.normalize(params.filePath)
+    const filepath = path.isAbsolute(normalized) ? normalized : Filesystem.resolve(Instance.directory, normalized)
     await assertExternalDirectory(ctx, filepath)
 
     const exists = await Filesystem.exists(filepath)
@@ -33,7 +34,7 @@ export const WriteTool = Tool.define("write", {
     const diff = trimDiff(createTwoFilesPatch(filepath, filepath, contentOld, params.content))
     await ctx.ask({
       permission: "edit",
-      patterns: [path.relative(Instance.worktree, filepath)],
+      patterns: [Filesystem.relative(Instance.worktree, filepath)],
       always: ["*"],
       metadata: {
         filepath,
@@ -54,7 +55,7 @@ export const WriteTool = Tool.define("write", {
     let output = "Wrote file successfully."
     await LSP.touchFile(filepath, true)
     const diagnostics = await LSP.diagnostics()
-    const normalizedFilepath = Filesystem.normalizePath(filepath)
+    const normalizedFilepath = Filesystem.realpath(filepath)
     let projectDiagnosticsCount = 0
     for (const [file, issues] of Object.entries(diagnostics)) {
       const errors = issues.filter((item) => item.severity === 1)
@@ -72,7 +73,7 @@ export const WriteTool = Tool.define("write", {
     }
 
     return {
-      title: path.relative(Instance.worktree, filepath),
+      title: Filesystem.relative(Instance.worktree, filepath),
       metadata: {
         diagnostics,
         filepath,
