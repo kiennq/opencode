@@ -45,6 +45,7 @@ import { LLM } from "./llm"
 import { iife } from "@/util/iife"
 import { Shell } from "@/shell/shell"
 import { Truncate } from "@/tool/truncation"
+import { Question } from "@/question"
 
 // @ts-ignore
 globalThis.AI_SDK_LOG_WARNINGS = false
