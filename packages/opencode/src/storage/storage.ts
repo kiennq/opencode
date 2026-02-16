@@ -183,7 +183,7 @@ export namespace Storage {
       using _ = await Lock.write(target)
       const content = await Bun.file(target).json()
       fn(content)
-      await Bun.write(target, JSON.stringify(content, null, 2))
+      await Bun.write(target, JSON.stringify(content))
       return content as T
     })
   }
@@ -193,7 +193,7 @@ export namespace Storage {
     const target = path.join(dir, ...key) + ".json"
     return withErrorHandling(async () => {
       using _ = await Lock.write(target)
-      await Bun.write(target, JSON.stringify(content, null, 2))
+      await Bun.write(target, JSON.stringify(content))
     })
   }
 
@@ -217,7 +217,16 @@ export namespace Storage {
           cwd: path.join(dir, ...prefix),
           onlyFiles: true,
         }),
-      ).then((results) => results.map((x) => [...prefix, ...x.slice(0, -5).split(path.sep)]))
+      ).then((results) =>
+        results.map((x) => {
+          // x is already relative to cwd, just remove .json extension
+          const withoutExt = x.slice(0, -5)
+          // Split by both separators for cross-platform compatibility
+          // This handles synced data from Windows (\) on Unix-like systems (/) and vice versa
+          const parts = withoutExt.split(/[\/\\]/)
+          return [...prefix, ...parts]
+        }),
+      )
       result.sort()
       return result
     } catch {
