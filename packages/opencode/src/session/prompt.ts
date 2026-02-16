@@ -45,12 +45,8 @@ import { LLM } from "./llm"
 import { iife } from "@/util/iife"
 import { Shell } from "@/shell/shell"
 import { Truncate } from "@/tool/truncation"
-<<<<<<< HEAD
 import { Question } from "@/question"
-||||||| parent of 20bd3e9c3 (fix(windows): path handling fixes for Windows)
-=======
 import { Filesystem } from "@/util/filesystem"
->>>>>>> 20bd3e9c3 (fix(windows): path handling fixes for Windows)
 
 // @ts-ignore
 globalThis.AI_SDK_LOG_WARNINGS = false
