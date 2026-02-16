@@ -1,4 +1,4 @@
-import { BusEvent } from "@/bus/bus-event"
+﻿import { BusEvent } from "@/bus/bus-event"
 import path from "path"
 import { $ } from "bun"
 import z from "zod"
@@ -85,7 +85,7 @@ export namespace Installation {
       },
       {
         name: "scoop" as const,
-        command: () => $`scoop list opencode`.throws(false).quiet().text(),
+        command: () => $`scoop list opencode-x`.throws(false).quiet().text(),
       },
       {
         name: "choco" as const,
@@ -104,7 +104,11 @@ export namespace Installation {
     for (const check of checks) {
       const output = await check.command()
       const installedName =
-        check.name === "brew" || check.name === "choco" || check.name === "scoop" ? "opencode" : "opencode-ai"
+        check.name === "brew" || check.name === "choco"
+          ? "opencode"
+          : check.name === "scoop"
+            ? "opencode-x"
+            : "opencode-ai"
       if (output.includes(installedName)) {
         return check.name
       }
@@ -168,7 +172,7 @@ export namespace Installation {
         cmd = $`echo Y | choco upgrade opencode --version=${target}`
         break
       case "scoop":
-        cmd = $`scoop install opencode@${target}`
+        cmd = $`scoop install opencode-x@${target}`
         break
       default:
         throw new Error(`Unknown method: ${method}`)
@@ -241,7 +245,7 @@ export namespace Installation {
     }
 
     if (detectedMethod === "scoop") {
-      return fetch("https://raw.githubusercontent.com/ScoopInstaller/Main/master/bucket/opencode.json", {
+      return fetch("https://raw.githubusercontent.com/kiennq/scoop-misc/master/bucket/opencode-x.json", {
         headers: { Accept: "application/json" },
       })
         .then((res) => {
