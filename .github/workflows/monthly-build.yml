@@ -1,0 +1,130 @@
+name: monthly-build
+run-name: "monthly build ${{ inputs.version_override || 'auto' }}"
+
+on:
+  schedule:
+    - cron: "0 0 1 * *" # Run at 00:00 on the 1st day of every month
+  workflow_dispatch:
+    inputs:
+      version_override:
+        description: "Override version (e.g., 1.2.3)"
+        required: false
+        type: string
+      draft:
+        description: "Create as draft release"
+        required: false
+        type: boolean
+        default: false
+
+permissions:
+  contents: write
+
+jobs:
+  version:
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.calc.outputs.version }}
+      original_version: ${{ steps.calc.outputs.original_version }}
+      tag: ${{ steps.calc.outputs.tag }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Calculate version
+        id: calc
+        run: |
+          if [ -n "${{ inputs.version_override }}" ]; then
+            VERSION="${{ inputs.version_override }}"
+            ORIGINAL_VERSION="$VERSION"
+          else
+            ORIGINAL_VERSION=$(jq -r '.version' packages/opencode/package.json)
+            VERSION="${ORIGINAL_VERSION}.${{ github.run_number }}"
+          fi
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "original_version=$ORIGINAL_VERSION" >> "$GITHUB_OUTPUT"
+          echo "tag=v$VERSION" >> "$GITHUB_OUTPUT"
+          echo "Calculated version: $VERSION (original: $ORIGINAL_VERSION)"
+
+  build:
+    needs: version
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: linux
+            arch: x64
+            runner: ubuntu-latest
+          - os: linux
+            arch: arm64
+            runner: ubuntu-24.04-arm
+          - os: windows
+            arch: x64
+            runner: windows-latest
+          - os: windows
+            arch: arm64
+            runner: windows-11-arm
+    runs-on: ${{ matrix.runner }}
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: ./.github/actions/setup-bun
+
+      - name: Build
+        working-directory: packages/opencode
+        run: bun script/build.ts --single
+        env:
+          OPENCODE_VERSION: ${{ needs.version.outputs.original_version }}
+
+      - name: Create archive (Linux)
+        if: matrix.os == 'linux'
+        working-directory: packages/opencode/dist
+        run: |
+          DIST_DIR=$(ls -d opencode-* | head -1)
+          ARCHIVE_NAME="opencode-${{ matrix.os }}-${{ matrix.arch }}.tar.gz"
+          tar -czvf "$ARCHIVE_NAME" -C "$DIST_DIR/bin" opencode
+          echo "ARCHIVE_NAME=$ARCHIVE_NAME" >> "$GITHUB_ENV"
+
+      - name: Create archive (Windows)
+        if: matrix.os == 'windows'
+        working-directory: packages/opencode/dist
+        run: |
+          DIST_DIR=$(ls -d opencode-* | head -1)
+          ARCHIVE_NAME="opencode-${{ matrix.os }}-${{ matrix.arch }}.zip"
+          7z a "$ARCHIVE_NAME" "./$DIST_DIR/bin/opencode.exe"
+          echo "ARCHIVE_NAME=$ARCHIVE_NAME" >> "$GITHUB_ENV"
+
+      - name: Create or update release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          TAG="${{ needs.version.outputs.tag }}"
+          VERSION="${{ needs.version.outputs.version }}"
+          ARCHIVE_PATH="packages/opencode/dist/${{ env.ARCHIVE_NAME }}"
+
+          # Retry loop to handle race condition between parallel jobs
+          for i in 1 2 3; do
+            if gh release view "$TAG" &>/dev/null; then
+              echo "Release $TAG exists, uploading asset..."
+              gh release upload "$TAG" "$ARCHIVE_PATH" --clobber
+              exit 0
+            else
+              echo "Creating release $TAG (attempt $i)..."
+              DRAFT_FLAG=""
+              if [ "${{ inputs.draft }}" = "true" ]; then
+                DRAFT_FLAG="--draft"
+              fi
+
+              if gh release create "$TAG" \
+                --title "$VERSION" \
+                --notes "Monthly Build $VERSION from commit ${{ github.sha }}. Platforms: Linux x64/arm64, Windows x64/arm64." \
+                $DRAFT_FLAG \
+                "$ARCHIVE_PATH"; then
+                exit 0
+              fi
+              # If create failed, maybe other job created it - retry
+              sleep 2
+            fi
+          done
+          echo "Failed to create or upload to release after 3 attempts"
+          exit 1
