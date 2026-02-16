@@ -74,7 +74,7 @@ jobs:
         working-directory: packages/opencode
         run: bun script/build.ts --single
         env:
-          OPENCODE_VERSION: ${{ needs.version.outputs.original_version }}
+          OPENCODE_VERSION: ${{ needs.version.outputs.version }}
 
       - name: Create archive (Linux)
         if: matrix.os == 'linux'
