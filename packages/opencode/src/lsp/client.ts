@@ -48,14 +48,20 @@ export namespace LSPClient {
       new StreamMessageWriter(input.server.process.stdin as any),
     )
 
+    const MAX_DIAGNOSTICS_FILES = 5000
     const diagnostics = new Map<string, Diagnostic[]>()
     connection.onNotification("textDocument/publishDiagnostics", (params) => {
-      const filePath = Filesystem.normalizePath(fileURLToPath(params.uri))
+      const filePath = Filesystem.realpath(fileURLToPath(params.uri))
       l.info("textDocument/publishDiagnostics", {
         path: filePath,
         count: params.diagnostics.length,
       })
       const exists = diagnostics.has(filePath)
+      // Evict oldest entries if map grows too large
+      if (!exists && diagnostics.size >= MAX_DIAGNOSTICS_FILES) {
+        const oldest = diagnostics.keys().next().value
+        if (oldest !== undefined) diagnostics.delete(oldest)
+      }
       diagnostics.set(filePath, params.diagnostics)
       if (!exists && input.serverID === "typescript") return
       Bus.publish(Event.Diagnostics, { path: filePath, serverID: input.serverID })
@@ -132,9 +138,7 @@ export namespace LSPClient {
       })
     }
 
-    const files: {
-      [path: string]: number
-    } = {}
+    const files = new Map<string, number>()
 
     const result = {
       root: input.root,
@@ -152,7 +156,7 @@ export namespace LSPClient {
           const extension = path.extname(input.path)
           const languageId = LANGUAGE_EXTENSIONS[extension] ?? "plaintext"
 
-          const version = files[input.path]
+          const version = files.get(input.path)
           if (version !== undefined) {
             log.info("workspace/didChangeWatchedFiles", input)
             await connection.sendNotification("workspace/didChangeWatchedFiles", {
@@ -165,7 +169,7 @@ export namespace LSPClient {
             })
 
             const next = version + 1
-            files[input.path] = next
+            files.set(input.path, next)
             log.info("textDocument/didChange", {
               path: input.path,
               version: next,
@@ -200,7 +204,7 @@ export namespace LSPClient {
               text,
             },
           })
-          files[input.path] = 0
+          files.set(input.path, 0)
           return
         },
       },
@@ -208,7 +212,7 @@ export namespace LSPClient {
         return diagnostics
       },
       async waitForDiagnostics(input: { path: string }) {
-        const normalizedPath = Filesystem.normalizePath(
+        const normalizedPath = Filesystem.realpath(
           path.isAbsolute(input.path) ? input.path : path.resolve(Instance.directory, input.path),
         )
         log.info("waiting for diagnostics", { path: normalizedPath })
@@ -238,8 +242,11 @@ export namespace LSPClient {
       },
       async shutdown() {
         l.info("shutting down")
+        diagnostics.clear()
+        files.clear()
         connection.end()
         connection.dispose()
+        diagnostics.clear()
         input.server.process.kill()
         l.info("shutdown")
       },
