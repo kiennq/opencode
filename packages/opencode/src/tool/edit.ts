@@ -20,6 +20,23 @@ import { assertExternalDirectory } from "./external-directory"
 
 const MAX_DIAGNOSTICS_PER_FILE = 20
 
+// Cache for compiled regex patterns in WhitespaceNormalizedReplacer
+const regexCache = new Map<string, RegExp>()
+
+function getOrCreateRegex(pattern: string): RegExp | undefined {
+  const cached = regexCache.get(pattern)
+  if (cached) return cached
+  try {
+    const regex = new RegExp(pattern)
+    // Limit cache size to prevent memory growth
+    if (regexCache.size > 1000) regexCache.clear()
+    regexCache.set(pattern, regex)
+    return regex
+  } catch {
+    return undefined
+  }
+}
+
 function normalizeLineEndings(text: string): string {
   return text.replaceAll("\r\n", "\n")
 }
@@ -41,7 +58,8 @@ export const EditTool = Tool.define("edit", {
       throw new Error("No changes to apply: oldString and newString are identical.")
     }
 
-    const filePath = path.isAbsolute(params.filePath) ? params.filePath : path.join(Instance.directory, params.filePath)
+    const normalized = Filesystem.normalize(params.filePath)
+    const filePath = path.isAbsolute(normalized) ? normalized : Filesystem.join(Instance.directory, normalized)
     await assertExternalDirectory(ctx, filePath)
 
     let diff = ""
@@ -54,7 +72,7 @@ export const EditTool = Tool.define("edit", {
         diff = trimDiff(createTwoFilesPatch(filePath, filePath, contentOld, contentNew))
         await ctx.ask({
           permission: "edit",
-          patterns: [path.relative(Instance.worktree, filePath)],
+          patterns: [Filesystem.relative(Instance.worktree, filePath)],
           always: ["*"],
           metadata: {
             filepath: filePath,
@@ -86,7 +104,7 @@ export const EditTool = Tool.define("edit", {
       )
       await ctx.ask({
         permission: "edit",
-        patterns: [path.relative(Instance.worktree, filePath)],
+        patterns: [Filesystem.relative(Instance.worktree, filePath)],
         always: ["*"],
         metadata: {
           filepath: filePath,
@@ -132,7 +150,7 @@ export const EditTool = Tool.define("edit", {
     let output = "Edit applied successfully."
     await LSP.touchFile(filePath, true)
     const diagnostics = await LSP.diagnostics()
-    const normalizedFilePath = Filesystem.normalizePath(filePath)
+    const normalizedFilePath = Filesystem.realpath(filePath)
     const issues = diagnostics[normalizedFilePath] ?? []
     const errors = issues.filter((item) => item.severity === 1)
     if (errors.length > 0) {
@@ -148,7 +166,7 @@ export const EditTool = Tool.define("edit", {
         diff,
         filediff,
       },
-      title: `${path.relative(Instance.worktree, filePath)}`,
+      title: `${Filesystem.relative(Instance.worktree, filePath)}`,
       output,
     }
   },
@@ -161,24 +179,53 @@ const SINGLE_CANDIDATE_SIMILARITY_THRESHOLD = 0.0
 const MULTIPLE_CANDIDATES_SIMILARITY_THRESHOLD = 0.3
 
 /**
- * Levenshtein distance algorithm implementation
+ * Levenshtein distance algorithm implementation with optional early exit
+ * @param a First string
+ * @param b Second string
+ * @param maxDistance Optional threshold - returns early if distance exceeds this
  */
-function levenshtein(a: string, b: string): number {
+function levenshtein(a: string, b: string, maxDistance?: number): number {
   // Handle empty strings
   if (a === "" || b === "") {
     return Math.max(a.length, b.length)
   }
-  const matrix = Array.from({ length: a.length + 1 }, (_, i) =>
-    Array.from({ length: b.length + 1 }, (_, j) => (i === 0 ? j : j === 0 ? i : 0)),
-  )
 
-  for (let i = 1; i <= a.length; i++) {
-    for (let j = 1; j <= b.length; j++) {
-      const cost = a[i - 1] === b[j - 1] ? 0 : 1
-      matrix[i][j] = Math.min(matrix[i - 1][j] + 1, matrix[i][j - 1] + 1, matrix[i - 1][j - 1] + cost)
-    }
+  // Early exit if length difference alone exceeds max
+  if (maxDistance !== undefined && Math.abs(a.length - b.length) > maxDistance) {
+    return maxDistance + 1
   }
-  return matrix[a.length][b.length]
+
+  // Use single row optimization for O(min(m,n)) space
+  const m = a.length
+  const n = b.length
+
+  // Ensure we iterate over the shorter string for columns
+  if (m > n) return levenshtein(b, a, maxDistance)
+
+  let prev = new Array(m + 1)
+  let curr = new Array(m + 1)
+
+  for (let i = 0; i <= m; i++) prev[i] = i
+
+  for (let j = 1; j <= n; j++) {
+    curr[0] = j
+    let rowMin = curr[0]
+
+    for (let i = 1; i <= m; i++) {
+      const cost = a[i - 1] === b[j - 1] ? 0 : 1
+      curr[i] = Math.min(prev[i] + 1, curr[i - 1] + 1, prev[i - 1] + cost)
+      if (curr[i] < rowMin) rowMin = curr[i]
+    }
+
+    // Early exit if minimum in this row exceeds threshold
+    if (maxDistance !== undefined && rowMin > maxDistance) {
+      return maxDistance + 1
+    }
+
+    ;[prev, curr] = [curr, prev]
+  }
+
+  return prev[m]
 }
 
 export const SimpleReplacer: Replacer = function* (_content, find) {
@@ -278,7 +325,8 @@ export const BlockAnchorReplacer: Replacer = function* (content, find) {
         if (maxLen === 0) {
           continue
         }
-        const distance = levenshtein(originalLine, searchLine)
+        // Use maxDistance for early exit - we need similarity >= 0, so any distance is acceptable
+        const distance = levenshtein(originalLine, searchLine, maxLen)
         similarity += (1 - distance / maxLen) / linesToCheck
 
         // Exit early when threshold is reached
@@ -327,7 +375,9 @@ export const BlockAnchorReplacer: Replacer = function* (content, find) {
         if (maxLen === 0) {
           continue
         }
-        const distance = levenshtein(originalLine, searchLine)
+        // For threshold 0.3, max acceptable distance is 70% of maxLen
+        const maxAcceptableDistance = Math.floor(maxLen * (1 - MULTIPLE_CANDIDATES_SIMILARITY_THRESHOLD))
+        const distance = levenshtein(originalLine, searchLine, maxAcceptableDistance)
         similarity += 1 - distance / maxLen
       }
       similarity /= linesToCheck // Average similarity
@@ -378,14 +428,12 @@ export const WhitespaceNormalizedReplacer: Replacer = function* (content, find) 
         const words = find.trim().split(/\s+/)
         if (words.length > 0) {
           const pattern = words.map((word) => word.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")).join("\\s+")
-          try {
-            const regex = new RegExp(pattern)
+          const regex = getOrCreateRegex(pattern)
+          if (regex) {
             const match = line.match(regex)
             if (match) {
               yield match[0]
             }
-          } catch (e) {
-            // Invalid regex pattern, skip
           }
         }
       }
