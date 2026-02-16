@@ -7,6 +7,7 @@ import {
   For,
   Match,
   on,
+  onCleanup,
   Show,
   Switch,
   useContext,
@@ -122,14 +123,32 @@ export function Session() {
       .filter((x) => x.parentID === parentID || x.id === parentID)
       .toSorted((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0))
   })
+
+  // Recursively collect all descendant session IDs
+  const descendants = createMemo(() => {
+    const collect = (id: string, visited: Set<string>): string[] => {
+      if (visited.has(id)) return []
+      visited.add(id)
+
+      const directChildren = sync.data.session.filter((x) => x.parentID === id).map((x) => x.id)
+
+      return [id, ...directChildren.flatMap((childID) => collect(childID, visited))]
+    }
+
+    const root = session()?.parentID ?? session()?.id
+    return root ? collect(root, new Set()) : []
+  })
+
   const messages = createMemo(() => sync.data.message[route.sessionID] ?? [])
+
   const permissions = createMemo(() => {
     if (session()?.parentID) return []
-    return children().flatMap((x) => sync.data.permission[x.id] ?? [])
+    return descendants().flatMap((x) => sync.data.permission[x] ?? [])
   })
+
   const questions = createMemo(() => {
     if (session()?.parentID) return []
-    return children().flatMap((x) => sync.data.question[x.id] ?? [])
+    return descendants().flatMap((x) => sync.data.question[x] ?? [])
   })
 
   const pending = createMemo(() => {
@@ -202,21 +221,23 @@ export function Session() {
   })
 
   let lastSwitch: string | undefined = undefined
-  sdk.event.on("message.part.updated", (evt) => {
-    const part = evt.properties.part
-    if (part.type !== "tool") return
-    if (part.sessionID !== route.sessionID) return
-    if (part.state.status !== "completed") return
-    if (part.id === lastSwitch) return
+  onCleanup(
+    sdk.event.on("message.part.updated", (evt) => {
+      const part = evt.properties.part
+      if (part.type !== "tool") return
+      if (part.sessionID !== route.sessionID) return
+      if (part.state.status !== "completed") return
+      if (part.id === lastSwitch) return
 
-    if (part.tool === "plan_exit") {
-      local.agent.set("build")
-      lastSwitch = part.id
-    } else if (part.tool === "plan_enter") {
-      local.agent.set("plan")
-      lastSwitch = part.id
-    }
-  })
+      if (part.tool === "plan_exit") {
+        local.agent.set("build")
+        lastSwitch = part.id
+      } else if (part.tool === "plan_enter") {
+        local.agent.set("plan")
+        lastSwitch = part.id
+      }
+    }),
+  )
 
   let scroll: ScrollBoxRenderable
   let prompt: PromptRef
@@ -1438,7 +1459,7 @@ function ToolPart(props: { last: boolean; part: ToolPart; message: AssistantMess
   return (
     <Show when={!shouldHide()}>
       <Switch>
-        <Match when={props.part.tool === "bash"}>
+        <Match when={props.part.tool === "bash" || props.part.tool === "pwsh"}>
           <Bash {...toolprops} />
         </Match>
         <Match when={props.part.tool === "glob"}>
@@ -1658,7 +1679,8 @@ function Bash(props: ToolProps<typeof BashTool>) {
     const base = sync.data.path.directory
     if (!base) return undefined
 
-    const absolute = path.resolve(base, workdir)
+    const normalized = Filesystem.normalize(workdir)
+    const absolute = path.isAbsolute(normalized) ? normalized : Filesystem.resolve(base, normalized)
     if (absolute === base) return undefined
 
     const home = Global.Path.home
@@ -1686,7 +1708,7 @@ function Bash(props: ToolProps<typeof BashTool>) {
           onClick={overflow() ? () => setExpanded((prev) => !prev) : undefined}
         >
           <box gap={1}>
-            <text fg={theme.text}>$ {props.input.command}</text>
+            <text fg={theme.text}>{props.part.tool === "pwsh" ? "PS>" : "$"} {props.input.command}</text>
             <Show when={output()}>
               <text fg={theme.text}>{limited()}</text>
             </Show>
@@ -1697,7 +1719,7 @@ function Bash(props: ToolProps<typeof BashTool>) {
         </BlockTool>
       </Match>
       <Match when={true}>
-        <InlineTool icon="$" pending="Writing command..." complete={props.input.command} part={props.part}>
+        <InlineTool icon={props.part.tool === "pwsh" ? "PS>" : "$"} pending="Writing command..." complete={props.input.command} part={props.part}>
           {props.input.command}
         </InlineTool>
       </Match>
@@ -1713,7 +1735,7 @@ function Write(props: ToolProps<typeof WriteTool>) {
   })
 
   const diagnostics = createMemo(() => {
-    const filePath = Filesystem.normalizePath(props.input.filePath ?? "")
+    const filePath = Filesystem.realpath(props.input.filePath ?? "")
     return props.metadata.diagnostics?.[filePath] ?? []
   })
 
@@ -1923,7 +1945,7 @@ function Edit(props: ToolProps<typeof EditTool>) {
   const diffContent = createMemo(() => props.metadata.diff)
 
   const diagnostics = createMemo(() => {
-    const filePath = Filesystem.normalizePath(props.input.filePath ?? "")
+    const filePath = Filesystem.realpath(props.input.filePath ?? "")
     const arr = props.metadata.diagnostics?.[filePath] ?? []
     return arr.filter((x) => x.severity === 1).slice(0, 3)
   })
@@ -2116,9 +2138,9 @@ function Skill(props: ToolProps<typeof SkillTool>) {
 function normalizePath(input?: string) {
   if (!input) return ""
   if (path.isAbsolute(input)) {
-    return path.relative(process.cwd(), input) || "."
+    return Filesystem.relative(process.cwd(), input) || "."
   }
-  return input
+  return Filesystem.normalize(input)
 }
 
 function input(input: Record<string, any>, omit?: string[]): string {
