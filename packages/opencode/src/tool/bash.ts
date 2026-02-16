@@ -121,12 +121,12 @@ export const BashTool = Tool.define("bash", async () => {
         if (["cd", "rm", "cp", "mv", "mkdir", "touch", "chmod", "chown", "cat"].includes(command[0])) {
           for (const arg of command.slice(1)) {
             if (arg.startsWith("-") || (command[0] === "chmod" && arg.startsWith("+"))) continue
-          const target = Filesystem.resolve(normalizedCwd, arg)
-          const dir = (await Filesystem.isDir(target)) ? target : Filesystem.dirname(target)
-          log.info("resolved path", { arg, dir, target })
-          if (!Filesystem.contains(Instance.directory, dir)) directories.add(dir)
+            const target = Filesystem.resolve(normalizedCwd, arg)
+            const dir = (await Filesystem.isDir(target)) ? target : Filesystem.dirname(target)
+            log.info("resolved path", { arg, dir, target })
+            if (!Filesystem.contains(Instance.directory, dir)) directories.add(dir)
+          }
         }
-      }
 
         // cd covered by above check
         if (command.length && command[0] !== "cd") {
