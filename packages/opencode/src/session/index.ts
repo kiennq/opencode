@@ -26,6 +26,7 @@ import { PermissionNext } from "@/permission/next"
 import { Global } from "@/global"
 import type { LanguageModelV2Usage } from "@ai-sdk/provider"
 import { iife } from "@/util/iife"
+import { Filesystem } from "@/util/filesystem"
 
 export namespace Session {
   const log = Log.create({ service: "session" })
@@ -309,7 +310,7 @@ export namespace Session {
     const base = Instance.project.vcs
       ? path.join(Instance.worktree, ".opencode", "plans")
       : path.join(Global.Path.data, "plans")
-    return path.join(base, [input.time.created, input.slug].join("-") + ".md")
+    return Filesystem.join(base, [input.time.created, input.slug].join("-") + ".md")
   }
 
   export const get = fn(Identifier.schema("session"), async (id) => {
@@ -454,6 +455,33 @@ export namespace Session {
       return info
     })
   })
+
+  export const setCompacting = fn(
+    z.object({
+      sessionID: Identifier.schema("session"),
+      time: z.number().optional(),
+    }),
+    async (input) => {
+      Database.use((db) => {
+        db.update(SessionTable)
+          .set({ time_compacting: input.time ?? null })
+          .where(eq(SessionTable.id, input.sessionID))
+          .run()
+      })
+    },
+  )
+
+  /** Find sessions that were compacting but never resumed (crash recovery) */
+  export function pendingResume(): string[] {
+    const rows = Database.use((db) =>
+      db
+        .select()
+        .from(SessionTable)
+        .where(and(eq(SessionTable.project_id, Instance.project.id), SessionTable.time_compacting))
+        .all(),
+    )
+    return rows.map((row: SessionRow) => row.id)
+  }
 
   export const setSummary = fn(
     z.object({
