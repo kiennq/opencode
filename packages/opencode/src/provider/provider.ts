@@ -38,7 +38,18 @@ import { createGateway } from "@ai-sdk/gateway"
 import { createTogetherAI } from "@ai-sdk/togetherai"
 import { createPerplexity } from "@ai-sdk/perplexity"
 import { createVercel } from "@ai-sdk/vercel"
-import { createGitLab, VERSION as GITLAB_PROVIDER_VERSION } from "@gitlab/gitlab-ai-provider"
+import { createGitLab } from "@gitlab/gitlab-ai-provider"
+
+// VERSION export may not be available in all gitlab-ai-provider versions
+// Try to get it from package, fallback to "unknown"
+const GITLAB_PROVIDER_VERSION = (() => {
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    return require("@gitlab/gitlab-ai-provider/package.json").version ?? "unknown"
+  } catch {
+    return "unknown"
+  }
+})()
 import { ProviderTransform } from "./transform"
 import { Installation } from "../installation"
 
@@ -495,7 +506,7 @@ export namespace Provider {
             ...(providerConfig?.options?.featureFlags || {}),
           },
         },
-        async getModel(sdk: ReturnType<typeof createGitLab>, modelID: string) {
+        async getModel(sdk: any, modelID: string) {
           return sdk.agenticChat(modelID, {
             aiGatewayHeaders,
             featureFlags: {
@@ -764,7 +775,6 @@ export namespace Provider {
     const modelLoaders: {
       [providerID: string]: CustomModelLoader
     } = {}
-    const sdk = new Map<number, SDK>()
 
     log.info("init")
 
@@ -1019,7 +1029,7 @@ export namespace Provider {
     return {
       models: languages,
       providers,
-      sdk,
+      sdk: new Map(),
       modelLoaders,
     }
   })
@@ -1113,7 +1123,7 @@ export namespace Provider {
 
       let installedPath: string
       if (!model.api.npm.startsWith("file://")) {
-        installedPath = await BunProc.install(model.api.npm, "latest")
+        installedPath = await BunProc.install(model.api.npm, "latest", model.providerID)
       } else {
         log.info("loading local provider", { pkg: model.api.npm })
         installedPath = model.api.npm
