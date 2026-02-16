@@ -50,16 +50,15 @@ git rebase upstream/dev
 
 Known conflict-prone areas and resolution strategy:
 
-| File                                         | Our fork changes                                                                                                                       | Resolution strategy                                                                                                                   |
-| -------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------- |
-| `src/pty/index.ts`                           | Buffer chunk optimization (bufferChunks/bufferSize)                                                                                    | **Take upstream** — their cursor-based reconnection system is more important; our chunk approach is incompatible with cursor tracking |
-| `src/session/compaction.ts`                  | Custom thresholds (token_threshold, context_threshold, min_messages), EARLY_COMPACT_RATIO, smart pruning, generateObject for summaries | **Merge both** — keep upstream's primary overflow logic, add our custom threshold early-exits and pruning features                    |
-| `src/config/config.ts`                       | Custom compaction threshold fields                                                                                                     | **Merge both** — keep upstream's new fields AND our additions                                                                         |
-| `src/session/index.ts`                       | FileTime import, offset pagination, session list merge                                                                                 | **Merge both** — keep all imports from both sides                                                                                     |
-| `src/cli/cmd/tui/component/dialog-model.tsx` | Lazy DialogProvider import, PROVIDER_PRIORITY, popularProvidersList memo                                                               | **Take ours** for `popularProvidersList()` since `createDialogProviderOptions` isn't imported in our lazy-import version              |
-| `src/provider/transform.ts`                  | Expanded Anthropic detection, whitespace trim                                                                                          | **Merge both** — our detection expansions layer on top of upstream                                                                    |
-| `src/tool/bash.ts`                           | Ring buffer (10MB cap)                                                                                                                 | **Take ours** if upstream still uses simple approach; watch for upstream ring buffer adoption                                         |
-| `src/question/index.ts`                      | Timeout + rejected event                                                                                                               | **Take ours** if upstream removed timeouts                                                                                            |
+| File                                         | Our fork changes                                                         | Resolution strategy                                                                                                                   |
+| -------------------------------------------- | ------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------- |
+| `src/pty/index.ts`                           | Buffer chunk optimization (bufferChunks/bufferSize)                      | **Take upstream** — their cursor-based reconnection system is more important; our chunk approach is incompatible with cursor tracking |
+| `src/config/config.ts`                       | Shell metadata, attach env fields                                        | **Merge both** — keep upstream's new fields AND our additions                                                                         |
+| `src/session/index.ts`                       | FileTime import, offset pagination, session list merge                   | **Merge both** — keep all imports from both sides                                                                                     |
+| `src/cli/cmd/tui/component/dialog-model.tsx` | Lazy DialogProvider import, PROVIDER_PRIORITY, popularProvidersList memo | **Take ours** for `popularProvidersList()` since `createDialogProviderOptions` isn't imported in our lazy-import version              |
+| `src/provider/transform.ts`                  | Expanded Anthropic detection, whitespace trim                            | **Merge both** — our detection expansions layer on top of upstream                                                                    |
+| `src/tool/bash.ts`                           | Ring buffer (10MB cap)                                                   | **Take ours** if upstream still uses simple approach; watch for upstream ring buffer adoption                                         |
+| `src/question/index.ts`                      | Timeout + rejected event                                                 | **Take ours** if upstream removed timeouts                                                                                            |
 
 General conflict resolution rules:
 
@@ -93,9 +92,12 @@ git fetch origin dev --quiet && git push origin dev --force-with-lease --no-veri
 - New `.yml` workflow files from upstream need renaming to `.yml.disabled` (we disable upstream CI)
 - Pre-push hook may fail on `@opencode-ai/desktop` typecheck due to missing `@tauri-apps/plugin-clipboard-manager` — use `--no-verify` to bypass
 
-## Fork behavior (must preserve)
+## Our fork's additions (must preserve)
 
-- **Custom compaction thresholds** — `token_threshold`, `context_threshold`, `min_messages`
+- **Persistent shell** — Windows native routing, shell metadata in bash tool output
+- **Attach env propagation** — `x-opencode-env` header, compressed fallback env in attach/server/pty paths
+- **Offset pagination** — `session list` API supports `before` cursor for incremental timeline loading
+- **TUI prompt fixes** — leader-key guard on history navigation, leader-down session shortcut
 
 ## Quick checklist
 
