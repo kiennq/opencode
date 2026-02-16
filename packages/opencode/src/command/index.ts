@@ -1,4 +1,5 @@
 import { BusEvent } from "@/bus/bus-event"
+import { Bus } from "@/bus"
 import z from "zod"
 import { Config } from "../config/config"
 import { Instance } from "../project/instance"
@@ -6,22 +7,13 @@ import { Identifier } from "../id/id"
 import PROMPT_INITIALIZE from "./template/initialize.txt"
 import PROMPT_REVIEW from "./template/review.txt"
 import { MCP } from "../mcp"
+import { Log } from "@/util/log"
 import { Skill } from "../skill"
 
 export namespace Command {
-  export const Event = {
-    Executed: BusEvent.define(
-      "command.executed",
-      z.object({
-        name: z.string(),
-        sessionID: Identifier.schema("session"),
-        arguments: z.string(),
-        messageID: Identifier.schema("message"),
-      }),
-    ),
-  }
+  const log = Log.create({ service: "command" })
 
-  export const Info = z
+  const InfoSchema = z
     .object({
       name: z.string(),
       description: z.string().optional(),
@@ -39,7 +31,14 @@ export namespace Command {
     })
 
   // for some reason zod is inferring `string` for z.promise(z.string()).or(z.string()) so we have to manually override it
-  export type Info = Omit<z.infer<typeof Info>, "template"> & { template: Promise<string> | string }
+  export type Info = Omit<z.infer<typeof InfoSchema>, "template"> & { template: Promise<string> | string }
+
+  // Serializable type for events (template is always awaited to string)
+  const InfoSerialized = InfoSchema.extend({
+    template: z.string(),
+  })
+
+  export const Info = InfoSchema
 
   export function hints(template: string): string[] {
     const result: string[] = []
@@ -55,6 +54,85 @@ export namespace Command {
     INIT: "init",
     REVIEW: "review",
   } as const
+
+  const mcpCommands = new Map<string, Info>()
+  const mcpTemplateCache = new Map<string, Promise<string>>()
+  let mcpInitPromise: Promise<void> | undefined
+
+  export async function initMCPCommands() {
+    if (mcpInitPromise) return mcpInitPromise
+    mcpInitPromise = MCP.prompts()
+      .then((prompts) => {
+        mcpCommands.clear()
+        mcpTemplateCache.clear()
+
+        for (const [name, prompt] of Object.entries(prompts)) {
+          mcpCommands.set(name, {
+            name,
+            source: "mcp",
+            description: prompt.description,
+            get template() {
+              if (mcpTemplateCache.has(name)) {
+                return mcpTemplateCache.get(name)!
+              }
+
+              const templatePromise = (async () => {
+                const template = await MCP.getPrompt(
+                  prompt.client,
+                  prompt.name,
+                  prompt.arguments
+                    ? Object.fromEntries(prompt.arguments?.map((argument, i) => [argument.name, `$${i + 1}`]))
+                    : {},
+                )
+                return (
+                  template?.messages
+                    .map((message) => (message.content.type === "text" ? message.content.text : ""))
+                    .join("\n") || ""
+                )
+              })()
+
+              mcpTemplateCache.set(name, templatePromise)
+              return templatePromise
+            },
+            hints: prompt.arguments?.map((_, i) => `$${i + 1}`) ?? [],
+          })
+        }
+      })
+      .then(async () => {
+        const userState = await state()
+        const commands = [...Object.values(userState), ...mcpCommands.values()]
+        const serialized = await Promise.all(
+          commands.map(async (cmd) => ({
+            name: cmd.name,
+            description: cmd.description,
+            agent: cmd.agent,
+            model: cmd.model,
+            source: cmd.source,
+            template: typeof cmd.template === "string" ? cmd.template : await cmd.template,
+            subtask: cmd.subtask,
+            hints: cmd.hints,
+          })),
+        )
+        Bus.publish(Event.Updated, serialized)
+      })
+      .catch((error) => {
+        log.error("Failed to load MCP prompts", { error })
+        mcpInitPromise = undefined
+      })
+  }
+
+  export const Event = {
+    Executed: BusEvent.define(
+      "command.executed",
+      z.object({
+        name: z.string(),
+        sessionID: Identifier.schema("session"),
+        arguments: z.string(),
+        messageID: Identifier.schema("message"),
+      }),
+    ),
+    Updated: BusEvent.define("command.updated", z.array(InfoSerialized)),
+  }
 
   const state = Instance.state(async () => {
     const cfg = await Config.get()
@@ -95,32 +173,6 @@ export namespace Command {
         hints: hints(command.template),
       }
     }
-    for (const [name, prompt] of Object.entries(await MCP.prompts())) {
-      result[name] = {
-        name,
-        source: "mcp",
-        description: prompt.description,
-        get template() {
-          // since a getter can't be async we need to manually return a promise here
-          return new Promise<string>(async (resolve, reject) => {
-            const template = await MCP.getPrompt(
-              prompt.client,
-              prompt.name,
-              prompt.arguments
-                ? // substitute each argument with $1, $2, etc.
-                  Object.fromEntries(prompt.arguments?.map((argument, i) => [argument.name, `$${i + 1}`]))
-                : {},
-            ).catch(reject)
-            resolve(
-              template?.messages
-                .map((message) => (message.content.type === "text" ? message.content.text : ""))
-                .join("\n") || "",
-            )
-          })
-        },
-        hints: prompt.arguments?.map((_, i) => `$${i + 1}`) ?? [],
-      }
-    }
 
     // Add skills as invokable commands
     for (const skill of await Skill.all()) {
@@ -141,10 +193,13 @@ export namespace Command {
   })
 
   export async function get(name: string) {
-    return state().then((x) => x[name])
+    const userState = await state()
+    if (userState[name]) return userState[name]
+    return mcpCommands.get(name)
   }
 
   export async function list() {
-    return state().then((x) => Object.values(x))
+    const userState = await state()
+    return [...Object.values(userState), ...mcpCommands.values()]
   }
 }
