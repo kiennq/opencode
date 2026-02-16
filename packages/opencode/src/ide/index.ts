@@ -57,8 +57,7 @@ export namespace Ide {
       stderr: "pipe",
     })
     await p.exited
-    const stdout = await new Response(p.stdout).text()
-    const stderr = await new Response(p.stderr).text()
+    const [stdout, stderr] = await Promise.all([Bun.readableStreamToText(p.stdout), Bun.readableStreamToText(p.stderr)])
 
     log.info("installed", {
       ide,
