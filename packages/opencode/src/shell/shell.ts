@@ -64,4 +64,16 @@ export namespace Shell {
     if (s && !BLACKLIST.has(process.platform === "win32" ? path.win32.basename(s) : path.basename(s))) return s
     return fallback()
   })
+
+  const UNIX_SHELLS = new Set(["bash", "sh", "zsh", "fish", "nu"])
+
+  export function isUnixLike(shell: string): boolean {
+    const base = path
+      .basename(shell)
+      .toLowerCase()
+      .replace(/\.exe$/, "")
+    return UNIX_SHELLS.has(base)
+  }
+
+  export const pwsh = lazy(() => Bun.which("pwsh") ?? undefined)
 }
