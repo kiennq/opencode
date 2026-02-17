@@ -9,15 +9,44 @@ import type { Event } from "@opencode-ai/sdk/v2"
 import type { EventSource } from "./context/sdk"
 import { win32DisableProcessedInput, win32InstallCtrlCGuard } from "./win32"
 import { Installation } from "@/installation"
-import { Server } from "@/server/server"
-import { Instance } from "@/project/instance"
-import { InstanceBootstrap } from "@/project/bootstrap"
-import { upgrade } from "@/cli/upgrade"
-import { Config } from "@/config/config"
-import { createOpencodeClient } from "@opencode-ai/sdk/v2"
-import { Session } from "@/session"
-import { Flag } from "@/flag/flag"
-import type { BunWebSocketData } from "hono/bun"
+import { Rpc } from "@/util/rpc"
+import type { WorkerRpc } from "./worker"
+
+function createWorkerFetch(client: ReturnType<typeof Rpc.client<WorkerRpc>>): typeof fetch {
+  return (async (input: RequestInfo | URL, init?: RequestInit) => {
+    const request = new Request(input, init)
+    const url = new URL(request.url)
+    const result = await client.call("fetch", {
+      url: url.pathname + url.search,
+      init: {
+        method: request.method,
+        headers: Object.fromEntries(request.headers),
+        body: request.body ? await request.text() : undefined,
+      },
+    })
+    return new Response(result.body ?? null, {
+      status: result.status,
+      headers: result.headers,
+    })
+  }) as typeof fetch
+}
+
+function createEventSource(client: ReturnType<typeof Rpc.client<WorkerRpc>>): EventSource {
+  const handlers = new Set<(event: Event) => void>()
+  const dispatch = (event: Event) => {
+    for (const handler of handlers) handler(event)
+  }
+  client.on("event", dispatch)
+  client.on("global.event", dispatch)
+  return {
+    on: (handler) => {
+      handlers.add(handler)
+      return () => {
+        handlers.delete(handler)
+      }
+    },
+  }
+}
 
 export const TuiThreadCommand = cmd({
   command: "$0 [project]",
@@ -35,12 +64,8 @@ export const TuiThreadCommand = cmd({
       .option("prompt", { type: "string", describe: "prompt to use" })
       .option("agent", { type: "string", describe: "agent to use" }),
   handler: async (args) => {
-    // Keep ENABLE_PROCESSED_INPUT cleared even if other code flips it.
-    // (Important when running under `bun run` wrappers on Windows.)
     const unguard = win32InstallCtrlCGuard()
     try {
-      // Must be the very first thing — disables CTRL_C_EVENT before any async work
-      // so the OS cannot kill the process group.
       win32DisableProcessedInput()
 
       if (args.fork && !args.continue && !args.session) {
@@ -57,7 +82,6 @@ export const TuiThreadCommand = cmd({
         return
       }
 
-      // Initialize logging
       await Log.init({
         print: process.argv.includes("--print-logs"),
         dev: Installation.isLocal(),
@@ -71,10 +95,6 @@ export const TuiThreadCommand = cmd({
       })
       process.on("unhandledRejection", (e) => {
         Log.Default.error(e)
-      })
-      process.on("SIGUSR2", async () => {
-        Config.global.reset()
-        await Instance.disposeAll()
       })
 
       const prompt = await iife(async () => {
@@ -92,215 +112,35 @@ export const TuiThreadCommand = cmd({
         networkOpts.port !== 0 ||
         networkOpts.hostname !== "127.0.0.1"
 
-      // --- Event handling infrastructure ---
-      const handlers = new Set<(event: Event) => void>()
-      const compacted = new Set<string>()
-      let exiting = false
-      let server: Bun.Server<BunWebSocketData> | undefined
+      const g = globalThis as Record<string, unknown>
+      const workerPath =
+        typeof g.OPENCODE_WORKER_PATH === "string"
+          ? g.OPENCODE_WORKER_PATH
+          : path.resolve(import.meta.dirname, Installation.isLocal() ? "worker.ts" : "worker.js")
 
-      // Helper to get authorization header
-      function getAuthorizationHeader(): string | undefined {
-        const password = Flag.OPENCODE_SERVER_PASSWORD
-        if (!password) return undefined
-        const username = Flag.OPENCODE_SERVER_USERNAME ?? "opencode"
-        return `Basic ${btoa(`${username}:${password}`)}`
-      }
-
-      // Resume a session after compaction
-      async function resumeSession(sessionID: string, retries = 3) {
-        for (let attempt = 0; attempt < retries; attempt++) {
-          Log.Default.info("resuming session after compaction", { sessionID, attempt })
-          const headers: Record<string, string> = { "content-type": "application/json" }
-          const auth = getAuthorizationHeader()
-          if (auth) headers["Authorization"] = auth
-
-          const request = new Request(`http://opencode.internal/session/${sessionID}/resume`, {
-            method: "POST",
-            headers,
-          })
-          const ok = await Promise.resolve(Server.App().fetch(request))
-            .then(() => true)
-            .catch((e: unknown) => {
-              Log.Default.error("failed to resume session after compaction", {
-                sessionID,
-                attempt,
-                error: e instanceof Error ? e.message : e,
-              })
-              return false
-            })
-          if (ok) return true
-          if (attempt < retries - 1) await Bun.sleep(500 * (attempt + 1))
-        }
-        Log.Default.error("exhausted resume retries", { sessionID })
-        return false
-      }
-
-      // Clear compacting marker after successful resume
-      async function resumeAndClear(sessionID: string) {
-        const ok = await resumeSession(sessionID)
-        if (ok) {
-          await Instance.provide({
-            directory: cwd,
-            init: InstanceBootstrap,
-            fn: () => Session.setCompacting({ sessionID, time: undefined }),
-          }).catch((e: unknown) => {
-            Log.Default.error("failed to clear compacting marker", {
-              sessionID,
-              error: e instanceof Error ? e.message : e,
-            })
-          })
-        }
-      }
-
-      // Set up event stream to listen for compaction events
-      const eventStream = { abort: undefined as AbortController | undefined }
-
-      function startEventStream() {
-        if (eventStream.abort) eventStream.abort.abort()
-        const abort = new AbortController()
-        eventStream.abort = abort
-        const signal = abort.signal
-
-        const fetchFn = (async (input: RequestInfo | URL, init?: RequestInit) => {
-          const request = new Request(input, init)
-          const auth = getAuthorizationHeader()
-          if (auth) request.headers.set("Authorization", auth)
-          return Server.App().fetch(request)
-        }) as typeof globalThis.fetch
-
-        const sdk = createOpencodeClient({
-          baseUrl: "http://opencode.internal",
-          directory: cwd,
-          fetch: fetchFn,
-          signal,
-        })
-
-        ;(async () => {
-          let backoff = 250
-          const maxBackoff = 30000
-          const backoffMultiplier = 1.5
-
-          while (!signal.aborted) {
-            const events = await Promise.resolve(sdk.event.subscribe({}, { signal })).catch(() => undefined)
-
-            if (!events) {
-              await Bun.sleep(backoff)
-              backoff = Math.min(backoff * backoffMultiplier, maxBackoff)
-              continue
-            }
-
-            backoff = 250
-
-            for await (const event of events.stream) {
-              const e = event as Event
-
-              // Handle compaction events - auto-resume without worker restart
-              if (e.type === "session.compacted") {
-                const props = e.properties as { sessionID: string }
-                compacted.add(props.sessionID)
-                Log.Default.info("session compacted", { sessionID: props.sessionID })
-              }
-
-              if (e.type === "session.status") {
-                const props = e.properties as { sessionID: string; status: { type: string } }
-                if (props.status.type === "idle") {
-                  if (compacted.delete(props.sessionID)) {
-                    Log.Default.info("compacted session idle, resuming", { sessionID: props.sessionID })
-                    // Resume without worker restart - just call resume endpoint
-                    resumeAndClear(props.sessionID)
-                  } else {
-                    // Race condition: session.status may arrive before session.compacted.
-                    // Check DB for time_compacting marker to catch this case.
-                    Instance.provide({
-                      directory: cwd,
-                      init: InstanceBootstrap,
-                      fn: () => Session.pendingResume(),
-                    })
-                      .then((pending) => {
-                        if (Array.isArray(pending) && pending.includes(props.sessionID)) {
-                          Log.Default.info("compacted session idle (DB fallback), resuming", {
-                            sessionID: props.sessionID,
-                          })
-                          resumeAndClear(props.sessionID)
-                        }
-                      })
-                      .catch((e: unknown) => {
-                        Log.Default.error("failed to check pending resume on idle", {
-                          sessionID: props.sessionID,
-                          error: e instanceof Error ? e.message : e,
-                        })
-                      })
-                  }
-                }
-              }
-
-              // Forward events to TUI handlers
-              for (const handler of handlers) handler(e)
-            }
-
-            if (!signal.aborted) {
-              await Bun.sleep(250)
-            }
-          }
-        })().catch((error) => {
-          Log.Default.error("event stream error", {
-            error: error instanceof Error ? error.message : error,
-          })
-        })
-      }
-
-      // Direct fetch implementation (no worker RPC)
-      const directFetch = (async (input: RequestInfo | URL, init?: RequestInit): Promise<Response> => {
-        const request = new Request(input, init)
-        const auth = getAuthorizationHeader()
-        if (auth && !request.headers.has("Authorization")) {
-          request.headers.set("Authorization", auth)
-        }
-        return Server.App().fetch(request)
-      }) as typeof fetch
-
-      const stableEvents: EventSource = {
-        on: (handler) => {
-          handlers.add(handler)
-          return () => {
-            handlers.delete(handler)
-          }
-        },
-      }
-
-      // Start the event stream
-      startEventStream()
-
-      // Check for any sessions that need resume on startup (crash recovery)
-      setTimeout(async () => {
-        try {
-          const pending = await Instance.provide({
-            directory: cwd,
-            init: InstanceBootstrap,
-            fn: () => Session.pendingResume(),
-          })
-          for (const sessionID of pending) {
-            Log.Default.info("found pending resume session from DB on startup", { sessionID })
-            resumeAndClear(sessionID)
-          }
-        } catch (e) {
-          Log.Default.error("failed to check pending resume on startup", {
-            error: e instanceof Error ? e.message : e,
-          })
-        }
-      }, 1000)
+      // Spawn worker thread — all server/agent/DB operations run there
+      const worker = new Worker(workerPath)
+      const transport = Rpc.worker(worker)
+      const client = Rpc.client<WorkerRpc>(transport)
 
       let url: string
       let customFetch: typeof fetch | undefined
       let events: EventSource | undefined
 
       if (shouldStartServer) {
-        server = Server.listen(networkOpts)
-        url = server.url.toString()
+        const result = await client.call("server", {
+          directory: cwd,
+          port: networkOpts.port,
+          hostname: networkOpts.hostname,
+          mdns: networkOpts.mdns,
+        })
+        url = result ?? `http://${networkOpts.hostname}:${networkOpts.port}`
       } else {
+        // Start event stream but don't listen on a port
+        await client.call("server", { directory: cwd })
         url = "http://opencode.internal"
-        customFetch = directFetch
-        events = stableEvents
+        customFetch = createWorkerFetch(client)
+        events = createEventSource(client)
       }
 
       const tuiPromise = tui({
@@ -316,22 +156,14 @@ export const TuiThreadCommand = cmd({
           fork: args.fork,
         },
         onExit: async () => {
-          exiting = true
-          if (eventStream.abort) eventStream.abort.abort()
-          await Instance.disposeAll()
-          if (server) server.stop(true)
+          await client.call("shutdown", {})
+          worker.terminate()
         },
       })
 
       // Check for upgrades in background
       setTimeout(() => {
-        Instance.provide({
-          directory: cwd,
-          init: InstanceBootstrap,
-          fn: async () => {
-            await upgrade().catch(() => {})
-          },
-        }).catch(() => {})
+        client.call("checkUpgrade", { directory: cwd }).catch(() => {})
       }, 1000)
 
       await tuiPromise

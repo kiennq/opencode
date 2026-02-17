@@ -19,6 +19,28 @@ export namespace Rpc {
     }
   }
 
+  export function worker(w: Worker): Transport {
+    return {
+      send(msg) {
+        w.postMessage(msg)
+      },
+      receive(handler) {
+        w.addEventListener("message", (e: MessageEvent) => handler(e.data))
+      },
+    }
+  }
+
+  export function self(): Transport {
+    return {
+      send(msg) {
+        postMessage(msg)
+      },
+      receive(handler) {
+        addEventListener("message", (e: MessageEvent) => handler(e.data))
+      },
+    }
+  }
+
   export function ipc() {
     const handlers = new Set<(msg: any) => void>()
     return {
