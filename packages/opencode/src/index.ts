@@ -28,6 +28,7 @@ import { PrCommand } from "./cli/cmd/pr"
 import { SessionCommand } from "./cli/cmd/session"
 import { DbCommand } from "./cli/cmd/db"
 import path from "path"
+import fs from "node:fs/promises"
 import { Global } from "./global"
 import { JsonMigration } from "./storage/json-migration"
 import { Database } from "./storage/db"
@@ -81,7 +82,12 @@ const cli = yargs(hideBin(process.argv))
     })
 
     const marker = path.join(Global.Path.data, "opencode.db")
-    if (!(await Bun.file(marker).exists())) {
+    if (
+      !(await fs.stat(marker).then(
+        () => true,
+        () => false,
+      ))
+    ) {
       const tty = process.stderr.isTTY
       process.stderr.write("Performing one time database migration, may take a few minutes..." + EOL)
       const width = 36

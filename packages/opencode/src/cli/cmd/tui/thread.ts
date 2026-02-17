@@ -12,6 +12,8 @@ import { Installation } from "@/installation"
 import { Rpc } from "@/util/rpc"
 import type { WorkerRpc } from "./worker"
 
+declare const OPENCODE_WORKER_PATH: string | undefined
+
 function createWorkerFetch(client: ReturnType<typeof Rpc.client<WorkerRpc>>): typeof fetch {
   return (async (input: RequestInfo | URL, init?: RequestInit) => {
     const request = new Request(input, init)
@@ -112,14 +114,14 @@ export const TuiThreadCommand = cmd({
         networkOpts.port !== 0 ||
         networkOpts.hostname !== "127.0.0.1"
 
-      const g = globalThis as Record<string, unknown>
       const workerPath =
-        typeof g.OPENCODE_WORKER_PATH === "string"
-          ? g.OPENCODE_WORKER_PATH
+        typeof OPENCODE_WORKER_PATH === "string"
+          ? OPENCODE_WORKER_PATH
           : path.resolve(import.meta.dirname, Installation.isLocal() ? "worker.ts" : "worker.js")
 
       // Spawn worker thread — all server/agent/DB operations run there
       const worker = new Worker(workerPath)
+      worker.onerror = (e) => Log.Default.error("worker error", { error: e })
       const transport = Rpc.worker(worker)
       const client = Rpc.client<WorkerRpc>(transport)
 
