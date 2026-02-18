@@ -44,7 +44,7 @@ export namespace Format {
         }
       }
 
-      for (const item of Formatter.all) {
+      for (const item of Object.values(Formatter)) {
         formatters[item.name] = item
       }
       for (const [name, item] of Object.entries(cfg.formatter ?? {})) {
