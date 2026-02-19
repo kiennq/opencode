@@ -39,6 +39,23 @@ export namespace SessionCompaction {
       input.tokens.total ||
       input.tokens.input + input.tokens.output + input.tokens.cache.read + input.tokens.cache.write
 
+    // Check model-specific thresholds first, then global config
+    const modelKey = `${input.model.providerID}/${input.model.id}`
+    const modelConfig = config.compaction?.models?.[modelKey]
+    const tokenThreshold = modelConfig?.token_threshold ?? config.compaction?.token_threshold
+    const contextThreshold = modelConfig?.context_threshold ?? config.compaction?.context_threshold
+
+    // If token_threshold is set, use absolute token count
+    if (tokenThreshold !== undefined) {
+      return count >= tokenThreshold
+    }
+
+    // If context_threshold is set, use fraction of context window
+    if (contextThreshold !== undefined) {
+      return count >= context * contextThreshold
+    }
+
+    // Default behavior: use reserved buffer calculation
     const reserved =
       config.compaction?.reserved ?? Math.min(COMPACTION_BUFFER, ProviderTransform.maxOutputTokens(input.model))
     const usable = input.model.limit.input
