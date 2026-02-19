@@ -161,10 +161,12 @@ for (const item of targets) {
   await $`mkdir -p dist/${name}/bin`
 
   const parserWorker = path.join(path.dirname(require.resolve("@opentui/core")), "parser.worker.js")
+  const opencodeWorker = path.join(dir, "src/cli/cmd/tui/worker.ts")
 
   // Use platform-specific bunfs root path based on target OS
   const bunfsRoot = item.os === "win32" ? "B:/~BUN/root/" : "/$bunfs/root/"
   const workerRelativePath = path.relative(dir, parserWorker).replaceAll("\\", "/")
+  const opencodeWorkerRelativePath = path.relative(dir, opencodeWorker).replaceAll("\\", "/")
 
   await Bun.build({
     conditions: ["browser"],
@@ -183,11 +185,12 @@ for (const item of targets) {
       execArgv: [`--user-agent=opencode/${Script.version}`, "--use-system-ca", "--"],
       windows: {},
     },
-    entrypoints: ["./src/index.ts", parserWorker],
+    entrypoints: ["./src/index.ts", parserWorker, opencodeWorker],
     define: {
       OPENCODE_VERSION: `'${Script.version}'`,
       OPENCODE_MIGRATIONS: JSON.stringify(migrations),
       OTUI_TREE_SITTER_WORKER_PATH: bunfsRoot + workerRelativePath,
+      OPENCODE_WORKER_PATH: `'${bunfsRoot}${opencodeWorkerRelativePath.replace(/\.ts$/, ".js")}'`,
       OPENCODE_CHANNEL: `'${Script.channel}'`,
       OPENCODE_LIBC: item.os === "linux" ? `'${item.abi ?? "glibc"}'` : "",
     },
