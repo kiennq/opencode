@@ -19,7 +19,27 @@ const opencode = await createOpencode({
 })
 console.log("✅ Opencode server ready")
 
-const sessions = new Map<string, { client: any; server: any; sessionId: string; channel: string; thread: string }>()
+const sessions = new Map<
+  string,
+  { client: any; server: any; sessionId: string; channel: string; thread: string; lastUsed: number }
+>()
+
+// Session cleanup: remove sessions older than 1 hour
+const SESSION_TIMEOUT_MS = 60 * 60 * 1000
+const MAX_SESSIONS = 100
+
+function cleanupOldSessions() {
+  const now = Date.now()
+  for (const [key, session] of sessions.entries()) {
+    if (now - session.lastUsed > SESSION_TIMEOUT_MS || sessions.size > MAX_SESSIONS) {
+      sessions.delete(key)
+      console.log("🧹 Cleaned up session:", key)
+    }
+  }
+}
+
+// Run cleanup periodically
+setInterval(cleanupOldSessions, 5 * 60 * 1000) // Every 5 minutes
 ;(async () => {
   const events = await opencode.client.event.subscribe()
   for await (const event of events.stream) {
@@ -29,6 +49,7 @@ const sessions = new Map<string, { client: any; server: any; sessionId: string; 
         // Find the session for this tool update
         for (const [sessionKey, session] of sessions.entries()) {
           if (session.sessionId === part.sessionID) {
+            session.lastUsed = Date.now()
             handleToolUpdate(part, session.channel, session.thread)
             break
           }
@@ -90,7 +111,7 @@ app.message(async ({ message, say }) => {
 
     console.log("✅ Created opencode session:", createResult.data.id)
 
-    session = { client, server, sessionId: createResult.data.id, channel, thread }
+    session = { client, server, sessionId: createResult.data.id, channel, thread, lastUsed: Date.now() }
     sessions.set(sessionKey, session)
 
     const shareResult = await client.session.share({ path: { id: createResult.data.id } })
@@ -102,6 +123,7 @@ app.message(async ({ message, say }) => {
   }
 
   console.log("📝 Sending to opencode:", message.text)
+  session.lastUsed = Date.now()
   const result = await session.client.session.prompt({
     path: { id: session.sessionId },
     body: { parts: [{ type: "text", text: message.text }] },
@@ -143,3 +165,16 @@ app.command("/test", async ({ command, ack, say }) => {
 
 await app.start()
 console.log("⚡️ Slack bot is running!")
+
+// Graceful shutdown handler
+process.on("SIGINT", () => {
+  console.log("\n🛑 Shutting down...")
+  sessions.clear()
+  process.exit(0)
+})
+
+process.on("SIGTERM", () => {
+  console.log("\n🛑 Shutting down...")
+  sessions.clear()
+  process.exit(0)
+})
