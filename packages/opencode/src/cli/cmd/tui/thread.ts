@@ -11,7 +11,7 @@ import { withNetworkOptions, resolveNetworkOptions } from "@/cli/network"
 import { Filesystem } from "@/util/filesystem"
 import type { Event } from "@opencode-ai/sdk/v2"
 import type { EventSource } from "./context/sdk"
-import { win32DisableProcessedInput, win32InstallCtrlCGuard } from "./win32"
+import { win32DisableProcessedInput, win32InstallCtrlCGuard, win32SetUtf8CodePage } from "./win32"
 import { TuiConfig } from "@/config/tui"
 import { Instance } from "@/project/instance"
 
@@ -103,6 +103,7 @@ export const TuiThreadCommand = cmd({
       // Must be the very first thing — disables CTRL_C_EVENT before any Worker
       // spawn or async work so the OS cannot kill the process group.
       win32DisableProcessedInput()
+      win32SetUtf8CodePage()
 
       if (args.fork && !args.continue && !args.session) {
         UI.error("--fork requires --continue or --session")
