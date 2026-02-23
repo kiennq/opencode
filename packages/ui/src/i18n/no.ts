@@ -100,6 +100,7 @@ export const dict: Record<Keys, string> = {
   "ui.tool.websearch": "Nettsøk",
   "ui.tool.codesearch": "Kodesøk",
   "ui.tool.shell": "Shell",
+  "ui.tool.powershell": "PowerShell",
   "ui.tool.patch": "Patch",
   "ui.tool.todos": "Gjøremål",
   "ui.tool.todos.read": "Les gjøremål",

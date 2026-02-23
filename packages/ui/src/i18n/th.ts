@@ -98,6 +98,7 @@ export const dict = {
   "ui.tool.websearch": "ค้นหาเว็บ",
   "ui.tool.codesearch": "ค้นหาโค้ด",
   "ui.tool.shell": "เชลล์",
+  "ui.tool.powershell": "PowerShell",
   "ui.tool.patch": "แพตช์",
   "ui.tool.todos": "รายการงาน",
   "ui.tool.todos.read": "อ่านรายการงาน",
