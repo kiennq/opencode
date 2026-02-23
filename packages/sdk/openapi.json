@@ -10224,6 +10224,38 @@
                 "type": "integer",
                 "minimum": 0,
                 "maximum": 9007199254740991
+              },
+              "token_threshold": {
+                "description": "Absolute token threshold that triggers compaction",
+                "type": "integer",
+                "exclusiveMinimum": 0,
+                "maximum": 9007199254740991
+              },
+              "context_threshold": {
+                "description": "Fraction of model context window that triggers compaction (0-1+)",
+                "type": "number",
+                "exclusiveMinimum": 0
+              },
+              "models": {
+                "description": "Per-model compaction thresholds keyed by providerID/modelID",
+                "type": "object",
+                "propertyNames": {
+                  "type": "string"
+                },
+                "additionalProperties": {
+                  "type": "object",
+                  "properties": {
+                    "token_threshold": {
+                      "type": "integer",
+                      "exclusiveMinimum": 0,
+                      "maximum": 9007199254740991
+                    },
+                    "context_threshold": {
+                      "type": "number",
+                      "exclusiveMinimum": 0
+                    }
+                  }
+                }
               }
             }
           },

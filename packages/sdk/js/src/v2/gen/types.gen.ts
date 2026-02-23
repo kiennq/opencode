@@ -1880,6 +1880,23 @@ export type Config = {
      * Token buffer for compaction. Leaves enough window to avoid overflow during compaction.
      */
     reserved?: number
+    /**
+     * Absolute token threshold that triggers compaction
+     */
+    token_threshold?: number
+    /**
+     * Fraction of model context window that triggers compaction (0-1+)
+     */
+    context_threshold?: number
+    /**
+     * Per-model compaction thresholds keyed by providerID/modelID
+     */
+    models?: {
+      [key: string]: {
+        token_threshold?: number
+        context_threshold?: number
+      }
+    }
   }
   experimental?: {
     disable_paste_summary?: boolean
