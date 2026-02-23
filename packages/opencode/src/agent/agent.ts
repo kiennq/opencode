@@ -19,6 +19,7 @@ import { Global } from "@/global"
 import path from "path"
 import { Plugin } from "@/plugin"
 import { Skill } from "../skill"
+import { Filesystem } from "@/util/filesystem"
 
 export namespace Agent {
   export const Info = z
