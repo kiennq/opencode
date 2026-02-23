@@ -1,6 +1,5 @@
 import path from "path"
 import fs from "fs/promises"
-import { createWriteStream } from "fs"
 import { Global } from "../global"
 import z from "zod"
 import { Glob } from "./glob"
@@ -65,15 +64,16 @@ export namespace Log {
       Global.Path.log,
       options.dev ? "dev.log" : new Date().toISOString().split(".")[0].replace(/:/g, "") + ".log",
     )
-    await fs.truncate(logpath).catch(() => {})
-    const stream = createWriteStream(logpath, { flags: "a" })
+    const logfile = Bun.file(logpath)
+    // Only truncate timestamped logs (one process per file).
+    // Dev mode uses a shared dev.log — truncating would wipe the
+    // parent's logs when the worker calls Log.init() second.
+    if (!options.dev) await fs.truncate(logpath).catch(() => {})
+    const writer = logfile.writer()
     write = async (msg: any) => {
-      return new Promise((resolve, reject) => {
-        stream.write(msg, (err) => {
-          if (err) reject(err)
-          else resolve(msg.length)
-        })
-      })
+      const num = writer.write(msg)
+      writer.flush()
+      return num
     }
   }
 
