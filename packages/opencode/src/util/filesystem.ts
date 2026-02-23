@@ -2,7 +2,7 @@ import { chmod, mkdir, readFile, writeFile } from "fs/promises"
 import { createWriteStream, existsSync, statSync } from "fs"
 import { lookup } from "mime-types"
 import { realpathSync } from "fs"
-import { dirname, join, relative } from "path"
+import { dirname, join as pathJoin, relative as pathRelative, resolve as pathResolve } from "path"
 import { Readable } from "stream"
 import { pipeline } from "stream/promises"
 import { Glob } from "./glob"
@@ -104,6 +104,10 @@ export namespace Filesystem {
    * This is needed because Windows paths are case-insensitive but LSP servers
    * may return paths with different casing than what we send them.
    */
+  export function normalize(p: string): string {
+    return normalizePath(p)
+  }
+
   export function normalizePath(p: string): string {
     if (process.platform !== "win32") return p
     try {
@@ -125,6 +129,23 @@ export namespace Filesystem {
         .replace(/^\/mnt\/([a-zA-Z])\//, (_, drive) => `${drive.toUpperCase()}:/`)
     )
   }
+
+  export function realpath(p: string): string {
+    try {
+      return realpathSync.native(p)
+    } catch {
+      return p
+    }
+  }
+
+  export function relative(from: string, to: string): string {
+    return pathRelative(from, to)
+  }
+
+  export function resolve(...parts: string[]): string {
+    return pathResolve(...parts)
+  }
+
   export function overlaps(a: string, b: string) {
     const relA = relative(a, b)
     const relB = relative(b, a)
@@ -135,11 +156,15 @@ export namespace Filesystem {
     return !relative(parent, child).startsWith("..")
   }
 
+  export function join(...parts: string[]) {
+    return pathJoin(...parts)
+  }
+
   export async function findUp(target: string, start: string, stop?: string) {
     let current = start
     const result = []
     while (true) {
-      const search = join(current, target)
+      const search = pathJoin(current, target)
       if (await exists(search)) result.push(search)
       if (stop === current) break
       const parent = dirname(current)
@@ -154,7 +179,7 @@ export namespace Filesystem {
     let current = start
     while (true) {
       for (const target of targets) {
-        const search = join(current, target)
+        const search = pathJoin(current, target)
         if (await exists(search)) yield search
       }
       if (stop === current) break

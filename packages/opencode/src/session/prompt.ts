@@ -626,26 +626,51 @@ export namespace SessionPrompt {
         })
       }
 
-      // Ephemerally wrap queued user messages with a reminder to stay on track
-      if (step > 1 && lastFinished) {
-        for (const msg of msgs) {
-          if (msg.info.role !== "user" || msg.info.id <= lastFinished.id) continue
-          for (const part of msg.parts) {
-            if (part.type !== "text" || part.ignored || part.synthetic) continue
-            if (!part.text.trim()) continue
-            part.text = [
-              "<system-reminder>",
-              "The user sent the following message:",
-              part.text,
-              "",
-              "Please address this message and continue with your tasks.",
-              "</system-reminder>",
-            ].join("\n")
-          }
-        }
-      }
+      // Ephemerally merge queued user messages into one message to reduce model input
+      // while still reminding the model to address each queued request.
+      const sessionMessages =
+        step > 1 && lastFinished
+          ? (() => {
+              const queued = msgs.filter(
+                (msg): msg is MessageV2.WithParts & { info: MessageV2.User } =>
+                  msg.info.role === "user" && msg.info.id > lastFinished.id,
+              )
+              if (queued.length === 0) return msgs
 
-      await Plugin.trigger("experimental.chat.messages.transform", {}, { messages: msgs })
+              const merged = {
+                info: queued[queued.length - 1].info,
+                parts: queued.flatMap((msg, i) =>
+                  msg.parts.map((part) => {
+                    if (part.type !== "text" || part.ignored || part.synthetic) return part
+                    if (!part.text.trim()) return part
+                    return {
+                      ...part,
+                      text: [
+                        "<system-reminder>",
+                        queued.length > 1
+                          ? `The user sent queued message #${i + 1}:`
+                          : "The user sent the following message:",
+                        part.text,
+                        "",
+                        "Please address this message and continue with your tasks.",
+                        "</system-reminder>",
+                      ].join("\n"),
+                    }
+                  }),
+                ),
+              }
+
+              let replaced = false
+              return msgs.flatMap((msg) => {
+                if (msg.info.role !== "user" || msg.info.id <= lastFinished.id) return [msg]
+                if (replaced) return []
+                replaced = true
+                return [merged]
+              })
+            })()
+          : msgs
+
+      await Plugin.trigger("experimental.chat.messages.transform", {}, { messages: sessionMessages })
 
       // Build system prompt, adding structured output instruction if needed
       const system = [...(await SystemPrompt.environment(model)), ...(await InstructionPrompt.system())]
@@ -661,7 +686,7 @@ export namespace SessionPrompt {
         sessionID,
         system,
         messages: [
-          ...MessageV2.toModelMessages(msgs, model),
+          ...MessageV2.toModelMessages(sessionMessages, model),
           ...(isLastStep
             ? [
                 {
@@ -1744,6 +1769,16 @@ NOTE: At any point in time through this workflow you should feel free to ask the
   export async function command(input: CommandInput) {
     log.info("command", input)
     const command = await Command.get(input.command)
+    if (!command) {
+      const available = await Command.list().then((x) => x.map((y) => y.name).sort())
+      const hint = available.length ? ` Available commands: ${available.join(", ")}` : ""
+      const error = new NamedError.Unknown({ message: `Command not found: "${input.command}".${hint}` })
+      Bus.publish(Session.Event.Error, {
+        sessionID: input.sessionID,
+        error: error.toObject(),
+      })
+      throw error
+    }
     const agentName = command.agent ?? input.agent ?? (await Agent.defaultAgent())
 
     const raw = input.arguments.match(argsRegex) ?? []
