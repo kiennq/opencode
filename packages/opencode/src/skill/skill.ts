@@ -85,7 +85,7 @@ export namespace Skill {
       skills[parsed.data.name] = {
         name: parsed.data.name,
         description: parsed.data.description,
-        location: match,
+        location: Filesystem.normalize(match),
         content: md.content,
       }
     }
