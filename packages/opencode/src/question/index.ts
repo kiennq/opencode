@@ -83,7 +83,8 @@ export namespace Question {
   interface PendingEntry {
     info: Request
     resolve: (answers: Answer[]) => void
-    reject: (e: any) => void
+    reject: (e: unknown) => void
+    timeout: ReturnType<typeof setTimeout>
   }
 
   const state = Instance.state(async () => ({
@@ -107,10 +108,32 @@ export namespace Question {
         questions: input.questions,
         tool: input.tool,
       }
+      const timeout = setTimeout(
+        () => {
+          if (s.pending.has(id)) {
+            s.pending.delete(id)
+            log.info("timed out", { requestID: id })
+            Bus.publish(Event.Rejected, {
+              sessionID: input.sessionID,
+              requestID: id,
+            })
+            reject(new Error("Question timed out"))
+          }
+        },
+        5 * 60 * 1000,
+      )
+
       s.pending.set(id, {
         info,
-        resolve,
-        reject,
+        resolve: (answers) => {
+          clearTimeout(timeout)
+          resolve(answers)
+        },
+        reject: (e) => {
+          clearTimeout(timeout)
+          reject(e)
+        },
+        timeout,
       })
       Bus.publish(Event.Asked, info)
     })
@@ -155,6 +178,21 @@ export namespace Question {
     existing.reject(new RejectedError())
   }
 
+  export async function rejectBySession(sessionID: SessionID): Promise<void> {
+    const s = await state()
+    for (const [id, entry] of s.pending) {
+      if (entry.info.sessionID === sessionID) {
+        s.pending.delete(id)
+        log.info("rejected by session", { requestID: id, sessionID })
+        Bus.publish(Event.Rejected, {
+          sessionID: entry.info.sessionID,
+          requestID: entry.info.id,
+        })
+        entry.reject(new RejectedError())
+      }
+    }
+  }
+
   export class RejectedError extends Error {
     constructor() {
       super("The user dismissed this question")
@@ -163,5 +201,15 @@ export namespace Question {
 
   export async function list() {
     return state().then((x) => Array.from(x.pending.values(), (x) => x.info))
+  }
+
+  export async function clearSession(sessionID: SessionID) {
+    const s = await state()
+    for (const [id, pending] of s.pending) {
+      if (pending.info.sessionID === sessionID) {
+        s.pending.delete(id)
+        pending.reject(new Error("Session ended"))
+      }
+    }
   }
 }
