@@ -1770,6 +1770,16 @@ NOTE: At any point in time through this workflow you should feel free to ask the
   export async function command(input: CommandInput) {
     log.info("command", input)
     const command = await Command.get(input.command)
+    if (!command) {
+      const available = await Command.list().then((x) => x.map((y) => y.name).sort())
+      const hint = available.length ? ` Available commands: ${available.join(", ")}` : ""
+      const error = new NamedError.Unknown({ message: `Command not found: "${input.command}".${hint}` })
+      Bus.publish(Session.Event.Error, {
+        sessionID: input.sessionID,
+        error: error.toObject(),
+      })
+      throw error
+    }
     const agentName = command.agent ?? input.agent ?? (await Agent.defaultAgent())
 
     const raw = input.arguments.match(argsRegex) ?? []

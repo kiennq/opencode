@@ -6,7 +6,6 @@ import { Filesystem } from "../../src/util/filesystem"
 import { tmpdir } from "../fixture/fixture"
 import type { PermissionNext } from "../../src/permission/next"
 import { Truncate } from "../../src/tool/truncation"
-import { Filesystem } from "../../src/util/filesystem"
 
 const ctx = {
   sessionID: "test",
