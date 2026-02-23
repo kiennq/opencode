@@ -62,13 +62,14 @@ function track(directory: string, next: Promise<Context>) {
 
 export const Instance = {
   async provide<R>(input: { directory: string; init?: () => Promise<any>; fn: () => R }): Promise<R> {
-    let existing = cache.get(input.directory)
+    const directory = Filesystem.normalize(input.directory)
+    let existing = cache.get(directory)
     if (!existing) {
-      Log.Default.info("creating instance", { directory: input.directory })
+      Log.Default.info("creating instance", { directory })
       existing = track(
-        input.directory,
+        directory,
         boot({
-          directory: input.directory,
+          directory,
           init: input.init,
         }),
       )

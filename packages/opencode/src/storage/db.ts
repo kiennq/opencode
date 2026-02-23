@@ -89,6 +89,8 @@ export namespace Database {
     sqlite.run("PRAGMA synchronous = NORMAL")
     sqlite.run("PRAGMA busy_timeout = 5000")
     sqlite.run("PRAGMA cache_size = -64000")
+    sqlite.run("PRAGMA temp_store = MEMORY")
+    sqlite.run("PRAGMA wal_autocheckpoint = 4000")
     sqlite.run("PRAGMA foreign_keys = ON")
     sqlite.run("PRAGMA wal_checkpoint(PASSIVE)")
 
