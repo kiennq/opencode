@@ -578,60 +578,6 @@ export type EventPermissionReplied = {
   }
 }
 
-export type EventTuiPromptAppend = {
-  type: "tui.prompt.append"
-  properties: {
-    text: string
-  }
-}
-
-export type EventTuiCommandExecute = {
-  type: "tui.command.execute"
-  properties: {
-    command:
-      | "session.list"
-      | "session.new"
-      | "session.share"
-      | "session.interrupt"
-      | "session.compact"
-      | "session.page.up"
-      | "session.page.down"
-      | "session.line.up"
-      | "session.line.down"
-      | "session.half.page.up"
-      | "session.half.page.down"
-      | "session.first"
-      | "session.last"
-      | "prompt.clear"
-      | "prompt.submit"
-      | "agent.cycle"
-      | string
-  }
-}
-
-export type EventTuiToastShow = {
-  type: "tui.toast.show"
-  properties: {
-    title?: string
-    message: string
-    variant: "info" | "success" | "warning" | "error"
-    /**
-     * Duration in milliseconds
-     */
-    duration?: number
-  }
-}
-
-export type EventTuiSessionSelect = {
-  type: "tui.session.select"
-  properties: {
-    /**
-     * Session ID to navigate to
-     */
-    sessionID: string
-  }
-}
-
 export type SessionStatus =
   | {
       type: "idle"
@@ -767,6 +713,60 @@ export type EventTodoUpdated = {
   properties: {
     sessionID: string
     todos: Array<Todo>
+  }
+}
+
+export type EventTuiPromptAppend = {
+  type: "tui.prompt.append"
+  properties: {
+    text: string
+  }
+}
+
+export type EventTuiCommandExecute = {
+  type: "tui.command.execute"
+  properties: {
+    command:
+      | "session.list"
+      | "session.new"
+      | "session.share"
+      | "session.interrupt"
+      | "session.compact"
+      | "session.page.up"
+      | "session.page.down"
+      | "session.line.up"
+      | "session.line.down"
+      | "session.half.page.up"
+      | "session.half.page.down"
+      | "session.first"
+      | "session.last"
+      | "prompt.clear"
+      | "prompt.submit"
+      | "agent.cycle"
+      | string
+  }
+}
+
+export type EventTuiToastShow = {
+  type: "tui.toast.show"
+  properties: {
+    title?: string
+    message: string
+    variant: "info" | "success" | "warning" | "error"
+    /**
+     * Duration in milliseconds
+     */
+    duration?: number
+  }
+}
+
+export type EventTuiSessionSelect = {
+  type: "tui.session.select"
+  properties: {
+    /**
+     * Session ID to navigate to
+     */
+    sessionID: string
   }
 }
 
@@ -973,10 +973,6 @@ export type Event =
   | EventMessagePartRemoved
   | EventPermissionAsked
   | EventPermissionReplied
-  | EventTuiPromptAppend
-  | EventTuiCommandExecute
-  | EventTuiToastShow
-  | EventTuiSessionSelect
   | EventSessionStatus
   | EventSessionIdle
   | EventQuestionAsked
@@ -985,6 +981,10 @@ export type Event =
   | EventSessionCompacted
   | EventFileWatcherUpdated
   | EventTodoUpdated
+  | EventTuiPromptAppend
+  | EventTuiCommandExecute
+  | EventTuiToastShow
+  | EventTuiSessionSelect
   | EventMcpToolsChanged
   | EventMcpBrowserOpenFailed
   | EventCommandExecuted
@@ -1880,69 +1880,6 @@ export type Config = {
      * Token buffer for compaction. Leaves enough window to avoid overflow during compaction.
      */
     reserved?: number
-    /**
-     * Trigger compaction when total token count exceeds this absolute number
-     */
-    token_threshold?: number
-    /**
-     * Trigger compaction when token usage exceeds this fraction of the model context window (e.g. 0.8 = 80%)
-     */
-    context_threshold?: number
-    /**
-     * Minimum number of messages to wait before next compaction (default: 5)
-     */
-    min_messages?: number
-    /**
-     * Model-specific compaction thresholds (key: provider/model)
-     */
-    models?: {
-      [key: string]: {
-        token_threshold?: number
-        context_threshold?: number
-        min_messages?: number
-      }
-    }
-  }
-  /**
-   * Smart pruning configuration for tiered tool output management
-   */
-  pruning?: {
-    /**
-     * Enable smart pruning (default: true)
-     */
-    enabled?: boolean
-    budgets?: {
-      /**
-       * Token budget for content tools like read/webfetch (default: 60000)
-       */
-      content?: number
-      /**
-       * Token budget for navigation tools like grep/glob (default: 15000)
-       */
-      navigation?: number
-    }
-    summarization?: {
-      /**
-       * Enable LLM summarization for content tools (default: true)
-       */
-      enabled?: boolean
-      /**
-       * Model to use for summarization (default: uses small_model or provider's small model)
-       */
-      model?: string
-    }
-    /**
-     * Additional tools to treat as content tools (high priority)
-     */
-    contentTools?: Array<string>
-    /**
-     * Additional tools to treat as navigation tools (low priority)
-     */
-    navigationTools?: Array<string>
-    /**
-     * Tools that should never be pruned
-     */
-    protectedTools?: Array<string>
   }
   experimental?: {
     disable_paste_summary?: boolean
