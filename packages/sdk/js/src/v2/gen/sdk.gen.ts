@@ -125,6 +125,8 @@ import type {
   SessionPromptAsyncResponses,
   SessionPromptErrors,
   SessionPromptResponses,
+  SessionResumeErrors,
+  SessionResumeResponses,
   SessionRevertErrors,
   SessionRevertResponses,
   SessionShareErrors,
@@ -1470,6 +1472,36 @@ export class Session2 extends HeyApiClient {
         ...options?.headers,
         ...params.headers,
       },
+    })
+  }
+
+  /**
+   * Resume session
+   *
+   * Resume processing a session that has pending messages without creating a new user message.
+   */
+  public resume<ThrowOnError extends boolean = false>(
+    parameters: {
+      sessionID: string
+      directory?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "path", key: "sessionID" },
+            { in: "query", key: "directory" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).post<SessionResumeResponses, SessionResumeErrors, ThrowOnError>({
+      url: "/session/{sessionID}/resume",
+      ...options,
+      ...params,
     })
   }
 
