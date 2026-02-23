@@ -152,6 +152,10 @@ export namespace ACP {
       this.startEventSubscription()
     }
 
+    async dispose() {
+      this.eventAbort.abort()
+    }
+
     private startEventSubscription() {
       if (this.eventStarted) return
       this.eventStarted = true

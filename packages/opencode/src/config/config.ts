@@ -1143,6 +1143,27 @@ export namespace Config {
             .min(0)
             .optional()
             .describe("Token buffer for compaction. Leaves enough window to avoid overflow during compaction."),
+          token_threshold: z
+            .number()
+            .int()
+            .positive()
+            .optional()
+            .describe("Absolute token threshold that triggers compaction"),
+          context_threshold: z
+            .number()
+            .positive()
+            .optional()
+            .describe("Fraction of model context window that triggers compaction (0-1+)"),
+          models: z
+            .record(
+              z.string(),
+              z.object({
+                token_threshold: z.number().int().positive().optional(),
+                context_threshold: z.number().positive().optional(),
+              }),
+            )
+            .optional()
+            .describe("Per-model compaction thresholds keyed by providerID/modelID"),
         })
         .optional(),
       experimental: z
