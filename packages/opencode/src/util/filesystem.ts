@@ -2,7 +2,7 @@ import { chmod, mkdir, readFile, writeFile } from "fs/promises"
 import { createWriteStream, existsSync, statSync } from "fs"
 import { lookup } from "mime-types"
 import { realpathSync } from "fs"
-import { dirname, join, relative } from "path"
+import { dirname, join as pathJoin, relative } from "path"
 import { Readable } from "stream"
 import { pipeline } from "stream/promises"
 import { Glob } from "./glob"
@@ -104,6 +104,10 @@ export namespace Filesystem {
    * This is needed because Windows paths are case-insensitive but LSP servers
    * may return paths with different casing than what we send them.
    */
+  export function normalize(p: string): string {
+    return normalizePath(p)
+  }
+
   export function normalizePath(p: string): string {
     if (process.platform !== "win32") return p
     try {
@@ -135,11 +139,15 @@ export namespace Filesystem {
     return !relative(parent, child).startsWith("..")
   }
 
+  export function join(...parts: string[]) {
+    return pathJoin(...parts)
+  }
+
   export async function findUp(target: string, start: string, stop?: string) {
     let current = start
     const result = []
     while (true) {
-      const search = join(current, target)
+      const search = pathJoin(current, target)
       if (await exists(search)) result.push(search)
       if (stop === current) break
       const parent = dirname(current)
@@ -154,7 +162,7 @@ export namespace Filesystem {
     let current = start
     while (true) {
       for (const target of targets) {
-        const search = join(current, target)
+        const search = pathJoin(current, target)
         if (await exists(search)) yield search
       }
       if (stop === current) break
