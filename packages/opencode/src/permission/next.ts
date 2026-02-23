@@ -24,6 +24,40 @@ export namespace PermissionNext {
     return pattern
   }
 
+  type StateWithSubscriptions = Awaited<ReturnType<typeof state>> & {
+    subscriptions?: Array<() => void>
+  }
+
+  async function withSubscriptions(fn: (subscriptions: Array<() => void>) => void | Promise<void>): Promise<void> {
+    const s = (await state()) as StateWithSubscriptions
+    if (!s.subscriptions) {
+      s.subscriptions = []
+    }
+    await fn(s.subscriptions)
+  }
+
+  export async function dispose() {
+    await withSubscriptions((subscriptions) => {
+      for (const unsubscribe of subscriptions) {
+        unsubscribe()
+      }
+      subscriptions.length = 0
+    })
+  }
+
+  export async function init() {
+    await dispose()
+    await withSubscriptions((subscriptions) => {
+      subscriptions.push(
+        Bus.subscribeAll(async (evt) => {
+          if (evt.type === "session.deleted") {
+            await clearSession(evt.properties.info.id)
+          }
+        }),
+      )
+    })
+  }
+
   export const Action = z.enum(["allow", "deny", "ask"]).meta({
     ref: "PermissionAction",
   })
@@ -111,7 +145,8 @@ export namespace PermissionNext {
   interface PendingEntry {
     info: Request
     resolve: () => void
-    reject: (e: any) => void
+    reject: (e: unknown) => void
+    timeout: ReturnType<typeof setTimeout>
   }
 
   const state = Instance.state(() => {
@@ -146,10 +181,27 @@ export namespace PermissionNext {
               id,
               ...request,
             }
+            const timeout = setTimeout(
+              () => {
+                if (s.pending.has(id)) {
+                  s.pending.delete(id)
+                  reject(new Error("Permission request timed out"))
+                }
+              },
+              5 * 60 * 1000,
+            )
+
             s.pending.set(id, {
               info,
-              resolve,
-              reject,
+              resolve: () => {
+                clearTimeout(timeout)
+                resolve()
+              },
+              reject: (e) => {
+                clearTimeout(timeout)
+                reject(e)
+              },
+              timeout,
             })
             Bus.publish(Event.Asked, info)
           })
@@ -170,30 +222,35 @@ export namespace PermissionNext {
       const existing = s.pending.get(input.requestID)
       if (!existing) return
       s.pending.delete(input.requestID)
-      Bus.publish(Event.Replied, {
-        sessionID: existing.info.sessionID,
-        requestID: existing.info.id,
-        reply: input.reply,
-      })
       if (input.reply === "reject") {
         existing.reject(input.message ? new CorrectedError(input.message) : new RejectedError())
+        Bus.publish(Event.Replied, {
+          sessionID: existing.info.sessionID,
+          requestID: existing.info.id,
+          reply: input.reply,
+        })
         // Reject all other pending permissions for this session
         const sessionID = existing.info.sessionID
         for (const [id, pending] of s.pending) {
           if (pending.info.sessionID === sessionID) {
             s.pending.delete(id)
+            pending.reject(new RejectedError())
             Bus.publish(Event.Replied, {
               sessionID: pending.info.sessionID,
               requestID: pending.info.id,
               reply: "reject",
             })
-            pending.reject(new RejectedError())
           }
         }
         return
       }
       if (input.reply === "once") {
         existing.resolve()
+        Bus.publish(Event.Replied, {
+          sessionID: existing.info.sessionID,
+          requestID: existing.info.id,
+          reply: input.reply,
+        })
         return
       }
       if (input.reply === "always") {
@@ -206,6 +263,11 @@ export namespace PermissionNext {
         }
 
         existing.resolve()
+        Bus.publish(Event.Replied, {
+          sessionID: existing.info.sessionID,
+          requestID: existing.info.id,
+          reply: input.reply,
+        })
 
         const sessionID = existing.info.sessionID
         for (const [id, pending] of s.pending) {
@@ -215,12 +277,12 @@ export namespace PermissionNext {
           )
           if (!ok) continue
           s.pending.delete(id)
+          pending.resolve()
           Bus.publish(Event.Replied, {
             sessionID: pending.info.sessionID,
             requestID: pending.info.id,
             reply: "always",
           })
-          pending.resolve()
         }
 
         // TODO: we don't save the permission ruleset to disk yet until there's
@@ -281,5 +343,20 @@ export namespace PermissionNext {
   export async function list() {
     const s = await state()
     return Array.from(s.pending.values(), (x) => x.info)
+  }
+
+  export async function clearSession(sessionID: SessionID) {
+    const s = await state()
+    for (const [id, pending] of s.pending) {
+      if (pending.info.sessionID === sessionID) {
+        s.pending.delete(id)
+        pending.reject(new RejectedError())
+        Bus.publish(Event.Replied, {
+          sessionID: pending.info.sessionID,
+          requestID: pending.info.id,
+          reply: "reject",
+        })
+      }
+    }
   }
 }

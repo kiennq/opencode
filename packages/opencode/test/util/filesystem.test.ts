@@ -320,6 +320,25 @@ describe("filesystem", () => {
     })
   })
 
+  describe("path helpers", () => {
+    test("relative() delegates to Node path.relative", () => {
+      const from = path.join("a", "b")
+      const to = path.join("a", "c", "d")
+      expect(Filesystem.relative(from, to)).toBe(path.relative(from, to))
+    })
+
+    test("resolve() delegates to Node path.resolve", () => {
+      const base = path.join("tmp", "project")
+      expect(Filesystem.resolve(base, "src", "index.ts")).toBe(path.resolve(base, "src", "index.ts"))
+    })
+
+    test("realpath() returns original path when missing", async () => {
+      await using tmp = await tmpdir()
+      const missing = path.join(tmp.path, "missing-file")
+      expect(Filesystem.realpath(missing)).toBe(missing)
+    })
+  })
+
   describe("writeStream()", () => {
     test("writes from Web ReadableStream", async () => {
       await using tmp = await tmpdir()
