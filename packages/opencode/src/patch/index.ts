@@ -76,6 +76,7 @@ export namespace Patch {
     lines: string[],
     startIdx: number,
   ): { filePath: string; movePath?: string; nextIdx: number } | null {
+    if (startIdx >= lines.length) return null
     const line = lines[startIdx]
 
     if (line.startsWith("*** Add File:")) {
