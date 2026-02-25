@@ -3293,6 +3293,10 @@ export type SessionMessagesData = {
      * Maximum number of messages to return
      */
     limit?: number
+    /**
+     * Number of newest messages to skip
+     */
+    offset?: number
   }
   url: "/session/{sessionID}/message"
 }

@@ -729,58 +729,75 @@ export namespace MessageV2 {
     )
   }
 
-  export const stream = fn(Identifier.schema("session"), async function* (sessionID) {
-    const size = 50
-    let offset = 0
-    while (true) {
-      const rows = Database.use((db) =>
-        db
-          .select()
-          .from(MessageTable)
-          .where(eq(MessageTable.session_id, sessionID))
-          .orderBy(desc(MessageTable.time_created))
-          .limit(size)
-          .offset(offset)
-          .all(),
-      )
-      if (rows.length === 0) break
-
-      const ids = rows.map((row) => row.id)
-      const partsByMessage = new Map<string, MessageV2.Part[]>()
-      if (ids.length > 0) {
-        const partRows = Database.use((db) =>
+  export const stream = fn(
+    z.union([
+      Identifier.schema("session"),
+      z.object({
+        sessionID: Identifier.schema("session"),
+        offset: z.number().int().nonnegative().optional(),
+        limit: z.number().int().positive().optional(),
+      }),
+    ]),
+    async function* (input) {
+      const sessionID = typeof input === "string" ? input : input.sessionID
+      const limit = typeof input === "string" ? undefined : input.limit
+      let offset = typeof input === "string" ? 0 : (input.offset ?? 0)
+      let count = 0
+      const size = 50
+      while (true) {
+        const remaining = limit ? limit - count : size
+        if (limit && remaining <= 0) break
+        const take = limit ? Math.min(size, remaining) : size
+        const rows = Database.use((db) =>
           db
             .select()
-            .from(PartTable)
-            .where(inArray(PartTable.message_id, ids))
-            .orderBy(PartTable.message_id, PartTable.id)
+            .from(MessageTable)
+            .where(eq(MessageTable.session_id, sessionID))
+            .orderBy(desc(MessageTable.time_created))
+            .limit(take)
+            .offset(offset)
             .all(),
         )
-        for (const row of partRows) {
-          const part = {
-            ...row.data,
-            id: row.id,
-            sessionID: row.session_id,
-            messageID: row.message_id,
-          } as MessageV2.Part
-          const list = partsByMessage.get(row.message_id)
-          if (list) list.push(part)
-          else partsByMessage.set(row.message_id, [part])
-        }
-      }
+        if (rows.length === 0) break
 
-      for (const row of rows) {
-        const info = { ...row.data, id: row.id, sessionID: row.session_id } as MessageV2.Info
-        yield {
-          info,
-          parts: partsByMessage.get(row.id) ?? [],
+        const ids = rows.map((row) => row.id)
+        const partsByMessage = new Map<string, MessageV2.Part[]>()
+        if (ids.length > 0) {
+          const partRows = Database.use((db) =>
+            db
+              .select()
+              .from(PartTable)
+              .where(inArray(PartTable.message_id, ids))
+              .orderBy(PartTable.message_id, PartTable.id)
+              .all(),
+          )
+          for (const row of partRows) {
+            const part = {
+              ...row.data,
+              id: row.id,
+              sessionID: row.session_id,
+              messageID: row.message_id,
+            } as MessageV2.Part
+            const list = partsByMessage.get(row.message_id)
+            if (list) list.push(part)
+            else partsByMessage.set(row.message_id, [part])
+          }
         }
-      }
 
-      offset += rows.length
-      if (rows.length < size) break
-    }
-  })
+        for (const row of rows) {
+          const info = { ...row.data, id: row.id, sessionID: row.session_id } as MessageV2.Info
+          yield {
+            info,
+            parts: partsByMessage.get(row.id) ?? [],
+          }
+        }
+
+        count += rows.length
+        offset += rows.length
+        if (rows.length < take) break
+      }
+    },
+  )
 
   export const parts = fn(Identifier.schema("message"), async (message_id) => {
     const rows = Database.use((db) =>
