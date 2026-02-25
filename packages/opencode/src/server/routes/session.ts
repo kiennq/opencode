@@ -603,6 +603,7 @@ export const SessionRoutes = lazy(() =>
         "query",
         z.object({
           limit: z.coerce.number().optional().meta({ description: "Maximum number of messages to return" }),
+          offset: z.coerce.number().optional().meta({ description: "Number of newest messages to skip" }),
         }),
       ),
       async (c) => {
@@ -610,6 +611,7 @@ export const SessionRoutes = lazy(() =>
         const messages = await Session.messages({
           sessionID: c.req.valid("param").sessionID,
           limit: query.limit,
+          offset: query.offset,
         })
         return c.json(messages)
       },
