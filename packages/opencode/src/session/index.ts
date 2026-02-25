@@ -521,12 +521,12 @@ export namespace Session {
   export const messages = fn(
     z.object({
       sessionID: Identifier.schema("session"),
-      limit: z.number().optional(),
+      limit: z.number().int().positive().optional(),
+      offset: z.number().int().nonnegative().optional(),
     }),
     async (input) => {
       const result = [] as MessageV2.WithParts[]
-      for await (const msg of MessageV2.stream(input.sessionID)) {
-        if (input.limit && result.length >= input.limit) break
+      for await (const msg of MessageV2.stream(input)) {
         result.push(msg)
       }
       result.reverse()
