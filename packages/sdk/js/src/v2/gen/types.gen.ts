@@ -3240,6 +3240,10 @@ export type SessionMessagesData = {
     directory?: string
     workspace?: string
     limit?: number
+    /**
+     * Number of newest messages to skip
+     */
+    offset?: number
   }
   url: "/session/{sessionID}/message"
 }
