@@ -2861,6 +2861,14 @@
               "type": "number"
             },
             "description": "Maximum number of messages to return"
+          },
+          {
+            "in": "query",
+            "name": "offset",
+            "schema": {
+              "type": "number"
+            },
+            "description": "Number of newest messages to skip"
           }
         ],
         "summary": "Get session messages",
