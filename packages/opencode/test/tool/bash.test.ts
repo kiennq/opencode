@@ -8,6 +8,7 @@ import { tmpdir } from "../fixture/fixture"
 import type { PermissionNext } from "../../src/permission/next"
 import { Truncate } from "../../src/tool/truncation"
 import { SessionID, MessageID } from "../../src/session/schema"
+import { Shell } from "../../src/shell/shell"
 
 const ctx = {
   sessionID: SessionID.make("ses_test"),
@@ -37,6 +38,34 @@ describe("tool.bash", () => {
         )
         expect(result.metadata.exit).toBe(0)
         expect(result.metadata.output).toContain("test")
+      },
+    })
+  })
+
+  test("uses attach env from instance context", async () => {
+    const key = "OPENCODE_ATTACH_ENV_TEST"
+    const value = "attach-env"
+    const command = [`Write-Output $env:${key}`, `echo %${key}%`, `printf '%s' "$${key}"`].find((item) => {
+      const shell = Shell.commandShell(item)
+      if (item.startsWith("Write-Output")) return Shell.isPowerShellShell(shell)
+      if (item.startsWith("echo %")) return Shell.isCmdShell(shell)
+      return !Shell.isPowerShellShell(shell) && !Shell.isCmdShell(shell)
+    })
+    if (!command) throw new Error("Could not find shell-compatible env command")
+    await Instance.provide({
+      directory: projectRoot,
+      env: { [key]: value },
+      fn: async () => {
+        const bash = await BashTool.init()
+        const result = await bash.execute(
+          {
+            command,
+            description: "Read attach env",
+          },
+          ctx,
+        )
+        expect(result.metadata.exit).toBe(0)
+        expect(result.output).toContain(value)
       },
     })
   })
