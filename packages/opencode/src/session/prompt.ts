@@ -70,6 +70,7 @@ export namespace SessionPrompt {
         {
           abort: AbortController
           callbacks: {
+            waitFor?: string
             resolve(input: MessageV2.WithParts): void
             reject(reason?: any): void
           }[]
@@ -182,7 +183,7 @@ export namespace SessionPrompt {
       return message
     }
 
-    return loop({ sessionID: input.sessionID })
+    return loop({ sessionID: input.sessionID, waitFor: message.info.id })
   })
 
   export async function resolvePromptParts(template: string): Promise<PromptInput["parts"]> {
@@ -271,6 +272,7 @@ export namespace SessionPrompt {
   export const LoopInput = z.object({
     sessionID: Identifier.schema("session"),
     resume_existing: z.boolean().optional(),
+    waitFor: Identifier.schema("message").optional(),
   })
   export const loop = fn(LoopInput, async (input) => {
     const { sessionID, resume_existing } = input
@@ -279,7 +281,7 @@ export namespace SessionPrompt {
     if (!abort) {
       return new Promise<MessageV2.WithParts>((resolve, reject) => {
         const callbacks = state()[sessionID].callbacks
-        callbacks.push({ resolve, reject })
+        callbacks.push({ waitFor: input.waitFor, resolve, reject })
       })
     }
 
@@ -738,15 +740,27 @@ export namespace SessionPrompt {
       continue
     }
     SessionCompaction.prune({ sessionID })
+    const assistant = [] as MessageV2.WithParts[]
     for await (const item of MessageV2.stream(sessionID)) {
       if (item.info.role === "user") continue
-      const queued = state()[sessionID]?.callbacks ?? []
-      for (const q of queued) {
-        q.resolve(item)
-      }
-      return item
+      assistant.push(item)
     }
-    throw new Error("Impossible")
+    const latest = assistant[0]
+    if (!latest) throw new Error("Impossible")
+    const pick = (waitFor?: string) => {
+      if (!waitFor) return latest
+      return (
+        assistant.find(
+          (item) => item.info.role === "assistant" && "parentID" in item.info && item.info.parentID === waitFor,
+        ) ?? latest
+      )
+    }
+    const queued = state()[sessionID]?.callbacks ?? []
+    for (const q of queued) {
+      q.resolve(pick(q.waitFor))
+    }
+    state()[sessionID].callbacks = []
+    return pick(input.waitFor)
   })
 
   async function lastModel(sessionID: string) {
