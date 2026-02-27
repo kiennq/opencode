@@ -24,8 +24,16 @@ const DEFAULT_TIMEOUT = Flag.OPENCODE_EXPERIMENTAL_BASH_DEFAULT_TIMEOUT_MS || 2 
 type SessionShell = {
   shell: string
   cwd: string
+  env: string
   process: ChildProcessWithoutNullStreams
   queue: Promise<void>
+}
+
+function envkey(env: Record<string, string>) {
+  return Object.entries(env)
+    .sort(([a], [b]) => a.localeCompare(b))
+    .map(([key, value]) => `${key}=${value}`)
+    .join("\0")
 }
 
 const shells = Instance.state(
@@ -60,9 +68,25 @@ function escapeRegExp(input: string) {
   return input.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")
 }
 
-function build(shell: string, command: string, mark: string) {
+function vars(shell: string, env: Record<string, string>) {
+  if (Object.keys(env).length === 0) return []
+  if (process.platform === "win32" && Shell.isPowerShellShell(shell)) {
+    return Object.entries(env).map(([key, value]) => `$env:${key} = ${quotePowerShell(value)}`)
+  }
+  if (process.platform === "win32" && Shell.isCmdShell(shell)) {
+    return Object.entries(env).map(([key, value]) => `set ${quoteCmd(`${key}=${value}`)}`)
+  }
+  return Object.entries(env).flatMap(([key, value]) => {
+    if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(key)) return []
+    return [`export ${key}=${quotePosix(value)}`]
+  })
+}
+
+function build(shell: string, command: string, mark: string, env: Record<string, string>) {
+  const lines = vars(shell, env)
   if (process.platform === "win32" && Shell.isPowerShellShell(shell)) {
     return [
+      ...lines,
       `$ErrorActionPreference = 'Continue'`,
       `& { ${command} } < $null`,
       `Write-Output \"${mark}$LASTEXITCODE\"`,
@@ -70,17 +94,19 @@ function build(shell: string, command: string, mark: string) {
     ].join("\n")
   }
   if (process.platform === "win32" && Shell.isCmdShell(shell)) {
-    return [`(${command}) <NUL`, `echo ${mark}%ERRORLEVEL%`, ""].join("\r\n")
+    return [...lines, `(${command}) <NUL`, `echo ${mark}%ERRORLEVEL%`, ""].join("\r\n")
   }
-  return [`{ ${command}; } </dev/null`, `printf '${mark}%s\n' \"$?\"`, ""].join("\n")
+  return [...lines, `{ ${command}; } </dev/null`, `printf '${mark}%s\n' \"$?\"`, ""].join("\n")
 }
 
 async function create(sessionID: string, shell: string, cwd: string, env: Record<string, string>) {
   const current = shells().get(sessionID)
+  const key = envkey(env)
   if (
     current &&
     current.shell === shell &&
     current.cwd === cwd &&
+    current.env === key &&
     !current.process.killed &&
     current.process.exitCode === null
   )
@@ -112,6 +138,7 @@ async function create(sessionID: string, shell: string, cwd: string, env: Record
   const created = {
     shell,
     cwd,
+    env: key,
     process: processRef,
     queue: Promise.resolve(),
   }
@@ -128,6 +155,7 @@ async function run(
   shell: string,
   cwd: string,
   env: Record<string, string>,
+  vars: Record<string, string>,
   command: string,
   timeout: number,
   abort: AbortSignal,
@@ -136,7 +164,7 @@ async function run(
   const next = session.queue.then(async () => {
     const mark = marker()
     const regex = new RegExp(`${escapeRegExp(mark)}(-?\\d+)`)
-    const script = build(shell, command, mark)
+    const script = build(shell, command, mark, vars)
     let output = ""
     let timedOut = false
     let aborted = false
@@ -382,8 +410,19 @@ export const BashTool = Tool.define("bash", async () => {
       log.info("bash tool using shell", { shell })
       const env = {
         ...process.env,
+        ...(Instance.env ?? {}),
         ...shellEnv.env,
       }
+      const commandVars = Object.fromEntries(
+        Object.entries({
+          ...(Instance.env ?? {}),
+          ...shellEnv.env,
+        }).flatMap(([key, value]): [string, string][] => {
+          if (typeof value !== "string") return []
+          if (process.env[key] === value) return []
+          return [[key, value]]
+        }),
+      )
       // Initialize metadata with empty output
       ctx.metadata({
         metadata: {
@@ -393,7 +432,7 @@ export const BashTool = Tool.define("bash", async () => {
       })
 
       let output = ""
-      const result = await run(ctx.sessionID, shell, cwd, env, params.command, timeout, ctx.abort)
+      const result = await run(ctx.sessionID, shell, cwd, env, commandVars, params.command, timeout, ctx.abort)
       output += result.output
 
       const resultMetadata: string[] = []

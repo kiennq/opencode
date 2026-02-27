@@ -10,6 +10,7 @@ interface Context {
   directory: string
   worktree: string
   project: Project.Info
+  env?: Record<string, string>
 }
 const context = Context.create<Context>("instance")
 const cache = new Map<string, Promise<Context>>()
@@ -61,7 +62,12 @@ function track(directory: string, next: Promise<Context>) {
 }
 
 export const Instance = {
-  async provide<R>(input: { directory: string; init?: () => Promise<any>; fn: () => R }): Promise<R> {
+  async provide<R>(input: {
+    directory: string
+    env?: Record<string, string>
+    init?: () => Promise<any>
+    fn: () => R
+  }): Promise<R> {
     const directory = Filesystem.resolve(input.directory)
     let existing = cache.get(directory)
     if (!existing) {
@@ -75,9 +81,15 @@ export const Instance = {
       )
     }
     const ctx = await existing
-    return context.provide(ctx, async () => {
-      return input.fn()
-    })
+    return context.provide(
+      {
+        ...ctx,
+        env: input.env,
+      },
+      async () => {
+        return input.fn()
+      },
+    )
   },
   get directory() {
     return context.use().directory
@@ -87,6 +99,9 @@ export const Instance = {
   },
   get project() {
     return context.use().project
+  },
+  get env() {
+    return context.use().env
   },
   /**
    * Check if a path is within the project boundary.
