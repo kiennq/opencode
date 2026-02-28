@@ -1,5 +1,5 @@
 import z from "zod"
-import { spawn } from "child_process"
+import { type ChildProcessWithoutNullStreams, spawn } from "child_process"
 import { Tool } from "./tool"
 import path from "path"
 import DESCRIPTION from "./bash.txt"
@@ -8,7 +8,6 @@ import { Instance } from "../project/instance"
 import { lazy } from "@/util/lazy"
 import { Language } from "web-tree-sitter"
 
-import { $ } from "bun"
 import { Filesystem } from "@/util/filesystem"
 import { fileURLToPath } from "url"
 import { Flag } from "@/flag/flag.ts"
@@ -17,9 +16,211 @@ import { Shell } from "@/shell/shell"
 import { BashArity } from "@/permission/arity"
 import { Truncate } from "./truncation"
 import { Plugin } from "@/plugin"
+import fs from "fs"
 
 const MAX_METADATA_LENGTH = 30_000
 const DEFAULT_TIMEOUT = Flag.OPENCODE_EXPERIMENTAL_BASH_DEFAULT_TIMEOUT_MS || 2 * 60 * 1000
+
+type SessionShell = {
+  shell: string
+  cwd: string
+  process: ChildProcessWithoutNullStreams
+  queue: Promise<void>
+}
+
+const shells = Instance.state(
+  () => new Map<string, SessionShell>(),
+  async (state) => {
+    for (const session of state.values()) {
+      try {
+        await Shell.killTree(session.process)
+      } catch {}
+    }
+    state.clear()
+  },
+)
+
+function quotePosix(input: string) {
+  return `'${input.replace(/'/g, `'"'"'`)}'`
+}
+
+function quotePowerShell(input: string) {
+  return `'${input.replace(/'/g, "''")}'`
+}
+
+function quoteCmd(input: string) {
+  return `"${input.replace(/"/g, '""')}"`
+}
+
+function marker() {
+  return `__OPENCODE_EXIT_${Date.now()}_${Math.random().toString(36).slice(2)}__:`
+}
+
+function escapeRegExp(input: string) {
+  return input.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")
+}
+
+function build(shell: string, command: string, mark: string) {
+  if (process.platform === "win32" && Shell.isPowerShellShell(shell)) {
+    return [
+      `$ErrorActionPreference = 'Continue'`,
+      `& { ${command} } < $null`,
+      `Write-Output \"${mark}$LASTEXITCODE\"`,
+      "",
+    ].join("\n")
+  }
+  if (process.platform === "win32" && Shell.isCmdShell(shell)) {
+    return [`(${command}) <NUL`, `echo ${mark}%ERRORLEVEL%`, ""].join("\r\n")
+  }
+  return [`{ ${command}; } </dev/null`, `printf '${mark}%s\n' \"$?\"`, ""].join("\n")
+}
+
+async function create(sessionID: string, shell: string, cwd: string, env: Record<string, string>) {
+  const current = shells().get(sessionID)
+  if (
+    current &&
+    current.shell === shell &&
+    current.cwd === cwd &&
+    !current.process.killed &&
+    current.process.exitCode === null
+  )
+    return current
+  if (current) {
+    try {
+      await Shell.killTree(current.process)
+    } catch {}
+    shells().delete(sessionID)
+  }
+
+  const args =
+    process.platform === "win32" && Shell.isPowerShellShell(shell)
+      ? ["-NoLogo", "-NoProfile", "-NonInteractive", "-Command", "-"]
+      : process.platform === "win32" && Shell.isCmdShell(shell)
+        ? ["/d", "/q", "/k"]
+        : Shell.isUnixLike(shell) && path.basename(shell).toLowerCase().startsWith("bash")
+          ? ["--noprofile", "--norc"]
+          : []
+
+  const processRef = spawn(shell, args, {
+    cwd,
+    env,
+    stdio: ["pipe", "pipe", "pipe"],
+    detached: false,
+    windowsHide: process.platform === "win32",
+  })
+
+  const created = {
+    shell,
+    cwd,
+    process: processRef,
+    queue: Promise.resolve(),
+  }
+  processRef.once("exit", () => {
+    const currentShell = shells().get(sessionID)
+    if (currentShell?.process === processRef) shells().delete(sessionID)
+  })
+  shells().set(sessionID, created)
+  return created
+}
+
+async function run(
+  sessionID: string,
+  shell: string,
+  cwd: string,
+  env: Record<string, string>,
+  command: string,
+  timeout: number,
+  abort: AbortSignal,
+) {
+  const session = await create(sessionID, shell, cwd, env)
+  const next = session.queue.then(async () => {
+    const mark = marker()
+    const regex = new RegExp(`${escapeRegExp(mark)}(-?\\d+)`)
+    const script = build(shell, command, mark)
+    let output = ""
+    let timedOut = false
+    let aborted = false
+
+    const result = await new Promise<{ output: string; exit: number | null; timedOut: boolean; aborted: boolean }>(
+      (resolve, reject) => {
+        let done = false
+        const cleanup = () => {
+          clearTimeout(timer)
+          abort.removeEventListener("abort", onAbort)
+          session.process.stdout.removeListener("data", onData)
+          session.process.stderr.removeListener("data", onData)
+          session.process.removeListener("error", onError)
+          session.process.removeListener("exit", onExit)
+        }
+        const finish = (exit: number | null) => {
+          if (done) return
+          done = true
+          cleanup()
+          resolve({
+            output,
+            exit,
+            timedOut,
+            aborted,
+          })
+        }
+        const fail = (error: Error) => {
+          if (done) return
+          done = true
+          cleanup()
+          reject(error)
+        }
+        const onData = (chunk: Buffer) => {
+          output += chunk.toString()
+          const match = output.match(regex)
+          if (!match) return
+          finish(Number(match[1]))
+        }
+        const onError = (error: Error) => fail(error)
+        const onExit = () => {
+          if (timedOut || aborted) {
+            finish(session.process.exitCode)
+            return
+          }
+          fail(new Error("Persistent shell exited unexpectedly"))
+        }
+        const onAbort = () => {
+          aborted = true
+          void Shell.killTree(session.process)
+          shells().delete(sessionID)
+        }
+        const timer = setTimeout(() => {
+          timedOut = true
+          void Shell.killTree(session.process)
+          shells().delete(sessionID)
+        }, timeout + 100)
+
+        if (abort.aborted) onAbort()
+        abort.addEventListener("abort", onAbort, { once: true })
+        session.process.stdout.on("data", onData)
+        session.process.stderr.on("data", onData)
+        session.process.once("error", onError)
+        session.process.once("exit", onExit)
+        session.process.stdin.write(script, (error) => {
+          if (error) fail(error)
+        })
+      },
+    )
+
+    const cleaned = result.output.replace(new RegExp(`${escapeRegExp(mark)}-?\\d+\\r?\\n?`, "g"), "")
+    return {
+      output: cleaned,
+      exit: result.exit,
+      timedOut: result.timedOut,
+      aborted: result.aborted,
+    }
+  })
+
+  session.queue = next.then(
+    () => {},
+    () => {},
+  )
+  return next
+}
 
 export const log = Log.create({ service: "bash-tool" })
 
@@ -53,9 +254,6 @@ const parser = lazy(async () => {
 
 // TODO: we may wanna rename this tool so it works better on other shells
 export const BashTool = Tool.define("bash", async () => {
-  const shell = Shell.acceptable()
-  log.info("bash tool using shell", { shell })
-
   return {
     description: DESCRIPTION.replaceAll("${directory}", Instance.directory)
       .replaceAll("${maxLines}", String(Truncate.MAX_LINES))
@@ -116,12 +314,15 @@ export const BashTool = Tool.define("bash", async () => {
         if (["cd", "rm", "cp", "mv", "mkdir", "touch", "chmod", "chown", "cat"].includes(command[0])) {
           for (const arg of command.slice(1)) {
             if (arg.startsWith("-") || (command[0] === "chmod" && arg.startsWith("+"))) continue
-            const resolved = await $`realpath ${arg}`
-              .cwd(cwd)
-              .quiet()
-              .nothrow()
-              .text()
-              .then((x) => x.trim())
+            const target = arg.replace(/^['"]|['"]$/g, "")
+            const resolved = (() => {
+              const absolute = path.resolve(cwd, target)
+              try {
+                return fs.realpathSync(absolute)
+              } catch {
+                return absolute
+              }
+            })()
             log.info("resolved path", { arg, resolved })
             if (resolved) {
               const normalized =
@@ -169,19 +370,12 @@ export const BashTool = Tool.define("bash", async () => {
         { cwd, sessionID: ctx.sessionID, callID: ctx.callID },
         { env: {} },
       )
-      const proc = spawn(params.command, {
-        shell,
-        cwd,
-        env: {
-          ...process.env,
-          ...shellEnv.env,
-        },
-        stdio: ["ignore", "pipe", "pipe"],
-        detached: process.platform !== "win32",
-      })
-
-      let output = ""
-
+      const shell = Shell.commandShell(params.command)
+      log.info("bash tool using shell", { shell })
+      const env = {
+        ...process.env,
+        ...shellEnv.env,
+      }
       // Initialize metadata with empty output
       ctx.metadata({
         metadata: {
@@ -190,69 +384,17 @@ export const BashTool = Tool.define("bash", async () => {
         },
       })
 
-      const append = (chunk: Buffer) => {
-        output += chunk.toString()
-        ctx.metadata({
-          metadata: {
-            // truncate the metadata to avoid GIANT blobs of data (has nothing to do w/ what agent can access)
-            output: output.length > MAX_METADATA_LENGTH ? output.slice(0, MAX_METADATA_LENGTH) + "\n\n..." : output,
-            description: params.description,
-          },
-        })
-      }
-
-      proc.stdout?.on("data", append)
-      proc.stderr?.on("data", append)
-
-      let timedOut = false
-      let aborted = false
-      let exited = false
-
-      const kill = () => Shell.killTree(proc, { exited: () => exited })
-
-      if (ctx.abort.aborted) {
-        aborted = true
-        await kill()
-      }
-
-      const abortHandler = () => {
-        aborted = true
-        void kill()
-      }
-
-      ctx.abort.addEventListener("abort", abortHandler, { once: true })
-
-      const timeoutTimer = setTimeout(() => {
-        timedOut = true
-        void kill()
-      }, timeout + 100)
-
-      await new Promise<void>((resolve, reject) => {
-        const cleanup = () => {
-          clearTimeout(timeoutTimer)
-          ctx.abort.removeEventListener("abort", abortHandler)
-        }
-
-        proc.once("exit", () => {
-          exited = true
-          cleanup()
-          resolve()
-        })
-
-        proc.once("error", (error) => {
-          exited = true
-          cleanup()
-          reject(error)
-        })
-      })
+      let output = ""
+      const result = await run(ctx.sessionID, shell, cwd, env, params.command, timeout, ctx.abort)
+      output += result.output
 
       const resultMetadata: string[] = []
 
-      if (timedOut) {
+      if (result.timedOut) {
         resultMetadata.push(`bash tool terminated command after exceeding timeout ${timeout} ms`)
       }
 
-      if (aborted) {
+      if (result.aborted) {
         resultMetadata.push("User aborted the command")
       }
 
@@ -260,14 +402,21 @@ export const BashTool = Tool.define("bash", async () => {
         output += "\n\n<bash_metadata>\n" + resultMetadata.join("\n") + "\n</bash_metadata>"
       }
 
+      const truncated = await Truncate.output(output)
+
       return {
         title: params.description,
         metadata: {
-          output: output.length > MAX_METADATA_LENGTH ? output.slice(0, MAX_METADATA_LENGTH) + "\n\n..." : output,
-          exit: proc.exitCode,
+          output:
+            truncated.content.length > MAX_METADATA_LENGTH
+              ? truncated.content.slice(0, MAX_METADATA_LENGTH) + "\n\n..."
+              : truncated.content,
+          exit: result.exit,
           description: params.description,
+          truncated: truncated.truncated,
+          outputPath: truncated.truncated ? truncated.outputPath : undefined,
         },
-        output,
+        output: truncated.content,
       }
     },
   }
