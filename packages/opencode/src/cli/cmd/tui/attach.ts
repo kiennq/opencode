@@ -5,6 +5,7 @@ import { win32DisableProcessedInput, win32InstallCtrlCGuard, win32SetUtf8CodePag
 import { TuiConfig } from "@/config/tui"
 import { Instance } from "@/project/instance"
 import { existsSync } from "fs"
+import { ATTACH_ENV_HEADER, encodeAttachEnv } from "@/util/attach-env"
 
 export const AttachCommand = cmd({
   command: "attach <url>",
@@ -62,10 +63,16 @@ export const AttachCommand = cmd({
         }
       })()
       const headers = (() => {
+        const result: Record<string, string> = {}
         const password = args.password ?? process.env.OPENCODE_SERVER_PASSWORD
-        if (!password) return undefined
-        const auth = `Basic ${Buffer.from(`opencode:${password}`).toString("base64")}`
-        return { Authorization: auth }
+        if (password) {
+          const auth = `Basic ${Buffer.from(`opencode:${password}`).toString("base64")}`
+          result.Authorization = auth
+        }
+        const encodedEnv = encodeAttachEnv(process.env)
+        if (encodedEnv) result[ATTACH_ENV_HEADER] = encodedEnv
+        if (Object.keys(result).length === 0) return
+        return result
       })()
       const config = await Instance.provide({
         directory: directory && existsSync(directory) ? directory : process.cwd(),
