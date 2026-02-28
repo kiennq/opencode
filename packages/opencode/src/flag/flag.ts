@@ -11,6 +11,7 @@ function falsy(key: string) {
 export namespace Flag {
   export const OPENCODE_AUTO_SHARE = truthy("OPENCODE_AUTO_SHARE")
   export const OPENCODE_GIT_BASH_PATH = process.env["OPENCODE_GIT_BASH_PATH"]
+  export const OPENCODE_PREFER_NATIVE_SHELL = truthy("OPENCODE_PREFER_NATIVE_SHELL")
   export const OPENCODE_CONFIG = process.env["OPENCODE_CONFIG"]
   export declare const OPENCODE_TUI_CONFIG: string | undefined
   export declare const OPENCODE_CONFIG_DIR: string | undefined
