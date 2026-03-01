@@ -2776,6 +2776,13 @@
             }
           },
           {
+            "in": "query",
+            "name": "workspace",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
             "in": "path",
             "name": "sessionID",
             "schema": {
