@@ -3255,6 +3255,7 @@ export type SessionResumeData = {
   }
   query?: {
     directory?: string
+    workspace?: string
   }
   url: "/session/{sessionID}/resume"
 }
