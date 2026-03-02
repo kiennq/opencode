@@ -960,6 +960,7 @@ export function Session() {
       value: "session.parent",
       keybind: "session_parent",
       category: "Session",
+      enabled: !!session()?.parentID,
       hidden: true,
       enabled: !!session()?.parentID,
       onSelect: childSessionHandler((dialog) => {
