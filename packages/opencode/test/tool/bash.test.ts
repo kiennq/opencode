@@ -344,6 +344,14 @@ describe("tool.bash permissions", () => {
 })
 
 describe("tool.bash truncation", () => {
+  const lineCommand = (count: number) =>
+    process.platform === "win32" ? `powershell -NoProfile -Command "1..${count}"` : `seq 1 ${count}`
+
+  const byteCommand = (count: number) =>
+    process.platform === "win32"
+      ? `powershell -NoProfile -Command "[Console]::Out.Write('a' * ${count})"`
+      : `head -c ${count} /dev/zero | tr '\\0' 'a'`
+
   test("truncates output exceeding line limit", async () => {
     await Instance.provide({
       directory: projectRoot,
@@ -352,7 +360,7 @@ describe("tool.bash truncation", () => {
         const lineCount = Truncate.MAX_LINES + 500
         const result = await bash.execute(
           {
-            command: `seq 1 ${lineCount}`,
+            command: lineCommand(lineCount),
             description: "Generate lines exceeding limit",
           },
           ctx,
@@ -372,7 +380,7 @@ describe("tool.bash truncation", () => {
         const byteCount = Truncate.MAX_BYTES + 10000
         const result = await bash.execute(
           {
-            command: `head -c ${byteCount} /dev/zero | tr '\\0' 'a'`,
+            command: byteCommand(byteCount),
             description: "Generate bytes exceeding limit",
           },
           ctx,
@@ -410,7 +418,7 @@ describe("tool.bash truncation", () => {
         const lineCount = Truncate.MAX_LINES + 100
         const result = await bash.execute(
           {
-            command: `seq 1 ${lineCount}`,
+            command: lineCommand(lineCount),
             description: "Generate lines for file check",
           },
           ctx,
@@ -421,7 +429,7 @@ describe("tool.bash truncation", () => {
         expect(filepath).toBeTruthy()
 
         const saved = await Filesystem.readText(filepath)
-        const lines = saved.trim().split("\n")
+        const lines = saved.trim().split(/\r?\n/)
         expect(lines.length).toBe(lineCount)
         expect(lines[0]).toBe("1")
         expect(lines[lineCount - 1]).toBe(String(lineCount))
