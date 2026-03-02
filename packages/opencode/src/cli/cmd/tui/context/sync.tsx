@@ -400,7 +400,6 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
     const args = useArgs()
 
     async function bootstrap() {
-      console.log("bootstrapping")
       fullSyncedSessions.clear()
       // Clear stale permission/question dialogs — backend state is gone after worker recycle/crash
       setStore("permission", reconcile({}))
