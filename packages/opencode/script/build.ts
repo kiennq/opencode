@@ -59,6 +59,9 @@ console.log(`Loaded ${migrations.length} migrations`)
 const singleFlag = process.argv.includes("--single")
 const baselineFlag = process.argv.includes("--baseline")
 const skipInstall = process.argv.includes("--skip-install")
+const noClean = process.argv.includes("--no-clean")
+const outdirArg = process.argv.indexOf("--outdir")
+const outputDir = outdirArg >= 0 && process.argv[outdirArg + 1] ? process.argv[outdirArg + 1] : "dist"
 
 const allTargets: {
   os: string
@@ -144,7 +147,7 @@ const targets = singleFlag
     })
   : allTargets
 
-await $`rm -rf dist`
+if (!noClean) await $`rm -rf ${outputDir}`
 
 const binaries: Record<string, string> = {}
 if (!skipInstall) {
@@ -163,7 +166,7 @@ for (const item of targets) {
     .filter(Boolean)
     .join("-")
   console.log(`building ${name}`)
-  await $`mkdir -p dist/${name}/bin`
+  await $`mkdir -p ${outputDir}/${name}/bin`
 
   const parserWorker = path.join(path.dirname(require.resolve("@opentui/core")), "parser.worker.js")
   const opencodeWorker = path.join(dir, "src/cli/cmd/tui/worker.ts")
@@ -185,7 +188,7 @@ for (const item of targets) {
       autoloadTsconfig: true,
       autoloadPackageJson: true,
       target: name.replace(pkg.name, "bun") as any,
-      outfile: `dist/${name}/bin/opencode`,
+      outfile: `${outputDir}/${name}/bin/opencode`,
       execArgv: [`--user-agent=opencode/${Script.version}`, "--use-system-ca", "--"],
       windows: {},
     },
@@ -200,8 +203,8 @@ for (const item of targets) {
     },
   })
 
-  await $`rm -rf ./dist/${name}/bin/tui`
-  await Bun.file(`dist/${name}/package.json`).write(
+  await $`rm -rf ./${outputDir}/${name}/bin/tui`
+  await Bun.file(`${outputDir}/${name}/package.json`).write(
     JSON.stringify(
       {
         name,
@@ -219,12 +222,12 @@ for (const item of targets) {
 if (Script.release) {
   for (const key of Object.keys(binaries)) {
     if (key.includes("linux")) {
-      await $`tar -czf ../../${key}.tar.gz *`.cwd(`dist/${key}/bin`)
+      await $`tar -czf ../../${key}.tar.gz *`.cwd(`${outputDir}/${key}/bin`)
     } else {
-      await $`zip -r ../../${key}.zip *`.cwd(`dist/${key}/bin`)
+      await $`zip -r ../../${key}.zip *`.cwd(`${outputDir}/${key}/bin`)
     }
   }
-  await $`gh release upload v${Script.version} ./dist/*.zip ./dist/*.tar.gz --clobber --repo ${process.env.GH_REPO}`
+  await $`gh release upload v${Script.version} ./${outputDir}/*.zip ./${outputDir}/*.tar.gz --clobber --repo ${process.env.GH_REPO}`
 }
 
 export { binaries }

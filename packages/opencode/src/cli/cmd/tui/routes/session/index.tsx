@@ -944,6 +944,7 @@ export function Session() {
       value: "session.parent",
       keybind: "session_parent",
       category: "Session",
+      enabled: !!session()?.parentID,
       hidden: true,
       enabled: !!session()?.parentID,
       onSelect: childSessionHandler((dialog) => {
@@ -1771,6 +1772,12 @@ function Bash(props: ToolProps<typeof BashTool>) {
   const sync = useSync()
   const isRunning = createMemo(() => props.part.state.status === "running")
   const output = createMemo(() => stripAnsi(props.metadata.output?.trim() ?? ""))
+  const shell = createMemo(() => {
+    const value = props.metadata.shell
+    if (typeof value !== "string") return undefined
+    if (!value) return undefined
+    return value
+  })
   const [expanded, setExpanded] = createSignal(false)
   const lines = createMemo(() => output().split("\n"))
   const overflow = createMemo(() => lines().length > 10)
@@ -1818,6 +1825,9 @@ function Bash(props: ToolProps<typeof BashTool>) {
             <text fg={theme.text}>
               {props.part.tool === "pwsh" ? "PS>" : "$"} {props.input.command}
             </text>
+            <Show when={shell()}>
+              <text fg={theme.textMuted}>Shell: {shell()}</text>
+            </Show>
             <Show when={output()}>
               <text fg={theme.text}>{limited()}</text>
             </Show>
