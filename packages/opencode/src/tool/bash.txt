@@ -25,6 +25,15 @@ Before executing the command, please follow these steps:
       - PowerShell (`pwsh`/`powershell`): prefer single-quoted strings for literals; in double-quoted strings escape `"` as `` `" `` and escape literal backtick as `` `` ``.
       - cmd (`cmd.exe`): escape metacharacters with `^` (for example `^&`, `^|`, `^<`, `^>`, `^^`), and use `%NAME%` for env expansion.
 
+Windows shell behavior:
+  - On Windows, commands run in the native shell `${windowsShell}` by default.
+  - Native fallback order is: `pwsh` -> `powershell` -> `cmd.exe`.
+  - Write commands using syntax for the selected shell. For example, environment variables are `$env:NAME` in PowerShell and `%NAME%` in cmd.
+  - Use escaping that matches the selected shell:
+    - PowerShell (`pwsh`/`powershell`): prefer single-quoted strings for literals; in double-quoted strings escape `"` as `` `" `` and escape literal backtick as `` `` ``.
+    - cmd (`cmd.exe`): escape metacharacters with `^` (for example `^&`, `^|`, `^<`, `^>`, `^^`), and use `%NAME%` for env expansion.
+    - If you explicitly invoke another shell (for example `cmd /c ...` or `powershell -Command ...`), escape for that invoked shell, not the outer shell.
+
 Usage notes:
   - The command argument is required.
   - You can specify an optional timeout in milliseconds. If not specified, commands will time out after 120000ms (2 minutes).
