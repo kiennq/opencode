@@ -1,7 +1,12 @@
 import { cmd } from "../cmd"
 import { UI } from "@/cli/ui"
 import { tui } from "./app"
-import { win32DisableProcessedInput, win32InstallCtrlCGuard, win32SetUtf8CodePage } from "./win32"
+import {
+  win32DisableProcessedInput,
+  win32InstallCtrlCGuard,
+  win32InstallExitReset,
+  win32SetUtf8CodePage,
+} from "./win32"
 import { TuiConfig } from "@/config/tui"
 import { Instance } from "@/project/instance"
 import { existsSync } from "fs"
@@ -42,6 +47,7 @@ export const AttachCommand = cmd({
       }),
   handler: async (args) => {
     const unguard = win32InstallCtrlCGuard()
+    const unreset = win32InstallExitReset()
     try {
       win32DisableProcessedInput()
       win32SetUtf8CodePage()
@@ -90,6 +96,7 @@ export const AttachCommand = cmd({
         headers,
       })
     } finally {
+      unreset?.()
       unguard?.()
     }
   },
