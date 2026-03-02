@@ -906,13 +906,20 @@ export function Prompt(props: PromptProps) {
                       e.preventDefault()
                       if (direction === -1) input.cursorOffset = 0
                       if (direction === 1) input.cursorOffset = input.plainText.length
+                      return
                     }
-                    return
                   }
 
-                  if (keybind.match("history_previous", e) && input.visualCursor.visualRow === 0) input.cursorOffset = 0
-                  if (keybind.match("history_next", e) && input.visualCursor.visualRow === input.height - 1)
+                  if (keybind.match("history_previous", e) && input.visualCursor.visualRow === 0) {
+                    input.cursorOffset = 0
+                    e.preventDefault()
+                    return
+                  }
+                  if (keybind.match("history_next", e) && input.visualCursor.visualRow === input.height - 1) {
                     input.cursorOffset = input.plainText.length
+                    e.preventDefault()
+                    return
+                  }
                 }
               }}
               onSubmit={submit}
