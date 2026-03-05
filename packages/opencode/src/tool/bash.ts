@@ -295,7 +295,14 @@ export const BashTool = Tool.define("bash", async () => {
     description: DESCRIPTION.replaceAll("${directory}", Instance.directory)
       .replaceAll("${maxLines}", String(Truncate.MAX_LINES))
       .replaceAll("${maxBytes}", String(Truncate.MAX_BYTES))
-      .replaceAll("${windowsShell}", process.platform === "win32" ? Shell.display(Shell.commandShell("")) : "n/a"),
+      .replaceAll("${os}", process.platform === "win32" ? "Windows" : process.platform === "darwin" ? "macOS" : "Linux")
+      .replaceAll("${shell}", process.platform === "win32" ? Shell.display(Shell.commandShell("")) : "bash")
+      .replaceAll(
+        "${chaining}",
+        process.platform === "win32" && Shell.isPowerShellShell(Shell.commandShell(""))
+          ? "use a single Bash call and chain them with `; if ($?) { ... }` (e.g., `git add .; if ($?) { git commit -m 'message' }; if ($?) { git push }`). NOTE: `&&` does NOT work in Windows PowerShell 5.1. For instance, if one operation must complete before another starts (like mkdir before cp, Write before Bash for git operations, or git add before git commit), run these operations sequentially instead."
+          : "use a single Bash call with '&&' to chain them together (e.g., `git add . && git commit -m \"message\" && git push`). For instance, if one operation must complete before another starts (like mkdir before cp, Write before Bash for git operations, or git add before git commit), run these operations sequentially instead.",
+      ),
     parameters: z.object({
       command: z.string().describe("The command to execute"),
       timeout: z.number().describe("Optional timeout in milliseconds").optional(),
