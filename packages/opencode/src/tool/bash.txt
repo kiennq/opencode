@@ -1,5 +1,7 @@
 Executes a given bash command in a persistent shell session with optional timeout, ensuring proper handling and security measures.
 
+Be aware: OS: ${os}, Shell: ${shell}
+
 All commands run in ${directory} by default. Use the `workdir` parameter if you need to run a command in a different directory. AVOID using `cd <directory> && <command>` patterns - use `workdir` instead.
 
 IMPORTANT: This tool is for terminal operations like git, npm, docker, etc. DO NOT use it for file operations (reading, writing, editing, searching, finding files) - use the specialized tools for this instead.
@@ -17,17 +19,11 @@ Before executing the command, please follow these steps:
      - mkdir /Users/name/My Documents (incorrect - will fail)
      - python "/path/with spaces/script.py" (correct)
      - python /path/with spaces/script.py (incorrect - will fail)
-   - After ensuring proper quoting, execute the command.
-   - Capture the output of the command.
-
-Windows shell behavior:
-  - On Windows, commands run in the native shell `${windowsShell}` by default.
-  - Native fallback order is: `pwsh` -> `powershell` -> `cmd.exe`.
-  - Write commands using syntax for the selected shell. For example, environment variables are `$env:NAME` in PowerShell and `%NAME%` in cmd.
-  - Use escaping that matches the selected shell:
-    - PowerShell (`pwsh`/`powershell`): prefer single-quoted strings for literals; in double-quoted strings escape `"` as `` `" `` and escape literal backtick as `` `` ``.
-    - cmd (`cmd.exe`): escape metacharacters with `^` (for example `^&`, `^|`, `^<`, `^>`, `^^`), and use `%NAME%` for env expansion.
-    - If you explicitly invoke another shell (for example `cmd /c ...` or `powershell -Command ...`), escape for that invoked shell, not the outer shell.
+    - After ensuring proper quoting, execute the command.
+    - Capture the output of the command.
+    - Use escaping that matches the shell:
+      - PowerShell (`pwsh`/`powershell`): prefer single-quoted strings for literals; in double-quoted strings escape `"` as `` `" `` and escape literal backtick as `` `` ``.
+      - cmd (`cmd.exe`): escape metacharacters with `^` (for example `^&`, `^|`, `^<`, `^>`, `^^`), and use `%NAME%` for env expansion.
 
 Usage notes:
   - The command argument is required.
@@ -44,7 +40,7 @@ Usage notes:
     - Communication: Output text directly (NOT echo/printf)
   - When issuing multiple commands:
     - If the commands are independent and can run in parallel, make multiple Bash tool calls in a single message. For example, if you need to run "git status" and "git diff", send a single message with two Bash tool calls in parallel.
-    - If the commands depend on each other and must run sequentially, use a single Bash call with '&&' to chain them together (e.g., `git add . && git commit -m "message" && git push`). For instance, if one operation must complete before another starts (like mkdir before cp, Write before Bash for git operations, or git add before git commit), run these operations sequentially instead.
+    - If the commands depend on each other and must run sequentially, ${chaining}
     - Use ';' only when you need to run commands sequentially but don't care if earlier commands fail
     - DO NOT use newlines to separate commands (newlines are ok in quoted strings)
   - AVOID using `cd <directory> && <command>`. Use the `workdir` parameter to change directories instead.
