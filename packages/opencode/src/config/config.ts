@@ -960,6 +960,7 @@ export namespace Config {
         .record(
           z.string(),
           ModelsDev.Model.partial().extend({
+            limit: ModelsDev.Model.shape.limit.partial().optional(),
             variants: z
               .record(
                 z.string(),
