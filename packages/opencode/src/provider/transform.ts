@@ -178,30 +178,40 @@ export namespace ProviderTransform {
     return msgs
   }
 
+  function isAnthropicModel(model: Provider.Model) {
+    return (
+      model.api.id.includes("anthropic") ||
+      model.api.id.includes("claude") ||
+      model.id.includes("anthropic") ||
+      model.id.includes("claude") ||
+      model.api.npm === "@ai-sdk/anthropic"
+    )
+  }
+
   function applyCaching(msgs: ModelMessage[], model: Provider.Model): ModelMessage[] {
     const system = msgs.filter((msg) => msg.role === "system").slice(0, 2)
     const final = msgs.filter((msg) => msg.role !== "system").slice(-2)
 
-    const providerOptions = {
-      anthropic: {
-        cacheControl: { type: "ephemeral" },
-      },
-      openrouter: {
-        cacheControl: { type: "ephemeral" },
-      },
-      bedrock: {
-        cachePoint: { type: "default" },
-      },
-      openaiCompatible: {
-        cache_control: { type: "ephemeral" },
-      },
-      copilot: {
-        copilot_cache_control: { type: "ephemeral" },
-      },
+    // Build provider-specific cache options based on which SDK is in use
+    const providerOptions: Record<string, any> = {}
+    const npm = model.api.npm
+    if (npm === "@ai-sdk/anthropic") {
+      providerOptions.anthropic = { cacheControl: { type: "ephemeral" } }
+    } else if (npm === "@ai-sdk/amazon-bedrock" || model.providerID.includes("bedrock")) {
+      providerOptions.bedrock = { cachePoint: { type: "default" } }
+    } else if (npm === "@openrouter/ai-sdk-provider") {
+      providerOptions.openrouter = { cacheControl: { type: "ephemeral" } }
+    } else if (npm === "@ai-sdk/openai-compatible") {
+      providerOptions.openaiCompatible = { cache_control: { type: "ephemeral" } }
+    } else if (npm === "@ai-sdk/github-copilot") {
+      providerOptions.copilot = { copilot_cache_control: { type: "ephemeral" } }
     }
 
+    if (Object.keys(providerOptions).length === 0) return msgs
+
     for (const msg of unique([...system, ...final])) {
-      const useMessageLevelOptions = model.providerID === "anthropic" || model.providerID.includes("bedrock")
+      const useMessageLevelOptions =
+        npm === "@ai-sdk/anthropic" || npm === "@ai-sdk/amazon-bedrock" || model.providerID.includes("bedrock")
       const shouldUseContentOptions = !useMessageLevelOptions && Array.isArray(msg.content) && msg.content.length > 0
 
       if (shouldUseContentOptions) {
@@ -259,15 +269,19 @@ export namespace ProviderTransform {
   export function message(msgs: ModelMessage[], model: Provider.Model, options: Record<string, unknown>) {
     msgs = unsupportedParts(msgs, model)
     msgs = normalizeMessages(msgs, model, options)
-    if (
-      (model.providerID === "anthropic" ||
-        model.api.id.includes("anthropic") ||
-        model.api.id.includes("claude") ||
-        model.id.includes("anthropic") ||
-        model.id.includes("claude") ||
-        model.api.npm === "@ai-sdk/anthropic") &&
-      model.api.npm !== "@ai-sdk/gateway"
-    ) {
+
+    // Apply explicit cache breakpoints for providers that support them.
+    // Automatic prefix-caching providers (OpenAI, Azure, Copilot-OpenAI, DeepSeek)
+    // don't need breakpoints — they use promptCacheKey for routing instead.
+    const npm = model.api.npm
+    const explicit =
+      npm === "@ai-sdk/anthropic" ||
+      npm === "@ai-sdk/amazon-bedrock" ||
+      npm === "@openrouter/ai-sdk-provider" ||
+      npm === "@ai-sdk/openai-compatible" ||
+      model.providerID.includes("bedrock") ||
+      isAnthropicModel(model)
+    if (explicit && npm !== "@ai-sdk/gateway") {
       msgs = applyCaching(msgs, model)
     }
 
@@ -724,7 +738,16 @@ export namespace ProviderTransform {
       }
     }
 
-    if (input.model.providerID === "openai" || input.providerOptions?.setCacheKey) {
+    // promptCacheKey improves cache hit rate for automatic prefix-caching
+    // providers by routing requests with the same session to the same cache.
+    if (
+      input.model.providerID === "openai" ||
+      input.model.providerID === "azure" ||
+      input.model.providerID === "deepseek" ||
+      input.model.api.npm === "@ai-sdk/azure" ||
+      (input.model.api.npm === "@ai-sdk/github-copilot" && !isAnthropicModel(input.model)) ||
+      input.providerOptions?.setCacheKey
+    ) {
       result["promptCacheKey"] = input.sessionID
     }
 
