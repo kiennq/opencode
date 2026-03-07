@@ -54,9 +54,13 @@ export function Sidebar(props: { sessionID: string; overlay?: boolean }) {
     const total =
       last.tokens.input + last.tokens.output + last.tokens.reasoning + last.tokens.cache.read + last.tokens.cache.write
     const model = sync.data.provider.find((x) => x.id === last.providerID)?.models[last.modelID]
+    const cached = last.tokens.cache.read + last.tokens.cache.write
     return {
       tokens: total.toLocaleString(),
       percentage: model?.limit.context ? Math.round((total / model.limit.context) * 100) : null,
+      cacheRead: last.tokens.cache.read,
+      cacheWrite: last.tokens.cache.write,
+      cached,
     }
   })
 
@@ -105,6 +109,11 @@ export function Sidebar(props: { sessionID: string; overlay?: boolean }) {
               <text fg={theme.textMuted}>{context()?.tokens ?? 0} tokens</text>
               <text fg={theme.textMuted}>{context()?.percentage ?? 0}% used</text>
               <text fg={theme.textMuted}>{cost()} spent</text>
+              <Show when={context()?.cached}>
+                <text fg={theme.textMuted}>
+                  cache: {context()!.cacheRead.toLocaleString()}r / {context()!.cacheWrite.toLocaleString()}w
+                </text>
+              </Show>
             </box>
             <Show when={mcpEntries().length > 0}>
               <box>
