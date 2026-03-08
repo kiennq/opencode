@@ -1,9 +1,9 @@
 name: monthly-build
-run-name: "monthly build ${{ inputs.version_override || 'auto' }}"
+run-name: "Build ${{ inputs.version_override || 'auto' }}"
 
 on:
   schedule:
-    - cron: "0 0 1 * *" # Run at 00:00 on the 1st day of every month
+    - cron: "0 0 * * 0"
   workflow_dispatch:
     inputs:
       version_override:
@@ -117,7 +117,7 @@ jobs:
 
               if gh release create "$TAG" \
                 --title "$VERSION" \
-                --notes "Monthly Build $VERSION from commit ${{ github.sha }}. Platforms: Linux x64/arm64, Windows x64/arm64." \
+                --notes "Build $VERSION from commit ${{ github.sha }}. Platforms: Linux x64/arm64, Windows x64/arm64." \
                 $DRAFT_FLAG \
                 "$ARCHIVE_PATH"; then
                 exit 0
