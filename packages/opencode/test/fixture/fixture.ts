@@ -51,6 +51,8 @@ export async function tmpdir<T>(options?: TmpDirOptions<T>) {
       })
     }
     await $`git config core.fsmonitor false`.cwd(dirpath).nothrow().quiet()
+    await $`git config user.email "test@opencode.test"`.cwd(dirpath).nothrow().quiet()
+    await $`git config user.name "Test"`.cwd(dirpath).nothrow().quiet()
     const commit = await $`git commit --allow-empty -m "root commit ${dirpath}"`.cwd(dirpath).nothrow().quiet()
     if (commit.exitCode !== 0) {
       console.error("git commit failed", {
