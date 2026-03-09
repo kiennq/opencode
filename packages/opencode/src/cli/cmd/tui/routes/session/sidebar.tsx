@@ -64,6 +64,12 @@ export function Sidebar(props: { sessionID: string; overlay?: boolean }) {
     }
   })
 
+  const quota = createMemo(() => {
+    const last = messages().findLast((x) => x.role === "assistant" && x.tokens.output > 0) as AssistantMessage
+    if (!last) return
+    return sync.data.quota[last.providerID] ?? undefined
+  })
+
   const directory = useDirectory()
   const kv = useKV()
 
@@ -115,6 +121,23 @@ export function Sidebar(props: { sessionID: string; overlay?: boolean }) {
                 </text>
               </Show>
             </box>
+            <Show when={quota()}>
+              <box>
+                <text fg={theme.text}>
+                  <b>Quota</b>
+                </text>
+                <For each={quota()!.items}>
+                  {(item) => (
+                    <text fg={theme.textMuted}>
+                      {item.label}: {item.remaining ?? "?"}%
+                    </text>
+                  )}
+                </For>
+                <Show when={quota()!.reset}>
+                  <text fg={theme.textMuted}>resets {quota()!.reset}</text>
+                </Show>
+              </box>
+            </Show>
             <Show when={mcpEntries().length > 0}>
               <box>
                 <box
