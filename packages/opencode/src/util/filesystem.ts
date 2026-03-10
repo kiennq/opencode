@@ -118,8 +118,8 @@ export namespace Filesystem {
   }
 
   // We cannot rely on path.resolve() here because git.exe may come from Git Bash, Cygwin, or MSYS2, so we need to translate these paths at the boundary.
-  export function resolve(p: string): string {
-    return normalizePath(pathResolve(windowsPath(p)))
+  export function resolve(...parts: string[]): string {
+    return normalizePath(pathResolve(...parts.map(windowsPath)))
   }
 
   export function windowsPath(p: string): string {

@@ -95,6 +95,10 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
       vcs: VcsInfo | undefined
       path: Path
       workspaceList: Workspace[]
+      quota: Record<
+        string,
+        { items: { label: string; remaining: number | null; limit: number | null }[]; reset?: string } | null
+      >
     }>({
       provider_next: {
         all: [],
@@ -123,6 +127,7 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
       vcs: undefined,
       path: { state: "", config: "", worktree: "", directory: "" },
       workspaceList: [],
+      quota: {},
     })
 
     const sdk = useSDK()
@@ -491,6 +496,16 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
             sdk.client.vcs.get().then((x) => setStore("vcs", reconcile(x.data))),
             sdk.client.path.get().then((x) => setStore("path", reconcile(x.data!))),
             syncWorkspaces(),
+            // Fetch quota for connected providers
+            ...store.provider.map((p) =>
+              sdk
+                .fetch(`${sdk.url}/provider/${encodeURIComponent(p.id)}/quota`)
+                .then((r) => r.json())
+                .then((data) => {
+                  if (data !== undefined) setStore("quota", p.id, reconcile(data))
+                })
+                .catch(() => {}),
+            ),
             // Re-sync messages for sessions that were previously loaded (e.g. after worker recycle)
             ...Object.keys(store.message).map((id) => result.session.sync(id).catch(() => {})),
           ]).then(() => {
@@ -511,7 +526,6 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
       bootstrap()
     })
 
-    const fullSyncedSessions = new Set<string>()
     let currentSessionID: string | undefined
     const result = {
       data: store,
