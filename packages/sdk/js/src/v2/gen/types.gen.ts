@@ -1807,6 +1807,17 @@ export type ProviderAuthAuthorization = {
   instructions: string
 }
 
+export type ProviderQuotaItem = {
+  label: string
+  remaining: number | null
+  limit: number | null
+}
+
+export type ProviderQuota = {
+  items: Array<ProviderQuotaItem>
+  reset?: string
+}
+
 export type Symbol = {
   name: string
   kind: number
@@ -4180,6 +4191,30 @@ export type ProviderOauthCallbackResponses = {
 }
 
 export type ProviderOauthCallbackResponse = ProviderOauthCallbackResponses[keyof ProviderOauthCallbackResponses]
+
+export type ProviderQuotaData = {
+  body?: never
+  path: {
+    /**
+     * Provider identifier
+     */
+    providerID: string
+  }
+  query?: {
+    directory?: string
+    workspace?: string
+  }
+  url: "/provider/{providerID}/quota"
+}
+
+export type ProviderQuotaResponses = {
+  /**
+   * Provider quota or null if unsupported
+   */
+  200: ProviderQuota | null
+}
+
+export type ProviderQuotaResponse = ProviderQuotaResponses[keyof ProviderQuotaResponses]
 
 export type FindTextData = {
   body?: never
