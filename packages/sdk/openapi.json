@@ -4856,6 +4856,63 @@
         ]
       }
     },
+    "/provider/{providerID}/quota": {
+      "get": {
+        "operationId": "provider.quota",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "directory",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "workspace",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "providerID",
+            "schema": {
+              "type": "string"
+            },
+            "required": true,
+            "description": "Provider identifier"
+          }
+        ],
+        "summary": "Get provider quota",
+        "description": "Get quota/usage information for a provider, if supported.",
+        "responses": {
+          "200": {
+            "description": "Provider quota or null if unsupported",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/ProviderQuota"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                }
+              }
+            }
+          }
+        },
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.provider.quota({\n  ...\n})"
+          }
+        ]
+      }
+    },
     "/find": {
       "get": {
         "operationId": "find.text",
@@ -11567,6 +11624,50 @@
           }
         },
         "required": ["url", "method", "instructions"]
+      },
+      "ProviderQuotaItem": {
+        "type": "object",
+        "properties": {
+          "label": {
+            "type": "string"
+          },
+          "remaining": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "limit": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": ["label", "remaining", "limit"]
+      },
+      "ProviderQuota": {
+        "type": "object",
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ProviderQuotaItem"
+            }
+          },
+          "reset": {
+            "type": "string"
+          }
+        },
+        "required": ["items"]
       },
       "Symbol": {
         "type": "object",
