@@ -6,6 +6,7 @@ import { Provider } from "../../provider/provider"
 import { ModelsDev } from "../../provider/models"
 import { ProviderAuth } from "../../provider/auth"
 import { ProviderID } from "../../provider/schema"
+import { ProviderQuota } from "../../provider/quota"
 import { mapValues } from "remeda"
 import { errors } from "../error"
 import { lazy } from "../../util/lazy"
@@ -161,6 +162,35 @@ export const ProviderRoutes = lazy(() =>
           code,
         })
         return c.json(true)
+      },
+    )
+    .get(
+      "/:providerID/quota",
+      describeRoute({
+        summary: "Get provider quota",
+        description: "Get quota/usage information for a provider, if supported.",
+        operationId: "provider.quota",
+        responses: {
+          200: {
+            description: "Provider quota or null if unsupported",
+            content: {
+              "application/json": {
+                schema: resolver(ProviderQuota.Info.nullable()),
+              },
+            },
+          },
+        },
+      }),
+      validator(
+        "param",
+        z.object({
+          providerID: z.string().meta({ description: "Provider identifier" }),
+        }),
+      ),
+      async (c) => {
+        const { providerID } = c.req.valid("param")
+        const quota = await ProviderQuota.get(providerID)
+        return c.json(quota)
       },
     ),
 )
