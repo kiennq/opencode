@@ -397,6 +397,7 @@ export type ToolStateCompleted = {
     compacted?: number
   }
   attachments?: Array<FilePart>
+  summary?: string
 }
 
 export type ToolStateError = {
@@ -795,6 +796,20 @@ export type EventCommandExecuted = {
   }
 }
 
+export type EventCommandUpdated = {
+  type: "command.updated"
+  properties: Array<{
+    name: string
+    description?: string
+    agent?: string
+    model?: string
+    source?: "command" | "mcp" | "skill"
+    template: string
+    subtask?: boolean
+    hints: Array<string>
+  }>
+}
+
 export type PermissionAction = "allow" | "deny" | "ask"
 
 export type PermissionRule = {
@@ -989,6 +1004,7 @@ export type Event =
   | EventMcpToolsChanged
   | EventMcpBrowserOpenFailed
   | EventCommandExecuted
+  | EventCommandUpdated
   | EventSessionCreated
   | EventSessionUpdated
   | EventSessionDeleted
@@ -1174,9 +1190,9 @@ export type ProviderConfig = {
         }
       }
       limit?: {
-        context: number
+        context?: number
         input?: number
-        output: number
+        output?: number
       }
       modalities?: {
         input: Array<"text" | "audio" | "image" | "video" | "pdf">
@@ -1477,6 +1493,23 @@ export type Config = {
      * Token buffer for compaction. Leaves enough window to avoid overflow during compaction.
      */
     reserved?: number
+    /**
+     * Absolute token threshold that triggers compaction
+     */
+    token_threshold?: number
+    /**
+     * Fraction of model context window that triggers compaction (0-1+)
+     */
+    context_threshold?: number
+    /**
+     * Per-model compaction thresholds keyed by providerID/modelID
+     */
+    models?: {
+      [key: string]: {
+        token_threshold?: number
+        context_threshold?: number
+      }
+    }
   }
   experimental?: {
     disable_paste_summary?: boolean
@@ -3234,6 +3267,43 @@ export type SessionSummarizeResponses = {
 }
 
 export type SessionSummarizeResponse = SessionSummarizeResponses[keyof SessionSummarizeResponses]
+
+export type SessionResumeData = {
+  body?: never
+  path: {
+    /**
+     * Session ID
+     */
+    sessionID: string
+  }
+  query?: {
+    directory?: string
+    workspace?: string
+  }
+  url: "/session/{sessionID}/resume"
+}
+
+export type SessionResumeErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+  /**
+   * Not found
+   */
+  404: NotFoundError
+}
+
+export type SessionResumeError = SessionResumeErrors[keyof SessionResumeErrors]
+
+export type SessionResumeResponses = {
+  /**
+   * Resumed session
+   */
+  200: boolean
+}
+
+export type SessionResumeResponse = SessionResumeResponses[keyof SessionResumeResponses]
 
 export type SessionMessagesData = {
   body?: never
