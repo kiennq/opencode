@@ -10,10 +10,13 @@ import { Installation } from "@/installation"
 import { useKeybind } from "../../context/keybind"
 import { useDirectory } from "../../context/directory"
 import { useKV } from "../../context/kv"
+import { useLocal } from "../../context/local"
 import { TodoItem } from "../../component/todo-item"
+import { pickQuota } from "./sidebar-quota"
 
 export function Sidebar(props: { sessionID: string; overlay?: boolean }) {
   const sync = useSync()
+  const local = useLocal()
   const { theme } = useTheme()
   const session = createMemo(() => sync.session.get(props.sessionID)!)
   const diff = createMemo(() => sync.data.session_diff[props.sessionID] ?? [])
@@ -62,6 +65,10 @@ export function Sidebar(props: { sessionID: string; overlay?: boolean }) {
       cacheWrite: last.tokens.cache.write,
       cached,
     }
+  })
+
+  const quota = createMemo(() => {
+    return pickQuota(messages(), local.model.current(), sync.data.quota)
   })
 
   const directory = useDirectory()
@@ -115,6 +122,23 @@ export function Sidebar(props: { sessionID: string; overlay?: boolean }) {
                 </text>
               </Show>
             </box>
+            <Show when={quota()}>
+              <box>
+                <text fg={theme.text}>
+                  <b>Quota</b>
+                </text>
+                <For each={quota()!.items}>
+                  {(item) => (
+                    <text fg={theme.textMuted}>
+                      {item.label}: {item.remaining ?? "?"}%
+                    </text>
+                  )}
+                </For>
+                <Show when={quota()!.reset}>
+                  <text fg={theme.textMuted}>resets {quota()!.reset}</text>
+                </Show>
+              </box>
+            </Show>
             <Show when={mcpEntries().length > 0}>
               <box>
                 <box
