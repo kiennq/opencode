@@ -4,6 +4,13 @@ import { iife } from "@/util/iife"
 import { setTimeout as sleep } from "node:timers/promises"
 
 const CLIENT_ID = "Ov23li8tweQw6odWQebz"
+const INITIATOR = "x-opencode-copilot-initiator"
+const AGENT_TEXT = [
+  "Summarize the task tool output above and continue with your task.",
+  "Continue if you have next steps, or stop and ask for clarification if you are unsure how to proceed.",
+  "The following tool was executed by the user",
+  "Attached image(s) from tool result:",
+]
 // Add a small safety buffer when polling to avoid hitting the server
 // slightly too early due to clock skew / timer drift.
 const OAUTH_POLLING_SAFETY_MARGIN_MS = 3000 // 3 seconds
@@ -16,6 +23,29 @@ function getUrls(domain: string) {
     DEVICE_CODE_URL: `https://${domain}/login/device/code`,
     ACCESS_TOKEN_URL: `https://${domain}/login/oauth/access_token`,
   }
+}
+
+function agent(body: any) {
+  if (body?.messages) {
+    const last = body.messages[body.messages.length - 1]
+    if (last?.role === "user") {
+      if (typeof last.content === "string") return AGENT_TEXT.includes(last.content)
+      if (Array.isArray(last.content)) {
+        const text = last.content.filter((part: any) => part?.type === "text").map((part: any) => part.text)
+        return text.length > 0 && text.every((part: string) => AGENT_TEXT.includes(part))
+      }
+    }
+  }
+
+  if (body?.input) {
+    const last = body.input[body.input.length - 1]
+    if (last?.role === "user" && Array.isArray(last.content)) {
+      const text = last.content.filter((part: any) => part?.type === "input_text").map((part: any) => part.text)
+      return text.length > 0 && text.every((part: string) => AGENT_TEXT.includes(part))
+    }
+  }
+
+  return false
 }
 
 export async function CopilotAuthPlugin(input: PluginInput): Promise<Hooks> {
@@ -66,9 +96,27 @@ export async function CopilotAuthPlugin(input: PluginInput): Promise<Hooks> {
             if (info.type !== "oauth") return fetch(request, init)
 
             const url = request instanceof URL ? request.href : request.toString()
+            const hint = iife(() => {
+              const headers = new Headers(init?.headers)
+              const value = headers.get(INITIATOR)
+              headers.delete(INITIATOR)
+              init = {
+                ...init,
+                headers,
+              }
+              return value
+            })
             const { isVision, isAgent } = iife(() => {
+              if (hint) {
+                return {
+                  isVision: false,
+                  isAgent: hint === "agent",
+                }
+              }
+
               try {
                 const body = typeof init?.body === "string" ? JSON.parse(init.body) : init?.body
+                if (agent(body)) return { isVision: false, isAgent: true }
 
                 // Completions API
                 if (body?.messages && url.includes("completions")) {
@@ -327,10 +375,12 @@ export async function CopilotAuthPlugin(input: PluginInput): Promise<Hooks> {
         return
       }
 
-      // Skip x-initiator override when using @ai-sdk/github-copilot - it has its own
-      // fetch wrapper that sets x-initiator based on message content, and overriding
-      // it here causes "invalid initiator" validation errors from Copilot API
-      if (incoming.model.api.npm === "@ai-sdk/github-copilot") return
+      const synthetic = parts?.data.parts.some((part) => {
+        if (part.type === "subtask") return true
+        if (part.type !== "text" || !part.synthetic) return false
+        return AGENT_TEXT.includes(part.text)
+      })
+
       const session = await sdk.session
         .get({
           path: {
@@ -342,9 +392,21 @@ export async function CopilotAuthPlugin(input: PluginInput): Promise<Hooks> {
           throwOnError: true,
         })
         .catch(() => undefined)
-      if (!session || !session.data.parentID) return
-      // mark subagent sessions as agent initiated matching standard that other copilot tools have
-      output.headers["x-initiator"] = "agent"
+
+      if (session?.data.parentID || synthetic) {
+        if (incoming.model.api.npm === "@ai-sdk/github-copilot") {
+          output.headers[INITIATOR] = "agent"
+          return
+        }
+
+        output.headers["x-initiator"] = "agent"
+        return
+      }
+
+      // Skip x-initiator override when using @ai-sdk/github-copilot - it has its own
+      // fetch wrapper that sets x-initiator based on message content, and overriding
+      // it here causes "invalid initiator" validation errors from Copilot API
+      if (incoming.model.api.npm === "@ai-sdk/github-copilot") return
     },
   }
 }

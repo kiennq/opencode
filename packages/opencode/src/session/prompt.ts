@@ -279,7 +279,7 @@ export namespace SessionPrompt {
   export const LoopInput = z.object({
     sessionID: SessionID.zod,
     resume_existing: z.boolean().optional(),
-    waitFor: Identifier.schema("message").optional(),
+    waitFor: MessageID.zod.optional(),
   })
   export const loop = fn(LoopInput, async (input) => {
     const { sessionID, resume_existing } = input
