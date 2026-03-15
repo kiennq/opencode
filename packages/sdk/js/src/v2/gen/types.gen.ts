@@ -717,6 +717,182 @@ export type EventTodoUpdated = {
   }
 }
 
+export type EventTeamCreated = {
+  type: "team.created"
+  properties: {
+    team: {
+      name: string
+      leadSessionID: string
+      members: Array<{
+        name: string
+        sessionID: string
+        agent: string
+        status: "ready" | "busy" | "shutdown_requested" | "shutdown" | "error"
+        execution_status?:
+          | "idle"
+          | "starting"
+          | "running"
+          | "cancel_requested"
+          | "cancelling"
+          | "cancelled"
+          | "completing"
+          | "completed"
+          | "failed"
+          | "timed_out"
+        prompt?: string
+        model?: string
+        planApproval?: "none" | "pending" | "approved" | "rejected"
+      }>
+      created: number
+      delegate?: boolean
+      delegate_permissions?: Array<{
+        permission: string
+        pattern: string
+        action: "allow" | "deny" | "ask"
+      }>
+    }
+  }
+}
+
+export type EventTeamMemberSpawned = {
+  type: "team.member.spawned"
+  properties: {
+    teamName: string
+    member: {
+      name: string
+      sessionID: string
+      agent: string
+      status: "ready" | "busy" | "shutdown_requested" | "shutdown" | "error"
+      execution_status?:
+        | "idle"
+        | "starting"
+        | "running"
+        | "cancel_requested"
+        | "cancelling"
+        | "cancelled"
+        | "completing"
+        | "completed"
+        | "failed"
+        | "timed_out"
+      prompt?: string
+      model?: string
+      planApproval?: "none" | "pending" | "approved" | "rejected"
+    }
+  }
+}
+
+export type EventTeamMemberStatus = {
+  type: "team.member.status"
+  properties: {
+    teamName: string
+    memberName: string
+    status: "ready" | "busy" | "shutdown_requested" | "shutdown" | "error"
+  }
+}
+
+export type EventTeamMemberExecution = {
+  type: "team.member.execution"
+  properties: {
+    teamName: string
+    memberName: string
+    status:
+      | "idle"
+      | "starting"
+      | "running"
+      | "cancel_requested"
+      | "cancelling"
+      | "cancelled"
+      | "completing"
+      | "completed"
+      | "failed"
+      | "timed_out"
+  }
+}
+
+export type EventTeamMessage = {
+  type: "team.message"
+  properties: {
+    teamName: string
+    from: string
+    to: string
+    text: string
+  }
+}
+
+export type EventTeamBroadcast = {
+  type: "team.broadcast"
+  properties: {
+    teamName: string
+    from: string
+    text: string
+  }
+}
+
+export type EventTeamTaskUpdated = {
+  type: "team.task.updated"
+  properties: {
+    teamName: string
+    tasks: Array<{
+      id: string
+      content: string
+      status: "pending" | "in_progress" | "completed" | "cancelled" | "blocked"
+      priority: "high" | "medium" | "low"
+      assignee?: string
+      depends_on?: Array<string>
+    }>
+  }
+}
+
+export type EventTeamTaskClaimed = {
+  type: "team.task.claimed"
+  properties: {
+    teamName: string
+    taskId: string
+    memberName: string
+  }
+}
+
+export type EventTeamShutdownRequest = {
+  type: "team.shutdown.request"
+  properties: {
+    teamName: string
+    memberName: string
+  }
+}
+
+export type EventTeamPlanApproval = {
+  type: "team.plan.approval"
+  properties: {
+    teamName: string
+    memberName: string
+    approved: boolean
+    feedback?: string
+  }
+}
+
+export type EventTeamMessageRead = {
+  type: "team.message.read"
+  properties: {
+    teamName: string
+    agentName: string
+    count: number
+  }
+}
+
+export type EventTeamCleaned = {
+  type: "team.cleaned"
+  properties: {
+    teamName: string
+    leadSessionID: string
+    delegate: boolean
+    delegate_permissions?: Array<{
+      permission: string
+      pattern: string
+      action: "allow" | "deny" | "ask"
+    }>
+  }
+}
+
 export type EventTuiPromptAppend = {
   type: "tui.prompt.append"
   properties: {
@@ -1045,6 +1221,18 @@ export type Event =
   | EventSessionCompacted
   | EventFileWatcherUpdated
   | EventTodoUpdated
+  | EventTeamCreated
+  | EventTeamMemberSpawned
+  | EventTeamMemberStatus
+  | EventTeamMemberExecution
+  | EventTeamMessage
+  | EventTeamBroadcast
+  | EventTeamTaskUpdated
+  | EventTeamTaskClaimed
+  | EventTeamShutdownRequest
+  | EventTeamPlanApproval
+  | EventTeamMessageRead
+  | EventTeamCleaned
   | EventTuiPromptAppend
   | EventTuiCommandExecute
   | EventTuiToastShow
@@ -3594,6 +3782,46 @@ export type PartUpdateResponses = {
 
 export type PartUpdateResponse = PartUpdateResponses[keyof PartUpdateResponses]
 
+export type SessionTeamMessageData = {
+  body?: {
+    to: string
+    text: string
+    agent?: string
+  }
+  path: {
+    sessionID: string
+  }
+  query?: {
+    directory?: string
+    workspace?: string
+  }
+  url: "/session/{sessionID}/team-message"
+}
+
+export type SessionTeamMessageErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+  /**
+   * Not found
+   */
+  404: NotFoundError
+}
+
+export type SessionTeamMessageError = SessionTeamMessageErrors[keyof SessionTeamMessageErrors]
+
+export type SessionTeamMessageResponses = {
+  /**
+   * Team message sent
+   */
+  200: {
+    ok: boolean
+  }
+}
+
+export type SessionTeamMessageResponse = SessionTeamMessageResponses[keyof SessionTeamMessageResponses]
+
 export type SessionPromptAsyncData = {
   body?: {
     messageID?: string
@@ -4636,6 +4864,226 @@ export type McpDisconnectResponses = {
 }
 
 export type McpDisconnectResponse = McpDisconnectResponses[keyof McpDisconnectResponses]
+
+export type TeamListData = {
+  body?: never
+  path?: never
+  query?: {
+    directory?: string
+    workspace?: string
+  }
+  url: "/team"
+}
+
+export type TeamListResponses = {
+  /**
+   * List of teams
+   */
+  200: Array<{
+    name: string
+    leadSessionID: string
+    members: Array<{
+      name: string
+      sessionID: string
+      agent: string
+      status: "ready" | "busy" | "shutdown_requested" | "shutdown" | "error"
+      execution_status?:
+        | "idle"
+        | "starting"
+        | "running"
+        | "cancel_requested"
+        | "cancelling"
+        | "cancelled"
+        | "completing"
+        | "completed"
+        | "failed"
+        | "timed_out"
+      prompt?: string
+      model?: string
+      planApproval?: "none" | "pending" | "approved" | "rejected"
+    }>
+    created: number
+    delegate?: boolean
+    delegate_permissions?: Array<{
+      permission: string
+      pattern: string
+      action: "allow" | "deny" | "ask"
+    }>
+  }>
+}
+
+export type TeamListResponse = TeamListResponses[keyof TeamListResponses]
+
+export type TeamGetData = {
+  body?: never
+  path: {
+    name: string
+  }
+  query?: {
+    directory?: string
+    workspace?: string
+  }
+  url: "/team/{name}"
+}
+
+export type TeamGetErrors = {
+  /**
+   * Not found
+   */
+  404: NotFoundError
+}
+
+export type TeamGetError = TeamGetErrors[keyof TeamGetErrors]
+
+export type TeamGetResponses = {
+  /**
+   * Team info
+   */
+  200: {
+    name: string
+    leadSessionID: string
+    members: Array<{
+      name: string
+      sessionID: string
+      agent: string
+      status: "ready" | "busy" | "shutdown_requested" | "shutdown" | "error"
+      execution_status?:
+        | "idle"
+        | "starting"
+        | "running"
+        | "cancel_requested"
+        | "cancelling"
+        | "cancelled"
+        | "completing"
+        | "completed"
+        | "failed"
+        | "timed_out"
+      prompt?: string
+      model?: string
+      planApproval?: "none" | "pending" | "approved" | "rejected"
+    }>
+    created: number
+    delegate?: boolean
+    delegate_permissions?: Array<{
+      permission: string
+      pattern: string
+      action: "allow" | "deny" | "ask"
+    }>
+  }
+}
+
+export type TeamGetResponse = TeamGetResponses[keyof TeamGetResponses]
+
+export type TeamTasksListData = {
+  body?: never
+  path: {
+    name: string
+  }
+  query?: {
+    directory?: string
+    workspace?: string
+  }
+  url: "/team/{name}/tasks"
+}
+
+export type TeamTasksListResponses = {
+  /**
+   * List of tasks
+   */
+  200: Array<{
+    id: string
+    content: string
+    status: "pending" | "in_progress" | "completed" | "cancelled" | "blocked"
+    priority: "high" | "medium" | "low"
+    assignee?: string
+    depends_on?: Array<string>
+  }>
+}
+
+export type TeamTasksListResponse = TeamTasksListResponses[keyof TeamTasksListResponses]
+
+export type TeamBySessionData = {
+  body?: never
+  path: {
+    sessionID: string
+  }
+  query?: {
+    directory?: string
+    workspace?: string
+  }
+  url: "/team/by-session/{sessionID}"
+}
+
+export type TeamBySessionResponses = {
+  /**
+   * Team info with role and tasks
+   */
+  200: unknown
+}
+
+export type TeamDelegateData = {
+  body?: {
+    enabled: boolean
+  }
+  path: {
+    name: string
+  }
+  query?: {
+    directory?: string
+    workspace?: string
+  }
+  url: "/team/{name}/delegate"
+}
+
+export type TeamDelegateErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+  /**
+   * Not found
+   */
+  404: NotFoundError
+}
+
+export type TeamDelegateError = TeamDelegateErrors[keyof TeamDelegateErrors]
+
+export type TeamDelegateResponses = {
+  /**
+   * Delegate mode updated
+   */
+  200: unknown
+}
+
+export type TeamCancelData = {
+  body?: {
+    member?: string
+  }
+  path: {
+    name: string
+  }
+  query?: {
+    directory?: string
+    workspace?: string
+  }
+  url: "/team/{name}/cancel"
+}
+
+export type TeamCancelErrors = {
+  /**
+   * Not found
+   */
+  404: NotFoundError
+}
+
+export type TeamCancelError = TeamCancelErrors[keyof TeamCancelErrors]
+
+export type TeamCancelResponses = {
+  /**
+   * Number of cancelled members
+   */
+  200: unknown
+}
 
 export type TuiAppendPromptData = {
   body?: {
