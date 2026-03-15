@@ -1,4 +1,4 @@
-import { describe, expect, test } from "bun:test"
+import { afterEach, beforeEach, describe, expect, test } from "bun:test"
 import os from "os"
 import path from "path"
 import { BashTool } from "../../src/tool/bash"
@@ -23,23 +23,61 @@ const ctx = {
 
 const projectRoot = path.join(__dirname, "../..")
 
+async function isolated<T>(fn: () => Promise<T>) {
+  const project = process.env.OPENCODE_DISABLE_PROJECT_CONFIG
+  const plugins = process.env.OPENCODE_DISABLE_DEFAULT_PLUGINS
+
+  process.env.OPENCODE_DISABLE_PROJECT_CONFIG = "true"
+  process.env.OPENCODE_DISABLE_DEFAULT_PLUGINS = "true"
+
+  try {
+    return await fn()
+  } finally {
+    if (project === undefined) delete process.env.OPENCODE_DISABLE_PROJECT_CONFIG
+    else process.env.OPENCODE_DISABLE_PROJECT_CONFIG = project
+
+    if (plugins === undefined) delete process.env.OPENCODE_DISABLE_DEFAULT_PLUGINS
+    else process.env.OPENCODE_DISABLE_DEFAULT_PLUGINS = plugins
+  }
+}
+
+let project: string | undefined
+let plugins: string | undefined
+
+beforeEach(() => {
+  project = process.env.OPENCODE_DISABLE_PROJECT_CONFIG
+  plugins = process.env.OPENCODE_DISABLE_DEFAULT_PLUGINS
+  process.env.OPENCODE_DISABLE_PROJECT_CONFIG = "true"
+  process.env.OPENCODE_DISABLE_DEFAULT_PLUGINS = "true"
+})
+
+afterEach(() => {
+  if (project === undefined) delete process.env.OPENCODE_DISABLE_PROJECT_CONFIG
+  else process.env.OPENCODE_DISABLE_PROJECT_CONFIG = project
+
+  if (plugins === undefined) delete process.env.OPENCODE_DISABLE_DEFAULT_PLUGINS
+  else process.env.OPENCODE_DISABLE_DEFAULT_PLUGINS = plugins
+})
+
 describe("tool.bash", () => {
   test("basic", async () => {
-    await Instance.provide({
-      directory: projectRoot,
-      fn: async () => {
-        const bash = await BashTool.init()
-        const result = await bash.execute(
-          {
-            command: "echo 'test'",
-            description: "Echo test message",
-          },
-          ctx,
-        )
-        expect(result.metadata.exit).toBe(0)
-        expect(result.metadata.output).toContain("test")
-      },
-    })
+    await isolated(() =>
+      Instance.provide({
+        directory: projectRoot,
+        fn: async () => {
+          const bash = await BashTool.init()
+          const result = await bash.execute(
+            {
+              command: "echo 'test'",
+              description: "Echo test message",
+            },
+            ctx,
+          )
+          expect(result.metadata.exit).toBe(0)
+          expect(result.metadata.output).toContain("test")
+        },
+      }),
+    )
   })
 
   test("uses attach env from instance context", async () => {
@@ -52,22 +90,24 @@ describe("tool.bash", () => {
       return !Shell.isPowerShellShell(shell) && !Shell.isCmdShell(shell)
     })
     if (!command) throw new Error("Could not find shell-compatible env command")
-    await Instance.provide({
-      directory: projectRoot,
-      env: { [key]: value },
-      fn: async () => {
-        const bash = await BashTool.init()
-        const result = await bash.execute(
-          {
-            command,
-            description: "Read attach env",
-          },
-          ctx,
-        )
-        expect(result.metadata.exit).toBe(0)
-        expect(result.output).toContain(value)
-      },
-    })
+    await isolated(() =>
+      Instance.provide({
+        directory: projectRoot,
+        env: { [key]: value },
+        fn: async () => {
+          const bash = await BashTool.init()
+          const result = await bash.execute(
+            {
+              command,
+              description: "Read attach env",
+            },
+            ctx,
+          )
+          expect(result.metadata.exit).toBe(0)
+          expect(result.output).toContain(value)
+        },
+      }),
+    )
   })
 })
 

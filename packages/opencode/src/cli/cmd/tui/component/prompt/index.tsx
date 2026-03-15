@@ -34,6 +34,13 @@ import { useToast } from "../../ui/toast"
 import { useKV } from "../../context/kv"
 import { useTextareaKeybindings } from "../textarea-keybindings"
 import { DialogSkill } from "../dialog-skill"
+import { DialogUsage } from "../dialog-usage"
+import { fetchUsage } from "../usage-client"
+import { formatUsageResetLong, formatUsageWindowLabel } from "../usage-format"
+import type { UsageDisplayMode, UsageEntry } from "../usage-data"
+import { Log } from "@/util/log"
+import { resolveUsageProvider } from "@/usage/command"
+import { usageRemember, usageShouldRefresh, usageWarning, usageWarningKey } from "../usage-toast"
 
 export type PromptProps = {
   sessionID?: string
@@ -58,6 +65,14 @@ export type PromptRef = {
 
 const PLACEHOLDERS = ["Fix a TODO in the codebase", "What is the tech stack of this project?", "Fix broken tests"]
 const SHELL_PLACEHOLDERS = ["ls -la", "git status", "pwd"]
+const log = Log.create({ service: "tui.prompt" })
+
+type UsageConfig = {
+  tui?: {
+    show_usage_provider_scope?: "current" | "all"
+    show_usage_value_mode?: UsageDisplayMode
+  }
+}
 
 export function Prompt(props: PromptProps) {
   let input: TextareaRenderable
@@ -78,6 +93,107 @@ export function Prompt(props: PromptProps) {
   const renderer = useRenderer()
   const { theme, syntax } = useTheme()
   const kv = useKV()
+  const [usageSuccessAt, setUsageSuccessAt] = createSignal(0)
+  const [usageFailureAt, setUsageFailureAt] = createSignal(0)
+  const [usageRefreshing, setUsageRefreshing] = createSignal(false)
+  const [previousStatus, setPreviousStatus] = createSignal("idle")
+  const usageSnapshot = new Map<string, UsageEntry["snapshot"]>()
+  const usageShown = new Set<string>()
+
+  function usageToast(entries: UsageEntry[]) {
+    for (const entry of entries) {
+      const previous = usageSnapshot.get(entry.provider)
+      usageSnapshot.set(entry.provider, entry.snapshot)
+      const warning = usageWarning(entry, previous)
+      if (!warning) continue
+
+      const key = usageWarningKey(entry.provider, warning)
+      if (!usageRemember(usageShown, key)) continue
+
+      const label = formatUsageWindowLabel(entry.provider, warning.window, warning.windowMinutes)
+      const reset = warning.resetsAt ? ` Resets ${formatUsageResetLong(warning.resetsAt)}.` : ""
+
+      toast.show({
+        title: `${entry.displayName} usage`,
+        message: `${label} reached ${Math.round(warning.usedPercent)}% used.${reset} Run /usage for details.`,
+        variant: warning.threshold >= 95 ? "error" : "warning",
+        duration: 5000,
+      })
+    }
+  }
+
+  createEffect(
+    on(
+      () => status().type,
+      (current) => {
+        const previous = previousStatus()
+        setPreviousStatus(current)
+        if (previous === "idle") return
+        if (current !== "idle") return
+
+        const provider = resolveUsageProvider({
+          scope: "current",
+          modelProviderID: local.model.current()?.providerID ?? null,
+        })
+        if (!provider) return
+
+        const now = Date.now()
+        if (
+          !usageShouldRefresh({
+            now,
+            successAt: usageSuccessAt(),
+            failureAt: usageFailureAt(),
+            refreshing: usageRefreshing(),
+          })
+        ) {
+          return
+        }
+
+        setUsageRefreshing(true)
+
+        fetchUsage(sdk, { provider, refresh: true })
+          .then((data) => {
+            usageToast(data.entries)
+            setUsageSuccessAt(Date.now())
+          })
+          .catch((error) => {
+            setUsageFailureAt(Date.now())
+            log.debug("usage refresh failed", { provider, error })
+          })
+          .finally(() => {
+            setUsageRefreshing(false)
+          })
+      },
+    ),
+  )
+
+  function firstToken(input: string) {
+    const line = input.split("\n")[0]?.trim()
+    if (!line) return ""
+    return line.split(/\s+/)[0] ?? ""
+  }
+
+  function handleUsageCommand(commandText: string) {
+    fetchUsage(sdk, {
+      command: commandText,
+      modelProviderID: local.model.current()?.providerID,
+      showUsageProviderScope: (sync.data.config as UsageConfig).tui?.show_usage_provider_scope,
+      showUsageValueMode: (sync.data.config as UsageConfig).tui?.show_usage_value_mode,
+      refresh: true,
+    })
+      .then((data) => {
+        if (data.entries.length > 0) {
+          dialog.replace(() => <DialogUsage entries={data.entries} errors={data.errors} initialMode={data.mode} />)
+          return
+        }
+        const message = data.error ?? "No usage data available."
+        DialogAlert.show(dialog, "Usage", message)
+      })
+      .catch((error: unknown) => {
+        const message = error instanceof Error ? error.message : String(error)
+        DialogAlert.show(dialog, "Usage", message)
+      })
+  }
 
   function promptModelWarning() {
     toast.show({
@@ -332,6 +448,19 @@ export function Prompt(props: PromptProps) {
         },
       },
       {
+        title: "Show usage limits",
+        value: "usage.show",
+        slashDescription: "Show usage limits (--current|--all, --used|--remaining)",
+        category: "Provider",
+        slash: {
+          name: "usage",
+        },
+        hidden: sync.data.command.some((x) => x.name === "usage"),
+        onSelect: () => {
+          handleUsageCommand("/usage")
+        },
+      },
+      {
         title: "Skills",
         value: "prompt.skills",
         category: "Prompt",
@@ -529,11 +658,27 @@ export function Prompt(props: PromptProps) {
 
   async function submit() {
     if (props.disabled) return
-    if (autocomplete?.visible) return
+    const promptToken = firstToken(store.prompt.input)
+    const customUsageCommand = sync.data.command.some((x) => x.name === "usage")
+    const isBuiltInUsage = promptToken === "/usage" && !customUsageCommand
+    if (autocomplete?.visible && !isBuiltInUsage) return
     if (!store.prompt.input) return
     const trimmed = store.prompt.input.trim()
     if (trimmed === "exit" || trimmed === "quit" || trimmed === ":q") {
       exit()
+      return
+    }
+
+    if (isBuiltInUsage && store.mode !== "shell") {
+      handleUsageCommand(store.prompt.input)
+      input.extmarks.clear()
+      setStore("prompt", {
+        input: "",
+        parts: [],
+      })
+      setStore("extmarkToPartIndex", new Map())
+      props.onSubmit?.()
+      input.clear()
       return
     }
     const selectedModel = local.model.current()
@@ -587,6 +732,8 @@ export function Prompt(props: PromptProps) {
     // Capture mode before it gets reset
     const currentMode = store.mode
     const variant = local.model.variant.current()
+    const token = firstToken(inputText)
+    const isUsage = token === "/usage" && !customUsageCommand
 
     if (store.mode === "shell") {
       sdk.client.session.shell({
@@ -599,6 +746,8 @@ export function Prompt(props: PromptProps) {
         command: inputText,
       })
       setStore("mode", "normal")
+    } else if (isUsage) {
+      handleUsageCommand(inputText)
     } else if (
       inputText.startsWith("/") &&
       iife(() => {
@@ -652,10 +801,12 @@ export function Prompt(props: PromptProps) {
         })
         .catch(() => {})
     }
-    history.append({
-      ...store.prompt,
-      mode: currentMode,
-    })
+    if (!isUsage) {
+      history.append({
+        ...store.prompt,
+        mode: currentMode,
+      })
+    }
     input.extmarks.clear()
     setStore("prompt", {
       input: "",

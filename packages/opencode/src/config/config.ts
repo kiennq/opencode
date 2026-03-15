@@ -1002,6 +1002,10 @@ export namespace Config {
         .object({
           apiKey: z.string().optional(),
           baseURL: z.string().optional(),
+          client: z
+            .enum(["github", "anomaly"])
+            .optional()
+            .describe("OAuth app to use for GitHub Copilot auth. Defaults to 'github'."),
           enterpriseUrl: z.string().optional().describe("GitHub Enterprise URL for copilot authentication"),
           setCacheKey: z.boolean().optional().describe("Enable promptCacheKey for this provider (default false)"),
           timeout: z
