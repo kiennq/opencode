@@ -1544,7 +1544,7 @@ function ToolPart(props: { last: boolean; part: ToolPart; message: AssistantMess
   return (
     <Show when={!shouldHide()}>
       <Switch>
-        <Match when={props.part.tool === "bash" || props.part.tool === "pwsh"}>
+        <Match when={props.part.tool === "bash"}>
           <Bash {...toolprops} />
         </Match>
         <Match when={props.part.tool === "glob"}>
@@ -1798,6 +1798,12 @@ function Bash(props: ToolProps<typeof BashTool>) {
   const sync = useSync()
   const isRunning = createMemo(() => props.part.state.status === "running")
   const output = createMemo(() => stripAnsi(props.metadata.output?.trim() ?? ""))
+  const shell = createMemo(() => {
+    const value = props.metadata.shell
+    if (typeof value !== "string") return undefined
+    if (!value) return undefined
+    return value
+  })
   const [expanded, setExpanded] = createSignal(false)
   const lines = createMemo(() => output().split("\n"))
   const overflow = createMemo(() => lines().length > 10)
@@ -1814,7 +1820,7 @@ function Bash(props: ToolProps<typeof BashTool>) {
     if (!base) return undefined
 
     const normalized = Filesystem.normalize(workdir)
-    const absolute = path.isAbsolute(normalized) ? normalized : Filesystem.resolve(base, normalized)
+    const absolute = path.isAbsolute(normalized) ? normalized : Filesystem.resolve(path.join(base, normalized))
     if (absolute === base) return undefined
 
     const home = Global.Path.home
@@ -1842,9 +1848,10 @@ function Bash(props: ToolProps<typeof BashTool>) {
           onClick={overflow() ? () => setExpanded((prev) => !prev) : undefined}
         >
           <box gap={1}>
-            <text fg={theme.text}>
-              {props.part.tool === "pwsh" ? "PS>" : "$"} {props.input.command}
-            </text>
+            <text fg={theme.text}>$ {props.input.command}</text>
+            <Show when={shell()}>
+              <text fg={theme.textMuted}>Shell: {shell()}</text>
+            </Show>
             <Show when={output()}>
               <text fg={theme.text}>{limited()}</text>
             </Show>
@@ -1855,12 +1862,7 @@ function Bash(props: ToolProps<typeof BashTool>) {
         </BlockTool>
       </Match>
       <Match when={true}>
-        <InlineTool
-          icon={props.part.tool === "pwsh" ? "PS>" : "$"}
-          pending="Writing command..."
-          complete={props.input.command}
-          part={props.part}
-        >
+        <InlineTool icon="$" pending="Writing command..." complete={props.input.command} part={props.part}>
           {props.input.command}
         </InlineTool>
       </Match>

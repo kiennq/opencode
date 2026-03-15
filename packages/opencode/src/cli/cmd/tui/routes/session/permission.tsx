@@ -297,23 +297,6 @@ export function PermissionPrompt(props: { request: PermissionRequest }) {
               }
             }
 
-            if (permission === "pwsh") {
-              const title =
-                typeof data.description === "string" && data.description ? data.description : "PowerShell command"
-              const command = typeof data.command === "string" ? data.command : ""
-              return {
-                icon: "#",
-                title,
-                body: (
-                  <Show when={command}>
-                    <box paddingLeft={1}>
-                      <text fg={theme.text}>{"PS> " + command}</text>
-                    </box>
-                  </Show>
-                ),
-              }
-            }
-
             if (permission === "task") {
               const type = typeof data.subagent_type === "string" ? data.subagent_type : "Unknown"
               const desc = typeof data.description === "string" ? data.description : ""
