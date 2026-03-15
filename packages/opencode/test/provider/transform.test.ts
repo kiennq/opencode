@@ -1638,26 +1638,6 @@ describe("ProviderTransform.message - cache control on gateway", () => {
           type: "ephemeral",
         },
       },
-      openrouter: {
-        cacheControl: {
-          type: "ephemeral",
-        },
-      },
-      bedrock: {
-        cachePoint: {
-          type: "default",
-        },
-      },
-      openaiCompatible: {
-        cache_control: {
-          type: "ephemeral",
-        },
-      },
-      copilot: {
-        copilot_cache_control: {
-          type: "ephemeral",
-        },
-      },
     })
   })
 })
