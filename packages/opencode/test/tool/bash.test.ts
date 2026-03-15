@@ -1,4 +1,5 @@
-import { describe, expect, test } from "bun:test"
+import { afterEach, beforeEach, describe, expect, test } from "bun:test"
+import fs from "fs/promises"
 import os from "os"
 import path from "path"
 import { BashTool } from "../../src/tool/bash"
@@ -8,6 +9,7 @@ import { tmpdir } from "../fixture/fixture"
 import type { Permission } from "../../src/permission"
 import { Truncate } from "../../src/tool/truncate"
 import { SessionID, MessageID } from "../../src/session/schema"
+import { Shell } from "../../src/shell/shell"
 
 const ctx = {
   sessionID: SessionID.make("ses_test"),
@@ -22,24 +24,188 @@ const ctx = {
 
 const projectRoot = path.join(__dirname, "../..")
 
+async function isolated<T>(fn: () => Promise<T>) {
+  const project = process.env.OPENCODE_DISABLE_PROJECT_CONFIG
+  const plugins = process.env.OPENCODE_DISABLE_DEFAULT_PLUGINS
+
+  process.env.OPENCODE_DISABLE_PROJECT_CONFIG = "true"
+  process.env.OPENCODE_DISABLE_DEFAULT_PLUGINS = "true"
+
+  try {
+    return await fn()
+  } finally {
+    if (project === undefined) delete process.env.OPENCODE_DISABLE_PROJECT_CONFIG
+    else process.env.OPENCODE_DISABLE_PROJECT_CONFIG = project
+
+    if (plugins === undefined) delete process.env.OPENCODE_DISABLE_DEFAULT_PLUGINS
+    else process.env.OPENCODE_DISABLE_DEFAULT_PLUGINS = plugins
+  }
+}
+
+let project: string | undefined
+let plugins: string | undefined
+
+beforeEach(() => {
+  project = process.env.OPENCODE_DISABLE_PROJECT_CONFIG
+  plugins = process.env.OPENCODE_DISABLE_DEFAULT_PLUGINS
+  process.env.OPENCODE_DISABLE_PROJECT_CONFIG = "true"
+  process.env.OPENCODE_DISABLE_DEFAULT_PLUGINS = "true"
+})
+
+afterEach(() => {
+  if (project === undefined) delete process.env.OPENCODE_DISABLE_PROJECT_CONFIG
+  else process.env.OPENCODE_DISABLE_PROJECT_CONFIG = project
+
+  if (plugins === undefined) delete process.env.OPENCODE_DISABLE_DEFAULT_PLUGINS
+  else process.env.OPENCODE_DISABLE_DEFAULT_PLUGINS = plugins
+})
+
 describe("tool.bash", () => {
   test("basic", async () => {
-    await Instance.provide({
-      directory: projectRoot,
-      fn: async () => {
-        const bash = await BashTool.init()
-        const result = await bash.execute(
-          {
-            command: "echo 'test'",
-            description: "Echo test message",
-          },
-          ctx,
-        )
-        expect(result.metadata.exit).toBe(0)
-        expect(result.metadata.output).toContain("test")
-      },
-    })
+    await isolated(() =>
+      Instance.provide({
+        directory: projectRoot,
+        fn: async () => {
+          const bash = await BashTool.init()
+          const result = await bash.execute(
+            {
+              command: "echo 'test'",
+              description: "Echo test message",
+            },
+            ctx,
+          )
+          expect(result.metadata.exit).toBe(0)
+          expect(result.metadata.output).toContain("test")
+        },
+      }),
+    )
   })
+
+  test("uses attach env from instance context", async () => {
+    const key = "OPENCODE_ATTACH_ENV_TEST"
+    const value = "attach-env"
+    const command = [`Write-Output $env:${key}`, `echo %${key}%`, `printf '%s' "$${key}"`].find((item) => {
+      const shell = Shell.commandShell(item)
+      if (item.startsWith("Write-Output")) return Shell.isPowerShellShell(shell)
+      if (item.startsWith("echo %")) return Shell.isCmdShell(shell)
+      return !Shell.isPowerShellShell(shell) && !Shell.isCmdShell(shell)
+    })
+    if (!command) throw new Error("Could not find shell-compatible env command")
+    await isolated(() =>
+      Instance.provide({
+        directory: projectRoot,
+        env: { [key]: value },
+        fn: async () => {
+          const bash = await BashTool.init()
+          const result = await bash.execute(
+            {
+              command,
+              description: "Read attach env",
+            },
+            ctx,
+          )
+          expect(result.metadata.exit).toBe(0)
+          expect(result.output).toContain(value)
+        },
+      }),
+    )
+  })
+
+  test(
+    "serializes concurrent calls sharing one session",
+    async () => {
+      await using a = await tmpdir({ git: true })
+      await using b = await tmpdir({ git: true })
+      const testCtx = {
+        ...ctx,
+        sessionID: SessionID.make("ses_parallel"),
+      }
+      const slow =
+        process.platform === "win32" ? "Start-Sleep -Milliseconds 400; Write-Output first" : "sleep 0.4; echo first"
+      const fast = process.platform === "win32" ? "Write-Output second" : "echo second"
+
+      await isolated(() =>
+        Instance.provide({
+          directory: projectRoot,
+          fn: async () => {
+            const bash = await BashTool.init()
+            const result = await Promise.all([
+              bash.execute(
+                {
+                  command: slow,
+                  workdir: a.path,
+                  description: "Run slow command",
+                },
+                testCtx,
+              ),
+              bash.execute(
+                {
+                  command: fast,
+                  workdir: b.path,
+                  description: "Run fast command",
+                },
+                testCtx,
+              ),
+            ])
+
+            expect(result[0].metadata.exit).toBe(0)
+            expect(result[0].output).toContain("first")
+            expect(result[1].metadata.exit).toBe(0)
+            expect(result[1].output).toContain("second")
+          },
+        }),
+      )
+    },
+    { timeout: 30000 },
+  )
+
+  test(
+    "releases prior workdir after reusing one session on windows",
+    async () => {
+      if (process.platform !== "win32") return
+      await using a = await tmpdir({ git: true })
+      await using b = await tmpdir({ git: true })
+      const testCtx = {
+        ...ctx,
+        sessionID: SessionID.make("ses_reuse_cwd"),
+      }
+
+      await isolated(() =>
+        Instance.provide({
+          directory: projectRoot,
+          fn: async () => {
+            const bash = await BashTool.init()
+            const first = await bash.execute(
+              {
+                command: "Write-Output first",
+                workdir: a.path,
+                description: "Run first command",
+              },
+              testCtx,
+            )
+            expect(first.metadata.exit).toBe(0)
+
+            const second = await bash.execute(
+              {
+                command: "Write-Output second",
+                workdir: b.path,
+                description: "Run second command",
+              },
+              testCtx,
+            )
+            expect(second.metadata.exit).toBe(0)
+
+            await fs.rm(b.path, {
+              recursive: true,
+              force: true,
+              maxRetries: 0,
+            })
+          },
+        }),
+      )
+    },
+    { timeout: 30000 },
+  )
 })
 
 describe("tool.bash permissions", () => {
@@ -316,6 +482,14 @@ describe("tool.bash permissions", () => {
 })
 
 describe("tool.bash truncation", () => {
+  const lineCommand = (count: number) =>
+    process.platform === "win32" ? `powershell -NoProfile -Command "1..${count}"` : `seq 1 ${count}`
+
+  const byteCommand = (count: number) =>
+    process.platform === "win32"
+      ? `powershell -NoProfile -Command "[Console]::Out.Write('a' * ${count})"`
+      : `head -c ${count} /dev/zero | tr '\\0' 'a'`
+
   test("truncates output exceeding line limit", async () => {
     await Instance.provide({
       directory: projectRoot,
@@ -324,7 +498,7 @@ describe("tool.bash truncation", () => {
         const lineCount = Truncate.MAX_LINES + 500
         const result = await bash.execute(
           {
-            command: `seq 1 ${lineCount}`,
+            command: lineCommand(lineCount),
             description: "Generate lines exceeding limit",
           },
           ctx,
@@ -344,7 +518,7 @@ describe("tool.bash truncation", () => {
         const byteCount = Truncate.MAX_BYTES + 10000
         const result = await bash.execute(
           {
-            command: `head -c ${byteCount} /dev/zero | tr '\\0' 'a'`,
+            command: byteCommand(byteCount),
             description: "Generate bytes exceeding limit",
           },
           ctx,
@@ -369,8 +543,7 @@ describe("tool.bash truncation", () => {
           ctx,
         )
         expect((result.metadata as any).truncated).toBe(false)
-        const eol = process.platform === "win32" ? "\r\n" : "\n"
-        expect(result.output).toBe(`hello${eol}`)
+        expect(["hello\n", "hello\r\n"]).toContain(result.output)
       },
     })
   })
@@ -383,7 +556,7 @@ describe("tool.bash truncation", () => {
         const lineCount = Truncate.MAX_LINES + 100
         const result = await bash.execute(
           {
-            command: `seq 1 ${lineCount}`,
+            command: lineCommand(lineCount),
             description: "Generate lines for file check",
           },
           ctx,
@@ -394,7 +567,7 @@ describe("tool.bash truncation", () => {
         expect(filepath).toBeTruthy()
 
         const saved = await Filesystem.readText(filepath)
-        const lines = saved.trim().split("\n")
+        const lines = saved.trim().split(/\r?\n/)
         expect(lines.length).toBe(lineCount)
         expect(lines[0]).toBe("1")
         expect(lines[lineCount - 1]).toBe(String(lineCount))
