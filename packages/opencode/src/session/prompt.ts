@@ -1640,9 +1640,6 @@ NOTE: At any point in time through this workflow you should feel free to ask the
       powershell: {
         args: ["-NoProfile", "-Command", input.command],
       },
-      pwsh: {
-        args: ["-NoProfile", "-Command", input.command],
-      },
       // Fallback: any shell that doesn't match those above
       //  - No -l, for max compatibility
       "": {
