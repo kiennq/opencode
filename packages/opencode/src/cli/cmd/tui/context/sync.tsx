@@ -136,7 +136,7 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
     const fullSyncedSessions = new Set<string>()
 
     const unsubscribe = sdk.event.listen((e) => {
-      const event = e.details
+      const event = e.details as typeof e.details | { type: "command.updated"; properties: Command[] }
       switch (event.type) {
         case "server.instance.disposed":
           bootstrap()

@@ -5,6 +5,7 @@ import { Log } from "../util/log"
 import { createOpencodeClient } from "@opencode-ai/sdk"
 import { BunProc } from "../bun"
 import { Flag } from "../flag/flag"
+import { Installation } from "../installation"
 import { CodexAuthPlugin } from "./codex"
 import { Session } from "../session"
 import { NamedError } from "@opencode-ai/util/error"
@@ -74,6 +75,7 @@ export namespace Plugin {
             const cfg = await Config.get()
             const input: PluginInput = {
               client,
+              version: Installation.VERSION,
               project: ctx.project,
               worktree: ctx.worktree,
               directory: ctx.directory,
