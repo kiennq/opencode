@@ -220,7 +220,9 @@ export namespace ProviderAuth {
             access: result.access,
             refresh: result.refresh,
             expires: result.expires,
+            ...(result.usage ? { usage: result.usage } : {}),
             ...(result.accountId ? { accountId: result.accountId } : {}),
+            ...(result.enterpriseUrl ? { enterpriseUrl: result.enterpriseUrl } : {}),
           })
         }
       })
