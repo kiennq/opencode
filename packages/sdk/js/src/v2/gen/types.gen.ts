@@ -397,6 +397,7 @@ export type ToolStateCompleted = {
     compacted?: number
   }
   attachments?: Array<FilePart>
+  summary?: string
 }
 
 export type ToolStateError = {
@@ -795,6 +796,20 @@ export type EventCommandExecuted = {
   }
 }
 
+export type EventCommandUpdated = {
+  type: "command.updated"
+  properties: Array<{
+    name: string
+    description?: string
+    agent?: string
+    model?: string
+    source?: "command" | "mcp" | "skill"
+    template: string
+    subtask?: boolean
+    hints: Array<string>
+  }>
+}
+
 export type PermissionAction = "allow" | "deny" | "ask"
 
 export type PermissionRule = {
@@ -957,6 +972,54 @@ export type EventWorktreeFailed = {
   }
 }
 
+export type EventUsageUpdated = {
+  type: "usage.updated"
+  properties: {
+    provider: string
+    snapshot: {
+      primary: {
+        usedPercent: number
+        windowMinutes: number | null
+        resetsAt: number | null
+      } | null
+      secondary: {
+        usedPercent: number
+        windowMinutes: number | null
+        resetsAt: number | null
+      } | null
+      tertiary: {
+        usedPercent: number
+        windowMinutes: number | null
+        resetsAt: number | null
+      } | null
+      credits: {
+        hasCredits: boolean
+        unlimited: boolean
+        balance: string | null
+        total?: number | null
+        used?: number | null
+        remaining?: number | null
+      } | null
+      planType:
+        | "guest"
+        | "free"
+        | "go"
+        | "plus"
+        | "pro"
+        | "free_workspace"
+        | "team"
+        | "business"
+        | "education"
+        | "quorum"
+        | "k12"
+        | "enterprise"
+        | "edu"
+        | null
+      updatedAt: number
+    }
+  }
+}
+
 export type Event =
   | EventInstallationUpdated
   | EventInstallationUpdateAvailable
@@ -989,6 +1052,7 @@ export type Event =
   | EventMcpToolsChanged
   | EventMcpBrowserOpenFailed
   | EventCommandExecuted
+  | EventCommandUpdated
   | EventSessionCreated
   | EventSessionUpdated
   | EventSessionDeleted
@@ -1003,6 +1067,7 @@ export type Event =
   | EventPtyDeleted
   | EventWorktreeReady
   | EventWorktreeFailed
+  | EventUsageUpdated
 
 export type GlobalEvent = {
   directory: string
@@ -1174,9 +1239,9 @@ export type ProviderConfig = {
         }
       }
       limit?: {
-        context: number
+        context?: number
         input?: number
-        output: number
+        output?: number
       }
       modalities?: {
         input: Array<"text" | "audio" | "image" | "video" | "pdf">
@@ -1214,6 +1279,10 @@ export type ProviderConfig = {
     apiKey?: string
     baseURL?: string
     /**
+     * OAuth app to use for GitHub Copilot auth. Defaults to 'github'.
+     */
+    client?: "github" | "anomaly"
+    /**
      * GitHub Enterprise URL for copilot authentication
      */
     enterpriseUrl?: string
@@ -1229,7 +1298,7 @@ export type ProviderConfig = {
      * Timeout in milliseconds between streamed SSE chunks for this provider. If no chunk arrives within this window, the request is aborted.
      */
     chunkTimeout?: number
-    [key: string]: unknown | string | boolean | number | false | number | undefined
+    [key: string]: unknown | string | "github" | "anomaly" | boolean | number | false | number | undefined
   }
 }
 
@@ -1480,6 +1549,23 @@ export type Config = {
      * Token buffer for compaction. Leaves enough window to avoid overflow during compaction.
      */
     reserved?: number
+    /**
+     * Absolute token threshold that triggers compaction
+     */
+    token_threshold?: number
+    /**
+     * Fraction of model context window that triggers compaction (0-1+)
+     */
+    context_threshold?: number
+    /**
+     * Per-model compaction thresholds keyed by providerID/modelID
+     */
+    models?: {
+      [key: string]: {
+        token_threshold?: number
+        context_threshold?: number
+      }
+    }
   }
   experimental?: {
     disable_paste_summary?: boolean
@@ -1518,6 +1604,7 @@ export type OAuth = {
   type: "oauth"
   refresh: string
   access: string
+  usage?: string
   expires: number
   accountId?: string
   enterpriseUrl?: string
@@ -3255,6 +3342,43 @@ export type SessionSummarizeResponses = {
 
 export type SessionSummarizeResponse = SessionSummarizeResponses[keyof SessionSummarizeResponses]
 
+export type SessionResumeData = {
+  body?: never
+  path: {
+    /**
+     * Session ID
+     */
+    sessionID: string
+  }
+  query?: {
+    directory?: string
+    workspace?: string
+  }
+  url: "/session/{sessionID}/resume"
+}
+
+export type SessionResumeErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+  /**
+   * Not found
+   */
+  404: NotFoundError
+}
+
+export type SessionResumeError = SessionResumeErrors[keyof SessionResumeErrors]
+
+export type SessionResumeResponses = {
+  /**
+   * Resumed session
+   */
+  200: boolean
+}
+
+export type SessionResumeResponse = SessionResumeResponses[keyof SessionResumeResponses]
+
 export type SessionMessagesData = {
   body?: never
   path: {
@@ -4094,6 +4218,83 @@ export type ProviderOauthCallbackResponses = {
 }
 
 export type ProviderOauthCallbackResponse = ProviderOauthCallbackResponses[keyof ProviderOauthCallbackResponses]
+
+export type UsageGetData = {
+  body?: never
+  path?: never
+  query?: {
+    directory?: string
+    workspace?: string
+    provider?: string
+    refresh?: boolean
+    command?: string
+    modelProviderID?: string
+    showUsageProviderScope?: "current" | "all"
+    showUsageValueMode?: "used" | "remaining"
+  }
+  url: "/usage"
+}
+
+export type UsageGetResponses = {
+  /**
+   * Usage response
+   */
+  200: {
+    entries: Array<{
+      provider: string
+      displayName: string
+      snapshot: {
+        primary: {
+          usedPercent: number
+          windowMinutes: number | null
+          resetsAt: number | null
+        } | null
+        secondary: {
+          usedPercent: number
+          windowMinutes: number | null
+          resetsAt: number | null
+        } | null
+        tertiary: {
+          usedPercent: number
+          windowMinutes: number | null
+          resetsAt: number | null
+        } | null
+        credits: {
+          hasCredits: boolean
+          unlimited: boolean
+          balance: string | null
+          total?: number | null
+          used?: number | null
+          remaining?: number | null
+        } | null
+        planType:
+          | "guest"
+          | "free"
+          | "go"
+          | "plus"
+          | "pro"
+          | "free_workspace"
+          | "team"
+          | "business"
+          | "education"
+          | "quorum"
+          | "k12"
+          | "enterprise"
+          | "edu"
+          | null
+        updatedAt: number
+      }
+    }>
+    error?: string
+    errors?: Array<{
+      provider: string
+      message: string
+    }>
+    mode?: "used" | "remaining"
+  }
+}
+
+export type UsageGetResponse = UsageGetResponses[keyof UsageGetResponses]
 
 export type FindTextData = {
   body?: never

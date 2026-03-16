@@ -1,5 +1,6 @@
 import { useSync } from "@tui/context/sync"
-import { createMemo, For, Show, Switch, Match } from "solid-js"
+import { TextAttributes } from "@opentui/core"
+import { createEffect, createMemo, createSignal, For, Match, on, Show, Switch } from "solid-js"
 import { createStore } from "solid-js/store"
 import { useTheme } from "../../context/theme"
 import { Locale } from "@/util/locale"
@@ -11,6 +12,22 @@ import { useKeybind } from "../../context/keybind"
 import { useDirectory } from "../../context/directory"
 import { useKV } from "../../context/kv"
 import { TodoItem } from "../../component/todo-item"
+import { useUsageResource } from "../../component/usage-client"
+import {
+  formatCreditsLabel,
+  formatPlanType,
+  formatUsageResetShort,
+  formatUsageWindowLabel,
+  usageBarColor,
+  usageBarString,
+  usageDisplay,
+} from "../../component/usage-format"
+
+type UsageConfig = {
+  tui?: {
+    show_usage_value_mode?: "used" | "remaining"
+  }
+}
 
 export function Sidebar(props: { sessionID: string; overlay?: boolean }) {
   const sync = useSync()
@@ -21,6 +38,7 @@ export function Sidebar(props: { sessionID: string; overlay?: boolean }) {
   const messages = createMemo(() => sync.data.message[props.sessionID] ?? [])
 
   const [expanded, setExpanded] = createStore({
+    usage: true,
     mcp: true,
     diff: true,
     todo: true,
@@ -54,9 +72,13 @@ export function Sidebar(props: { sessionID: string; overlay?: boolean }) {
     const total =
       last.tokens.input + last.tokens.output + last.tokens.reasoning + last.tokens.cache.read + last.tokens.cache.write
     const model = sync.data.provider.find((x) => x.id === last.providerID)?.models[last.modelID]
+    const cached = last.tokens.cache.read + last.tokens.cache.write
     return {
       tokens: total.toLocaleString(),
       percentage: model?.limit.context ? Math.round((total / model.limit.context) * 100) : null,
+      cacheRead: last.tokens.cache.read,
+      cacheWrite: last.tokens.cache.write,
+      cached,
     }
   })
 
@@ -67,6 +89,32 @@ export function Sidebar(props: { sessionID: string; overlay?: boolean }) {
     sync.data.provider.some((x) => x.id !== "opencode" || Object.values(x.models).some((y) => y.cost?.input !== 0)),
   )
   const gettingStartedDismissed = createMemo(() => kv.get("dismissed_getting_started", false))
+  const usage = useUsageResource()
+  const status = createMemo(() => sync.data.session_status?.[props.sessionID] ?? { type: "idle" })
+  const [prev, setPrev] = createSignal<string>("idle")
+
+  createEffect(
+    on(
+      () => status().type,
+      (current) => {
+        if (prev() !== "idle" && current === "idle") {
+          usage.refetch()
+        }
+        setPrev(current)
+      },
+    ),
+  )
+
+  const usageSections = createMemo(() => {
+    const entries = usage.data()?.entries ?? []
+    return entries.filter(
+      (entry) =>
+        entry.snapshot.primary || entry.snapshot.secondary || entry.snapshot.tertiary || entry.snapshot.credits,
+    )
+  })
+
+  const usageErrors = createMemo(() => usage.data()?.errors ?? [])
+  const usageMode = createMemo(() => (sync.data.config as UsageConfig).tui?.show_usage_value_mode ?? "used")
 
   return (
     <Show when={session()}>
@@ -105,7 +153,108 @@ export function Sidebar(props: { sessionID: string; overlay?: boolean }) {
               <text fg={theme.textMuted}>{context()?.tokens ?? 0} tokens</text>
               <text fg={theme.textMuted}>{context()?.percentage ?? 0}% used</text>
               <text fg={theme.textMuted}>{cost()} spent</text>
+              <Show when={context()?.cached}>
+                <text fg={theme.textMuted}>
+                  cache: {context()!.cacheRead.toLocaleString()}r / {context()!.cacheWrite.toLocaleString()}w
+                </text>
+              </Show>
             </box>
+            <Show when={usageSections().length > 0}>
+              <box>
+                <box flexDirection="row" gap={1} onMouseDown={() => setExpanded("usage", !expanded.usage)}>
+                  <text fg={theme.text}>{expanded.usage ? "▼" : "▶"}</text>
+                  <text fg={theme.text}>
+                    <b>Usage</b>
+                    <Show when={usageMode() === "remaining"}>
+                      <span style={{ fg: theme.textMuted }}> (remaining)</span>
+                    </Show>
+                  </text>
+                </box>
+                <Show when={expanded.usage}>
+                  <For each={usageSections()}>
+                    {(entry, index) => {
+                      const planType = formatPlanType(entry.snapshot.planType)
+                      const entryErrors = usageErrors()
+                        .filter((error) => error.provider === entry.provider)
+                        .map((error) => error.message)
+                      return (
+                        <box flexDirection="column" gap={0} marginTop={index() === 0 ? 0 : 1}>
+                          <text fg={theme.text}>
+                            <b>{entry.displayName}</b>
+                            <Show when={planType}>
+                              <span style={{ fg: theme.textMuted }}>{` (${planType})`}</span>
+                            </Show>
+                          </text>
+                          <Show when={entry.snapshot.primary}>
+                            {(window) => {
+                              const used = usageDisplay(window().usedPercent, "used").percent
+                              const display = usageDisplay(window().usedPercent, usageMode()).percent
+                              return (
+                                <text fg={theme.textMuted}>
+                                  {formatUsageWindowLabel(entry.provider, "primary", window().windowMinutes)}{" "}
+                                  <span style={{ fg: usageBarColor(used, theme) }}>{usageBarString(display, 10)}</span>{" "}
+                                  {Math.round(display)}%{" "}
+                                  <Show when={window().resetsAt !== null}>
+                                    ({formatUsageResetShort(window().resetsAt)})
+                                  </Show>
+                                </text>
+                              )
+                            }}
+                          </Show>
+                          <Show when={entry.snapshot.secondary}>
+                            {(window) => {
+                              const used = usageDisplay(window().usedPercent, "used").percent
+                              const display = usageDisplay(window().usedPercent, usageMode()).percent
+                              return (
+                                <text fg={theme.textMuted}>
+                                  {formatUsageWindowLabel(entry.provider, "secondary", window().windowMinutes)}{" "}
+                                  <span style={{ fg: usageBarColor(used, theme) }}>{usageBarString(display, 10)}</span>{" "}
+                                  {Math.round(display)}%{" "}
+                                  <Show when={window().resetsAt !== null}>
+                                    ({formatUsageResetShort(window().resetsAt)})
+                                  </Show>
+                                </text>
+                              )
+                            }}
+                          </Show>
+                          <Show when={entry.snapshot.tertiary}>
+                            {(window) => {
+                              const used = usageDisplay(window().usedPercent, "used").percent
+                              const display = usageDisplay(window().usedPercent, usageMode()).percent
+                              return (
+                                <text fg={theme.textMuted}>
+                                  {formatUsageWindowLabel(entry.provider, "tertiary", window().windowMinutes)}{" "}
+                                  <span style={{ fg: usageBarColor(used, theme) }}>{usageBarString(display, 10)}</span>{" "}
+                                  {Math.round(display)}%{" "}
+                                  <Show when={window().resetsAt !== null}>
+                                    ({formatUsageResetShort(window().resetsAt)})
+                                  </Show>
+                                </text>
+                              )
+                            }}
+                          </Show>
+                          <Show when={entry.snapshot.credits}>
+                            {(credits) => (
+                              <text fg={theme.textMuted}>
+                                {formatCreditsLabel(entry.provider, credits(), {
+                                  mode: usageMode(),
+                                  slot: "secondary",
+                                })}
+                              </text>
+                            )}
+                          </Show>
+                          <Show when={entryErrors.length > 0}>
+                            <text fg={theme.error} attributes={TextAttributes.DIM}>
+                              {entryErrors.join(" • ")}
+                            </text>
+                          </Show>
+                        </box>
+                      )
+                    }}
+                  </For>
+                </Show>
+              </box>
+            </Show>
             <Show when={mcpEntries().length > 0}>
               <box>
                 <box

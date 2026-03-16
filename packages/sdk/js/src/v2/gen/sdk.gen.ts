@@ -131,6 +131,8 @@ import type {
   SessionPromptAsyncResponses,
   SessionPromptErrors,
   SessionPromptResponses,
+  SessionResumeErrors,
+  SessionResumeResponses,
   SessionRevertErrors,
   SessionRevertResponses,
   SessionShareErrors,
@@ -172,6 +174,8 @@ import type {
   TuiSelectSessionResponses,
   TuiShowToastResponses,
   TuiSubmitPromptResponses,
+  UsageGetResponses,
+  VcsDiffResponses,
   VcsGetResponses,
   WorktreeCreateErrors,
   WorktreeCreateInput,
@@ -1783,6 +1787,38 @@ export class Session2 extends HeyApiClient {
   }
 
   /**
+   * Resume session
+   *
+   * Resume processing a session that has pending messages without creating a new user message.
+   */
+  public resume<ThrowOnError extends boolean = false>(
+    parameters: {
+      sessionID: string
+      directory?: string
+      workspace?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "path", key: "sessionID" },
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).post<SessionResumeResponses, SessionResumeErrors, ThrowOnError>({
+      url: "/session/{sessionID}/resume",
+      ...options,
+      ...params,
+    })
+  }
+
+  /**
    * Get session messages
    *
    * Retrieve all messages in a session, including user prompts and AI responses.
@@ -2644,6 +2680,50 @@ export class Provider extends HeyApiClient {
   private _oauth?: Oauth
   get oauth(): Oauth {
     return (this._oauth ??= new Oauth({ client: this.client }))
+  }
+}
+
+export class Usage extends HeyApiClient {
+  /**
+   * Get usage
+   *
+   * Fetch usage limits for authenticated providers.
+   */
+  public get<ThrowOnError extends boolean = false>(
+    parameters?: {
+      directory?: string
+      workspace?: string
+      provider?: string
+      refresh?: boolean
+      command?: string
+      modelProviderID?: string
+      showUsageProviderScope?: "current" | "all"
+      showUsageValueMode?: "used" | "remaining"
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+            { in: "query", key: "provider" },
+            { in: "query", key: "refresh" },
+            { in: "query", key: "command" },
+            { in: "query", key: "modelProviderID" },
+            { in: "query", key: "showUsageProviderScope" },
+            { in: "query", key: "showUsageValueMode" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).get<UsageGetResponses, unknown, ThrowOnError>({
+      url: "/usage",
+      ...options,
+      ...params,
+    })
   }
 }
 
@@ -3971,6 +4051,11 @@ export class OpencodeClient extends HeyApiClient {
   private _provider?: Provider
   get provider(): Provider {
     return (this._provider ??= new Provider({ client: this.client }))
+  }
+
+  private _usage?: Usage
+  get usage(): Usage {
+    return (this._usage ??= new Usage({ client: this.client }))
   }
 
   private _find?: Find
