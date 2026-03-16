@@ -2805,6 +2805,77 @@
         ]
       }
     },
+    "/session/{sessionID}/resume": {
+      "post": {
+        "operationId": "session.resume",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "directory",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "workspace",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "sessionID",
+            "schema": {
+              "type": "string",
+              "pattern": "^ses.*"
+            },
+            "required": true,
+            "description": "Session ID"
+          }
+        ],
+        "summary": "Resume session",
+        "description": "Resume processing a session that has pending messages without creating a new user message.",
+        "responses": {
+          "200": {
+            "description": "Resumed session",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "boolean"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BadRequestError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NotFoundError"
+                }
+              }
+            }
+          }
+        },
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.session.resume({\n  ...\n})"
+          }
+        ]
+      }
+    },
     "/session/{sessionID}/message": {
       "get": {
         "operationId": "session.messages",
@@ -2848,6 +2919,14 @@
             "schema": {
               "type": "string"
             }
+          },
+          {
+            "in": "query",
+            "name": "offset",
+            "schema": {
+              "type": "number"
+            },
+            "description": "Number of newest messages to skip"
           }
         ],
         "summary": "Get session messages",
@@ -4862,6 +4941,332 @@
           {
             "lang": "js",
             "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.provider.oauth.callback({\n  ...\n})"
+          }
+        ]
+      }
+    },
+    "/usage": {
+      "get": {
+        "operationId": "usage.get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "directory",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "workspace",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "provider",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "refresh",
+            "schema": {
+              "type": "boolean"
+            }
+          },
+          {
+            "in": "query",
+            "name": "command",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "modelProviderID",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "showUsageProviderScope",
+            "schema": {
+              "type": "string",
+              "enum": ["current", "all"]
+            }
+          },
+          {
+            "in": "query",
+            "name": "showUsageValueMode",
+            "schema": {
+              "type": "string",
+              "enum": ["used", "remaining"]
+            }
+          }
+        ],
+        "summary": "Get usage",
+        "description": "Fetch usage limits for authenticated providers.",
+        "responses": {
+          "200": {
+            "description": "Usage response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "entries": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "provider": {
+                            "type": "string"
+                          },
+                          "displayName": {
+                            "type": "string"
+                          },
+                          "snapshot": {
+                            "type": "object",
+                            "properties": {
+                              "primary": {
+                                "anyOf": [
+                                  {
+                                    "type": "object",
+                                    "properties": {
+                                      "usedPercent": {
+                                        "type": "number"
+                                      },
+                                      "windowMinutes": {
+                                        "anyOf": [
+                                          {
+                                            "type": "number"
+                                          },
+                                          {
+                                            "type": "null"
+                                          }
+                                        ]
+                                      },
+                                      "resetsAt": {
+                                        "anyOf": [
+                                          {
+                                            "type": "number"
+                                          },
+                                          {
+                                            "type": "null"
+                                          }
+                                        ]
+                                      }
+                                    },
+                                    "required": ["usedPercent", "windowMinutes", "resetsAt"]
+                                  },
+                                  {
+                                    "type": "null"
+                                  }
+                                ]
+                              },
+                              "secondary": {
+                                "anyOf": [
+                                  {
+                                    "type": "object",
+                                    "properties": {
+                                      "usedPercent": {
+                                        "type": "number"
+                                      },
+                                      "windowMinutes": {
+                                        "anyOf": [
+                                          {
+                                            "type": "number"
+                                          },
+                                          {
+                                            "type": "null"
+                                          }
+                                        ]
+                                      },
+                                      "resetsAt": {
+                                        "anyOf": [
+                                          {
+                                            "type": "number"
+                                          },
+                                          {
+                                            "type": "null"
+                                          }
+                                        ]
+                                      }
+                                    },
+                                    "required": ["usedPercent", "windowMinutes", "resetsAt"]
+                                  },
+                                  {
+                                    "type": "null"
+                                  }
+                                ]
+                              },
+                              "tertiary": {
+                                "anyOf": [
+                                  {
+                                    "type": "object",
+                                    "properties": {
+                                      "usedPercent": {
+                                        "type": "number"
+                                      },
+                                      "windowMinutes": {
+                                        "anyOf": [
+                                          {
+                                            "type": "number"
+                                          },
+                                          {
+                                            "type": "null"
+                                          }
+                                        ]
+                                      },
+                                      "resetsAt": {
+                                        "anyOf": [
+                                          {
+                                            "type": "number"
+                                          },
+                                          {
+                                            "type": "null"
+                                          }
+                                        ]
+                                      }
+                                    },
+                                    "required": ["usedPercent", "windowMinutes", "resetsAt"]
+                                  },
+                                  {
+                                    "type": "null"
+                                  }
+                                ]
+                              },
+                              "credits": {
+                                "anyOf": [
+                                  {
+                                    "type": "object",
+                                    "properties": {
+                                      "hasCredits": {
+                                        "type": "boolean"
+                                      },
+                                      "unlimited": {
+                                        "type": "boolean"
+                                      },
+                                      "balance": {
+                                        "anyOf": [
+                                          {
+                                            "type": "string"
+                                          },
+                                          {
+                                            "type": "null"
+                                          }
+                                        ]
+                                      },
+                                      "total": {
+                                        "anyOf": [
+                                          {
+                                            "type": "number"
+                                          },
+                                          {
+                                            "type": "null"
+                                          }
+                                        ]
+                                      },
+                                      "used": {
+                                        "anyOf": [
+                                          {
+                                            "type": "number"
+                                          },
+                                          {
+                                            "type": "null"
+                                          }
+                                        ]
+                                      },
+                                      "remaining": {
+                                        "anyOf": [
+                                          {
+                                            "type": "number"
+                                          },
+                                          {
+                                            "type": "null"
+                                          }
+                                        ]
+                                      }
+                                    },
+                                    "required": ["hasCredits", "unlimited", "balance"]
+                                  },
+                                  {
+                                    "type": "null"
+                                  }
+                                ]
+                              },
+                              "planType": {
+                                "anyOf": [
+                                  {
+                                    "type": "string",
+                                    "enum": [
+                                      "guest",
+                                      "free",
+                                      "go",
+                                      "plus",
+                                      "pro",
+                                      "free_workspace",
+                                      "team",
+                                      "business",
+                                      "education",
+                                      "quorum",
+                                      "k12",
+                                      "enterprise",
+                                      "edu"
+                                    ]
+                                  },
+                                  {
+                                    "type": "null"
+                                  }
+                                ]
+                              },
+                              "updatedAt": {
+                                "type": "number"
+                              }
+                            },
+                            "required": ["primary", "secondary", "tertiary", "credits", "planType", "updatedAt"]
+                          }
+                        },
+                        "required": ["provider", "displayName", "snapshot"]
+                      }
+                    },
+                    "error": {
+                      "type": "string"
+                    },
+                    "errors": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "provider": {
+                            "type": "string"
+                          },
+                          "message": {
+                            "type": "string"
+                          }
+                        },
+                        "required": ["provider", "message"]
+                      }
+                    },
+                    "mode": {
+                      "type": "string",
+                      "enum": ["used", "remaining"]
+                    }
+                  },
+                  "required": ["entries"]
+                }
+              }
+            }
+          }
+        },
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.usage.get({\n  ...\n})"
           }
         ]
       }
@@ -8354,6 +8759,9 @@
             "items": {
               "$ref": "#/components/schemas/FilePart"
             }
+          },
+          "summary": {
+            "type": "string"
           }
         },
         "required": ["status", "input", "output", "title", "metadata", "time"]
@@ -9159,6 +9567,53 @@
         },
         "required": ["type", "properties"]
       },
+      "Event.command.updated": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": "string",
+            "const": "command.updated"
+          },
+          "properties": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "name": {
+                  "type": "string"
+                },
+                "description": {
+                  "type": "string"
+                },
+                "agent": {
+                  "type": "string"
+                },
+                "model": {
+                  "type": "string"
+                },
+                "source": {
+                  "type": "string",
+                  "enum": ["command", "mcp", "skill"]
+                },
+                "template": {
+                  "type": "string"
+                },
+                "subtask": {
+                  "type": "boolean"
+                },
+                "hints": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                }
+              },
+              "required": ["name", "template", "hints"]
+            }
+          }
+        },
+        "required": ["type", "properties"]
+      },
       "PermissionAction": {
         "type": "string",
         "enum": ["allow", "deny", "ask"]
@@ -9607,6 +10062,226 @@
         },
         "required": ["type", "properties"]
       },
+      "Event.usage.updated": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": "string",
+            "const": "usage.updated"
+          },
+          "properties": {
+            "type": "object",
+            "properties": {
+              "provider": {
+                "type": "string"
+              },
+              "snapshot": {
+                "type": "object",
+                "properties": {
+                  "primary": {
+                    "anyOf": [
+                      {
+                        "type": "object",
+                        "properties": {
+                          "usedPercent": {
+                            "type": "number"
+                          },
+                          "windowMinutes": {
+                            "anyOf": [
+                              {
+                                "type": "number"
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          },
+                          "resetsAt": {
+                            "anyOf": [
+                              {
+                                "type": "number"
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          }
+                        },
+                        "required": ["usedPercent", "windowMinutes", "resetsAt"]
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "secondary": {
+                    "anyOf": [
+                      {
+                        "type": "object",
+                        "properties": {
+                          "usedPercent": {
+                            "type": "number"
+                          },
+                          "windowMinutes": {
+                            "anyOf": [
+                              {
+                                "type": "number"
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          },
+                          "resetsAt": {
+                            "anyOf": [
+                              {
+                                "type": "number"
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          }
+                        },
+                        "required": ["usedPercent", "windowMinutes", "resetsAt"]
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "tertiary": {
+                    "anyOf": [
+                      {
+                        "type": "object",
+                        "properties": {
+                          "usedPercent": {
+                            "type": "number"
+                          },
+                          "windowMinutes": {
+                            "anyOf": [
+                              {
+                                "type": "number"
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          },
+                          "resetsAt": {
+                            "anyOf": [
+                              {
+                                "type": "number"
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          }
+                        },
+                        "required": ["usedPercent", "windowMinutes", "resetsAt"]
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "credits": {
+                    "anyOf": [
+                      {
+                        "type": "object",
+                        "properties": {
+                          "hasCredits": {
+                            "type": "boolean"
+                          },
+                          "unlimited": {
+                            "type": "boolean"
+                          },
+                          "balance": {
+                            "anyOf": [
+                              {
+                                "type": "string"
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          },
+                          "total": {
+                            "anyOf": [
+                              {
+                                "type": "number"
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          },
+                          "used": {
+                            "anyOf": [
+                              {
+                                "type": "number"
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          },
+                          "remaining": {
+                            "anyOf": [
+                              {
+                                "type": "number"
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          }
+                        },
+                        "required": ["hasCredits", "unlimited", "balance"]
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "planType": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "enum": [
+                          "guest",
+                          "free",
+                          "go",
+                          "plus",
+                          "pro",
+                          "free_workspace",
+                          "team",
+                          "business",
+                          "education",
+                          "quorum",
+                          "k12",
+                          "enterprise",
+                          "edu"
+                        ]
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "updatedAt": {
+                    "type": "number"
+                  }
+                },
+                "required": ["primary", "secondary", "tertiary", "credits", "planType", "updatedAt"]
+              }
+            },
+            "required": ["provider", "snapshot"]
+          }
+        },
+        "required": ["type", "properties"]
+      },
       "Event": {
         "anyOf": [
           {
@@ -9706,6 +10381,9 @@
             "$ref": "#/components/schemas/Event.command.executed"
           },
           {
+            "$ref": "#/components/schemas/Event.command.updated"
+          },
+          {
             "$ref": "#/components/schemas/Event.session.created"
           },
           {
@@ -9743,6 +10421,9 @@
           },
           {
             "$ref": "#/components/schemas/Event.worktree.failed"
+          },
+          {
+            "$ref": "#/components/schemas/Event.usage.updated"
           }
         ]
       },
@@ -10092,8 +10773,7 @@
                     "output": {
                       "type": "number"
                     }
-                  },
-                  "required": ["context", "output"]
+                  }
                 },
                 "modalities": {
                   "type": "object",
@@ -10189,6 +10869,11 @@
               },
               "baseURL": {
                 "type": "string"
+              },
+              "client": {
+                "description": "OAuth app to use for GitHub Copilot auth. Defaults to 'github'.",
+                "type": "string",
+                "enum": ["github", "anomaly"]
               },
               "enterpriseUrl": {
                 "description": "GitHub Enterprise URL for copilot authentication",
@@ -10710,6 +11395,38 @@
                 "type": "integer",
                 "minimum": 0,
                 "maximum": 9007199254740991
+              },
+              "token_threshold": {
+                "description": "Absolute token threshold that triggers compaction",
+                "type": "integer",
+                "exclusiveMinimum": 0,
+                "maximum": 9007199254740991
+              },
+              "context_threshold": {
+                "description": "Fraction of model context window that triggers compaction (0-1+)",
+                "type": "number",
+                "exclusiveMinimum": 0
+              },
+              "models": {
+                "description": "Per-model compaction thresholds keyed by providerID/modelID",
+                "type": "object",
+                "propertyNames": {
+                  "type": "string"
+                },
+                "additionalProperties": {
+                  "type": "object",
+                  "properties": {
+                    "token_threshold": {
+                      "type": "integer",
+                      "exclusiveMinimum": 0,
+                      "maximum": 9007199254740991
+                    },
+                    "context_threshold": {
+                      "type": "number",
+                      "exclusiveMinimum": 0
+                    }
+                  }
+                }
               }
             }
           },
@@ -10781,6 +11498,9 @@
             "type": "string"
           },
           "access": {
+            "type": "string"
+          },
+          "usage": {
             "type": "string"
           },
           "expires": {

@@ -511,7 +511,6 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
       bootstrap()
     })
 
-    const fullSyncedSessions = new Set<string>()
     let currentSessionID: string | undefined
     const result = {
       data: store,
