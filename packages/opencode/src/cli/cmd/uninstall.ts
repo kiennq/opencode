@@ -135,7 +135,7 @@ async function showRemovalSummary(targets: RemovalTargets, method: Installation.
       yarn: "yarn global remove opencode-ai",
       brew: "brew uninstall opencode",
       choco: "choco uninstall opencode",
-      scoop: "scoop uninstall opencode",
+      scoop: "scoop uninstall opencode-x",
     }
     prompts.log.info(`  ✓ Package: ${cmds[method] || method}`)
   }
@@ -186,7 +186,7 @@ async function executeUninstall(method: Installation.Method, targets: RemovalTar
       yarn: ["yarn", "global", "remove", "opencode-ai"],
       brew: ["brew", "uninstall", "opencode"],
       choco: ["choco", "uninstall", "opencode"],
-      scoop: ["scoop", "uninstall", "opencode"],
+      scoop: ["scoop", "uninstall", "opencode-x"],
     }
 
     const cmd = cmds[method]

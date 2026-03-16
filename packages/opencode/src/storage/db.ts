@@ -83,6 +83,8 @@ export namespace Database {
     db.run("PRAGMA synchronous = NORMAL")
     db.run("PRAGMA busy_timeout = 5000")
     db.run("PRAGMA cache_size = -64000")
+    db.run("PRAGMA temp_store = MEMORY")
+    db.run("PRAGMA wal_autocheckpoint = 4000")
     db.run("PRAGMA foreign_keys = ON")
     db.run("PRAGMA wal_checkpoint(PASSIVE)")
 
