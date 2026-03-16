@@ -180,13 +180,6 @@ export namespace Shell {
     return UNIX_SHELLS.has(base)
   }
 
-  export function display(shell: string) {
-    return path
-      .basename(shell)
-      .replace(/\.exe$/i, "")
-      .toLowerCase()
-  }
-
   export const pwsh = lazy(() => which("pwsh") ?? undefined)
   export const powershell = lazy(() => which("powershell") ?? which("powershell.exe") ?? undefined)
 }
