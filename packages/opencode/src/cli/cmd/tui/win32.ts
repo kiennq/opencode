@@ -69,6 +69,32 @@ export function win32FlushInputBuffer() {
 
 let unhook: (() => void) | undefined
 
+// VT sequences to reset terminal state on abnormal exit.
+// Disables mouse tracking modes and shows cursor.
+const RESET =
+  "\x1b[?1000l" + // disable normal mouse tracking
+  "\x1b[?1002l" + // disable button-event tracking
+  "\x1b[?1003l" + // disable all-motion tracking
+  "\x1b[?1006l" + // disable SGR mouse mode
+  "\x1b[?25h" // show cursor
+
+/**
+ * Install a process.on("exit") handler that writes terminal reset sequences.
+ * This fires on process.exit(), SIGINT, uncaught exceptions, and SIGTERM —
+ * essentially all exit paths except SIGKILL. Ensures mouse tracking and
+ * cursor state are restored even when renderer.destroy() doesn't run.
+ */
+export function win32InstallExitReset() {
+  if (!process.stdout.isTTY) return
+  const handler = () => {
+    try {
+      process.stdout.write(RESET)
+    } catch {}
+  }
+  process.on("exit", handler)
+  return () => process.off("exit", handler)
+}
+
 /**
  * Keep ENABLE_PROCESSED_INPUT disabled.
  *
