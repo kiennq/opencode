@@ -112,10 +112,4 @@ export namespace FileTime {
   export async function withLock<T>(filepath: string, fn: () => Promise<T>): Promise<T> {
     return runPromiseInstance(FileTimeService.use((s) => s.withLock(filepath, fn)))
   }
-
-  export function clearSession(sessionID: string) {
-    const current = state()
-    delete current.read[sessionID]
-    log.info("cleared session", { sessionID })
-  }
 }
