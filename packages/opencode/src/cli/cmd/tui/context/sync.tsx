@@ -25,10 +25,30 @@ import { createSimpleContext } from "./helper"
 import type { Snapshot } from "@/snapshot"
 import { useExit } from "./exit"
 import { useArgs } from "./args"
-import { batch, onMount } from "solid-js"
+import { batch, onCleanup, onMount } from "solid-js"
 import { Log } from "@/util/log"
 import type { Path } from "@opencode-ai/sdk"
 import type { Workspace } from "@opencode-ai/sdk/v2"
+
+// Strip large before/after content from message summary diffs to save memory
+// The full content is available in session_diff if needed
+function stripLargeDiffs(message: Message): Message {
+  if (message.role !== "user") return message
+  const summary = message.summary
+  if (!summary?.diffs) return message
+  return {
+    ...message,
+    summary: {
+      title: summary.title,
+      body: summary.body,
+      diffs: summary.diffs.map((d) => ({
+        ...d,
+        before: "",
+        after: "",
+      })),
+    },
+  }
+}
 
 export const { use: useSync, provider: SyncProvider } = createSimpleContext({
   name: "Sync",
@@ -113,7 +133,9 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
       setStore("workspaceList", reconcile(result.data))
     }
 
-    sdk.event.listen((e) => {
+    const fullSyncedSessions = new Set<string>()
+
+    const unsubscribe = sdk.event.listen((e) => {
       const event = e.details
       switch (event.type) {
         case "server.instance.disposed":
@@ -203,7 +225,9 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
           break
 
         case "session.deleted": {
-          const result = Binary.search(store.session, event.properties.info.id, (s) => s.id)
+          const sessionID = event.properties.info.id
+          fullSyncedSessions.delete(sessionID)
+          const result = Binary.search(store.session, sessionID, (s) => s.id)
           if (result.found) {
             setStore(
               "session",
@@ -212,6 +236,23 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
               }),
             )
           }
+          setStore(
+            produce((draft) => {
+              delete draft.session_diff[sessionID]
+              delete draft.session_status[sessionID]
+              delete draft.todo[sessionID]
+              delete draft.question[sessionID]
+              delete draft.permission[sessionID]
+              // Clean up messages and parts
+              const messages = draft.message[sessionID]
+              if (messages) {
+                for (const msg of messages) {
+                  delete draft.part[msg.id]
+                }
+              }
+              delete draft.message[sessionID]
+            }),
+          )
           break
         }
         case "session.updated": {
@@ -235,38 +276,43 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
         }
 
         case "message.updated": {
-          const messages = store.message[event.properties.info.sessionID]
+          const info = stripLargeDiffs(event.properties.info)
+          const messages = store.message[info.sessionID]
           if (!messages) {
-            setStore("message", event.properties.info.sessionID, [event.properties.info])
+            setStore("message", info.sessionID, [info])
             break
           }
-          const result = Binary.search(messages, event.properties.info.id, (m) => m.id)
+          const result = Binary.search(messages, info.id, (m) => m.id)
           if (result.found) {
-            setStore("message", event.properties.info.sessionID, result.index, reconcile(event.properties.info))
+            setStore("message", info.sessionID, result.index, reconcile(info))
             break
           }
           setStore(
             "message",
-            event.properties.info.sessionID,
+            info.sessionID,
             produce((draft) => {
-              draft.splice(result.index, 0, event.properties.info)
+              draft.splice(result.index, 0, info)
             }),
           )
-          const updated = store.message[event.properties.info.sessionID]
-          if (updated.length > 100) {
-            const oldest = updated[0]
+          const updated = store.message[info.sessionID]
+          const cap = 100
+          if (updated.length > cap) {
+            const excess = updated.length - cap
+            const removedMessages = updated.slice(0, excess)
             batch(() => {
               setStore(
                 "message",
-                event.properties.info.sessionID,
+                info.sessionID,
                 produce((draft) => {
-                  draft.shift()
+                  draft.splice(0, excess)
                 }),
               )
               setStore(
                 "part",
                 produce((draft) => {
-                  delete draft[oldest.id]
+                  for (const msg of removedMessages) {
+                    delete draft[msg.id]
+                  }
                 }),
               )
             })
@@ -275,6 +321,7 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
         }
         case "message.removed": {
           const messages = store.message[event.properties.sessionID]
+          if (!messages) break
           const result = Binary.search(messages, event.properties.messageID, (m) => m.id)
           if (result.found) {
             setStore(
@@ -328,6 +375,7 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
 
         case "message.part.removed": {
           const parts = store.part[event.properties.messageID]
+          if (!parts) break
           const result = Binary.search(parts, event.properties.partID, (p) => p.id)
           if (result.found)
             setStore(
@@ -352,11 +400,18 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
       }
     })
 
+    // Clean up event listener on unmount to prevent memory leak
+    onCleanup(unsubscribe)
+
     const exit = useExit()
     const args = useArgs()
 
     async function bootstrap() {
       console.log("bootstrapping")
+      fullSyncedSessions.clear()
+      // Clear stale permission/question dialogs — backend state is gone after worker recycle/crash
+      setStore("permission", reconcile({}))
+      setStore("question", reconcile({}))
       const start = Date.now() - 30 * 24 * 60 * 60 * 1000
       const sessionListPromise = sdk.client.session
         .list({ start: start })
@@ -410,7 +465,15 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
           if (store.status !== "complete") setStore("status", "partial")
           // non-blocking
           Promise.all([
-            ...(args.continue ? [] : [sessionListPromise.then((sessions) => setStore("session", reconcile(sessions)))]),
+            ...(args.continue
+              ? []
+              : [
+                  sessionListPromise.then((sessions) => {
+                    // Merge with existing sessions to prevent race condition on creation
+                    const merged = new Map([...store.session, ...sessions].map((s) => [s.id, s]))
+                    setStore("session", reconcile([...merged.values()].toSorted((a, b) => a.id.localeCompare(b.id))))
+                  }),
+                ]),
             sdk.client.command.list().then((x) => setStore("command", reconcile(x.data ?? []))),
             sdk.client.lsp.status().then((x) => setStore("lsp", reconcile(x.data!))),
             sdk.client.mcp.status().then((x) => setStore("mcp", reconcile(x.data!))),
@@ -423,6 +486,8 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
             sdk.client.vcs.get().then((x) => setStore("vcs", reconcile(x.data))),
             sdk.client.path.get().then((x) => setStore("path", reconcile(x.data!))),
             syncWorkspaces(),
+            // Re-sync messages for sessions that were previously loaded (e.g. after worker recycle)
+            ...Object.keys(store.message).map((id) => result.session.sync(id).catch(() => {})),
           ]).then(() => {
             setStore("status", "complete")
           })
@@ -441,7 +506,7 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
       bootstrap()
     })
 
-    const fullSyncedSessions = new Set<string>()
+    let currentSessionID: string | undefined
     const result = {
       data: store,
       set: setStore,
@@ -468,6 +533,27 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
           return last.time.completed ? "idle" : "working"
         },
         async sync(sessionID: string) {
+          // Clean up previous session's data from memory when switching sessions
+          if (currentSessionID && currentSessionID !== sessionID) {
+            const oldMessages = store.message[currentSessionID]
+            if (oldMessages) {
+              setStore(
+                produce((draft) => {
+                  // Clean up parts for old session's messages
+                  for (const msg of oldMessages) {
+                    delete draft.part[msg.id]
+                  }
+                  // Clean up old session's messages
+                  delete draft.message[currentSessionID!]
+                  // Clean up old session's diff
+                  delete draft.session_diff[currentSessionID!]
+                }),
+              )
+            }
+            fullSyncedSessions.delete(currentSessionID)
+          }
+          currentSessionID = sessionID
+
           if (fullSyncedSessions.has(sessionID)) return
           const [session, messages, todo, diff] = await Promise.all([
             sdk.client.session.get({ sessionID }, { throwOnError: true }),
@@ -481,7 +567,7 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
               if (match.found) draft.session[match.index] = session.data!
               if (!match.found) draft.session.splice(match.index, 0, session.data!)
               draft.todo[sessionID] = todo.data ?? []
-              draft.message[sessionID] = messages.data!.map((x) => x.info)
+              draft.message[sessionID] = messages.data!.map((x) => stripLargeDiffs(x.info))
               for (const message of messages.data!) {
                 draft.part[message.info.id] = message.parts
               }

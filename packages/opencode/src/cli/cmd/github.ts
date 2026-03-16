@@ -484,6 +484,7 @@ export const GithubRunCommand = cmd({
       let gitConfig: string
       let session: { id: SessionID; title: string; version: string }
       let shareId: string | undefined
+      let unsubscribeSessionEvents: (() => void) | undefined
       let exitCode = 0
       type PromptFiles = Awaited<ReturnType<typeof getUserPrompt>>["promptFiles"]
       const triggerCommentId = isCommentEvent
@@ -867,6 +868,9 @@ export const GithubRunCommand = cmd({
       }
 
       function subscribeSessionEvents() {
+        // Cleanup any existing subscription before creating a new one
+        unsubscribeSessionEvents?.()
+
         const TOOL: Record<string, [string, string]> = {
           todowrite: ["Todo", UI.Style.TEXT_WARNING_BOLD],
           bash: ["Bash", UI.Style.TEXT_DANGER_BOLD],
@@ -889,7 +893,7 @@ export const GithubRunCommand = cmd({
         }
 
         let text = ""
-        Bus.subscribe(MessageV2.Event.PartUpdated, (evt) => {
+        const unsubscribe = Bus.subscribe(MessageV2.Event.PartUpdated, async (evt) => {
           if (evt.properties.part.sessionID !== session.id) return
           //if (evt.properties.part.messageID === messageID) return
           const part = evt.properties.part
@@ -916,6 +920,8 @@ export const GithubRunCommand = cmd({
             }
           }
         })
+
+        unsubscribeSessionEvents = unsubscribe
       }
 
       async function summarize(response: string) {

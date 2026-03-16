@@ -1,8 +1,13 @@
 import { sortBy, pipe } from "remeda"
 
 export namespace Wildcard {
-  export function match(str: string, pattern: string) {
-    if (str) str = str.replaceAll("\\", "/")
+  // Cache compiled regexes to avoid repeated compilation
+  const regexCache = new Map<string, RegExp>()
+
+  function getRegex(pattern: string): RegExp {
+    let regex = regexCache.get(pattern)
+    if (regex) return regex
+
     if (pattern) pattern = pattern.replaceAll("\\", "/")
     let escaped = pattern
       .replace(/[.+^${}()|[\]\\]/g, "\\$&") // escape special regex chars
@@ -16,7 +21,15 @@ export namespace Wildcard {
     }
 
     const flags = process.platform === "win32" ? "si" : "s"
-    return new RegExp("^" + escaped + "$", flags).test(str)
+    regex = new RegExp("^" + escaped + "$", flags)
+    if (regexCache.size > 1000) regexCache.clear()
+    regexCache.set(pattern, regex)
+    return regex
+  }
+
+  export function match(str: string, pattern: string) {
+    if (str) str = str.replaceAll("\\", "/")
+    return getRegex(pattern).test(str)
   }
 
   export function all(input: string, patterns: Record<string, any>) {
