@@ -141,6 +141,8 @@ export type AuthOAuthResult = { url: string; instructions: string } & (
                 refresh: string
                 access: string
                 expires: number
+                usage?: string
+                enterpriseUrl?: string
                 accountId?: string
                 enterpriseUrl?: string
               }
@@ -162,6 +164,8 @@ export type AuthOAuthResult = { url: string; instructions: string } & (
                 refresh: string
                 access: string
                 expires: number
+                usage?: string
+                enterpriseUrl?: string
                 accountId?: string
                 enterpriseUrl?: string
               }

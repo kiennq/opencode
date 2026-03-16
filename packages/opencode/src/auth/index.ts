@@ -16,6 +16,7 @@ export namespace Auth {
     type: Schema.Literal("oauth"),
     refresh: Schema.String,
     access: Schema.String,
+    usage: Schema.optional(Schema.String),
     expires: Schema.Number,
     accountId: Schema.optional(Schema.String),
     enterpriseUrl: Schema.optional(Schema.String),

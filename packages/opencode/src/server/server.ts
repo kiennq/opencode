@@ -6,6 +6,8 @@ import { cors } from "hono/cors"
 import { basicAuth } from "hono/basic-auth"
 import z from "zod"
 import { Auth } from "../auth"
+import { InstanceBootstrap } from "../project/bootstrap"
+import { Instance } from "../project/instance"
 import { Flag } from "../flag/flag"
 import { ProviderID } from "../provider/schema"
 import { WorkspaceRouterMiddleware } from "./router"
@@ -18,7 +20,7 @@ import { errorHandler } from "./middleware"
 import { InstanceRoutes } from "./instance"
 import { initProjectors } from "./projectors"
 import { ATTACH_ENV_HEADER, decodeAttachEnv } from "@/util/attach-env"
-import { ATTACH_ENV_HEADER, decodeAttachEnv } from "@/util/attach-env"
+import { Filesystem } from "@/util/filesystem"
 
 // @ts-ignore This global is needed to prevent ai-sdk from logging warnings to stdout https://github.com/vercel/ai/blob/2dc67e0ef538307f21368db32d5a12345d98831b/packages/ai/src/logger/log-warnings.ts#L85
 globalThis.AI_SDK_LOG_WARNINGS = false
