@@ -166,7 +166,7 @@ export namespace Installation {
             { name: "pnpm", command: () => text(["pnpm", "list", "-g", "--depth=0"]) },
             { name: "bun", command: () => text(["bun", "pm", "ls", "-g"]) },
             { name: "brew", command: () => text(["brew", "list", "--formula", "opencode"]) },
-            { name: "scoop", command: () => text(["scoop", "list", "opencode"]) },
+            { name: "scoop", command: () => text(["scoop", "list", "opencode-x"]) },
             { name: "choco", command: () => text(["choco", "list", "--limit-output", "opencode"]) },
           ]
 
@@ -181,7 +181,11 @@ export namespace Installation {
           for (const check of checks) {
             const output = yield* check.command()
             const installedName =
-              check.name === "brew" || check.name === "choco" || check.name === "scoop" ? "opencode" : "opencode-ai"
+              check.name === "brew" || check.name === "choco"
+                ? "opencode"
+                : check.name === "scoop"
+                  ? "opencode-x"
+                  : "opencode-ai"
             if (output.includes(installedName)) {
               return check.name
             }
@@ -234,7 +238,7 @@ export namespace Installation {
           if (detectedMethod === "scoop") {
             const response = yield* httpOk.execute(
               HttpClientRequest.get(
-                "https://raw.githubusercontent.com/ScoopInstaller/Main/master/bucket/opencode.json",
+                "https://raw.githubusercontent.com/kiennq/scoop-misc/master/bucket/opencode-x.json",
               ).pipe(HttpClientRequest.setHeaders({ Accept: "application/json" })),
             )
             const data = yield* HttpClientResponse.schemaBodyJson(ScoopManifest)(response)
@@ -291,7 +295,7 @@ export namespace Installation {
               result = yield* run(["choco", "upgrade", "opencode", `--version=${target}`, "-y"])
               break
             case "scoop":
-              result = yield* run(["scoop", "install", `opencode@${target}`])
+              result = yield* run(["scoop", "install", `opencode-x@${target}`])
               break
             default:
               return yield* new UpgradeFailedError({ stderr: `Unknown method: ${m}` })

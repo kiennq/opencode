@@ -20,6 +20,7 @@ import { Global } from "@/global"
 import path from "path"
 import { Plugin } from "@/plugin"
 import { Skill } from "../skill"
+import { Filesystem } from "@/util/filesystem"
 
 export namespace Agent {
   export const Info = z
@@ -53,7 +54,7 @@ export namespace Agent {
     const cfg = await Config.get()
 
     const skillDirs = await Skill.dirs()
-    const whitelistedDirs = [Truncate.GLOB, ...skillDirs.map((dir) => path.join(dir, "*"))]
+    const whitelistedDirs = [Truncate.GLOB, ...skillDirs.map((dir) => Filesystem.join(dir, "*"))]
     const defaults = Permission.fromConfig({
       "*": "allow",
       doom_loop: "ask",

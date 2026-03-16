@@ -1,12 +1,22 @@
-import { createMemo, createSignal } from "solid-js"
+import { createMemo, createSignal, lazy } from "solid-js"
 import { useLocal } from "@tui/context/local"
 import { useSync } from "@tui/context/sync"
 import { map, pipe, flatMap, entries, filter, sortBy, take } from "remeda"
 import { DialogSelect } from "@tui/ui/dialog-select"
 import { useDialog } from "@tui/ui/dialog"
-import { createDialogProviderOptions, DialogProvider } from "./dialog-provider"
 import { useKeybind } from "../context/keybind"
 import * as fuzzysort from "fuzzysort"
+
+// Lazy import to break circular dependency with dialog-provider.tsx
+const DialogProvider = lazy(() => import("./dialog-provider").then((m) => ({ default: m.DialogProvider })))
+
+const PROVIDER_PRIORITY: Record<string, number> = {
+  opencode: 0,
+  anthropic: 1,
+  "github-copilot": 2,
+  openai: 3,
+  google: 4,
+}
 
 export function useConnected() {
   const sync = useSync()
@@ -23,7 +33,32 @@ export function DialogModel(props: { providerID?: string }) {
   const [query, setQuery] = createSignal("")
 
   const connected = useConnected()
-  const providers = createDialogProviderOptions()
+
+  // Simple provider options for "Popular providers" section - navigates to DialogProvider for auth
+  const popularProvidersList = createMemo(() => {
+    const connectedSet = new Set(sync.data.provider_next.connected)
+    return pipe(
+      sync.data.provider_next.all,
+      sortBy((x) => PROVIDER_PRIORITY[x.id] ?? 99),
+      map((provider) => {
+        const isConnected = connectedSet.has(provider.id)
+        return {
+          title: provider.name,
+          value: provider.id,
+          description: {
+            opencode: "(Recommended)",
+            anthropic: "(Claude Max or API key)",
+            openai: "(ChatGPT Plus/Pro or API key)",
+          }[provider.id],
+          footer: isConnected ? "Connected" : undefined,
+          onSelect() {
+            // Navigate to DialogProvider to handle the full auth flow
+            dialog.replace(() => <DialogProvider />)
+          },
+        }
+      }),
+    )
+  })
 
   const showExtra = createMemo(() => connected() && !props.providerID)
 
@@ -110,7 +145,7 @@ export function DialogModel(props: { providerID?: string }) {
 
     const popularProviders = !connected()
       ? pipe(
-          providers(),
+          popularProvidersList(),
           map((option) => ({
             ...option,
             category: "Popular providers",
