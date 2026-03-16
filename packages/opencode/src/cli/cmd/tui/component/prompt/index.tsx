@@ -35,6 +35,13 @@ import { useToast } from "../../ui/toast"
 import { useKV } from "../../context/kv"
 import { useTextareaKeybindings } from "../textarea-keybindings"
 import { DialogSkill } from "../dialog-skill"
+import { DialogUsage } from "../dialog-usage"
+import { fetchUsage } from "../usage-client"
+import { formatUsageResetLong, formatUsageWindowLabel } from "../usage-format"
+import type { UsageDisplayMode, UsageEntry } from "../usage-data"
+import { Log } from "@/util/log"
+import { resolveUsageProvider } from "@/usage/command"
+import { usageRemember, usageShouldRefresh, usageWarning, usageWarningKey } from "../usage-toast"
 
 export type PromptProps = {
   sessionID?: string
@@ -45,6 +52,10 @@ export type PromptProps = {
   ref?: (ref: PromptRef) => void
   hint?: JSX.Element
   showPlaceholder?: boolean
+  /** When set, submit sends a team message to this teammate instead of a normal prompt */
+  selectedTeammate?: string | null
+  /** Called after a team message is sent so the parent can reset selection state */
+  onTeammateMessageSent?: () => void
 }
 
 export type PromptRef = {
@@ -63,6 +74,14 @@ const money = new Intl.NumberFormat("en-US", {
   style: "currency",
   currency: "USD",
 })
+const log = Log.create({ service: "tui.prompt" })
+
+type UsageConfig = {
+  tui?: {
+    show_usage_provider_scope?: "current" | "all"
+    show_usage_value_mode?: UsageDisplayMode
+  }
+}
 
 export function Prompt(props: PromptProps) {
   let input: TextareaRenderable
@@ -77,12 +96,123 @@ export function Prompt(props: PromptProps) {
   const dialog = useDialog()
   const toast = useToast()
   const status = createMemo(() => sync.data.session_status?.[props.sessionID ?? ""] ?? { type: "idle" })
+  const teamBusy = createMemo(() => {
+    const sid = props.sessionID
+    if (!sid) return 0
+    const team = sync.data.team?.[sid]
+    if (!team || team.role !== "lead") return 0
+    return team.members.filter((m) => {
+      if (m.status === "shutdown") return false
+      return ["starting", "running", "cancel_requested", "cancelling", "completing"].includes(m.execution_status)
+    }).length
+  })
   const history = usePromptHistory()
   const stash = usePromptStash()
   const command = useCommandDialog()
   const renderer = useRenderer()
   const { theme, syntax } = useTheme()
   const kv = useKV()
+  const [usageSuccessAt, setUsageSuccessAt] = createSignal(0)
+  const [usageFailureAt, setUsageFailureAt] = createSignal(0)
+  const [usageRefreshing, setUsageRefreshing] = createSignal(false)
+  const [previousStatus, setPreviousStatus] = createSignal("idle")
+  const usageSnapshot = new Map<string, UsageEntry["snapshot"]>()
+  const usageShown = new Set<string>()
+
+  function usageToast(entries: UsageEntry[]) {
+    for (const entry of entries) {
+      const previous = usageSnapshot.get(entry.provider)
+      usageSnapshot.set(entry.provider, entry.snapshot)
+      const warning = usageWarning(entry, previous)
+      if (!warning) continue
+
+      const key = usageWarningKey(entry.provider, warning)
+      if (!usageRemember(usageShown, key)) continue
+
+      const label = formatUsageWindowLabel(entry.provider, warning.window, warning.windowMinutes)
+      const reset = warning.resetsAt ? ` Resets ${formatUsageResetLong(warning.resetsAt)}.` : ""
+
+      toast.show({
+        title: `${entry.displayName} usage`,
+        message: `${label} reached ${Math.round(warning.usedPercent)}% used.${reset} Run /usage for details.`,
+        variant: warning.threshold >= 95 ? "error" : "warning",
+        duration: 5000,
+      })
+    }
+  }
+
+  createEffect(
+    on(
+      () => status().type,
+      (current) => {
+        const previous = previousStatus()
+        setPreviousStatus(current)
+        if (previous === "idle") return
+        if (current !== "idle") return
+
+        const provider = resolveUsageProvider({
+          scope: "current",
+          modelProviderID: local.model.current()?.providerID ?? null,
+        })
+        if (!provider) return
+
+        const now = Date.now()
+        if (
+          !usageShouldRefresh({
+            now,
+            successAt: usageSuccessAt(),
+            failureAt: usageFailureAt(),
+            refreshing: usageRefreshing(),
+          })
+        ) {
+          return
+        }
+
+        setUsageRefreshing(true)
+
+        fetchUsage(sdk, { provider, refresh: true })
+          .then((data) => {
+            usageToast(data.entries)
+            setUsageSuccessAt(Date.now())
+          })
+          .catch((error) => {
+            setUsageFailureAt(Date.now())
+            log.debug("usage refresh failed", { provider, error })
+          })
+          .finally(() => {
+            setUsageRefreshing(false)
+          })
+      },
+    ),
+  )
+
+  function firstToken(input: string) {
+    const line = input.split("\n")[0]?.trim()
+    if (!line) return ""
+    return line.split(/\s+/)[0] ?? ""
+  }
+
+  function handleUsageCommand(commandText: string) {
+    fetchUsage(sdk, {
+      command: commandText,
+      modelProviderID: local.model.current()?.providerID,
+      showUsageProviderScope: (sync.data.config as UsageConfig).tui?.show_usage_provider_scope,
+      showUsageValueMode: (sync.data.config as UsageConfig).tui?.show_usage_value_mode,
+      refresh: true,
+    })
+      .then((data) => {
+        if (data.entries.length > 0) {
+          dialog.replace(() => <DialogUsage entries={data.entries} errors={data.errors} initialMode={data.mode} />)
+          return
+        }
+        const message = data.error ?? "No usage data available."
+        DialogAlert.show(dialog, "Usage", message)
+      })
+      .catch((error: unknown) => {
+        const message = error instanceof Error ? error.message : String(error)
+        DialogAlert.show(dialog, "Usage", message)
+      })
+  }
 
   function promptModelWarning() {
     toast.show({
@@ -242,7 +372,7 @@ export function Prompt(props: PromptProps) {
         keybind: "session_interrupt",
         category: "Session",
         hidden: true,
-        enabled: status().type !== "idle",
+        enabled: status().type !== "idle" || teamBusy() > 0,
         onSelect: (dialog) => {
           if (autocomplete.visible) return
           if (!input.focused) return
@@ -253,6 +383,22 @@ export function Prompt(props: PromptProps) {
           }
           if (!props.sessionID) return
 
+          // Lead is idle but teammates are busy — cancel teammates directly
+          if (status().type === "idle" && teamBusy() > 0) {
+            const team = sync.data.team?.[props.sessionID]
+            if (team?.members) {
+              for (const m of team.members) {
+                if (
+                  ["starting", "running", "cancel_requested", "cancelling", "completing"].includes(m.execution_status)
+                ) {
+                  sdk.client.session.abort({ sessionID: m.sessionID }).catch(() => {})
+                }
+              }
+            }
+            dialog.clear()
+            return
+          }
+
           setStore("interrupt", store.interrupt + 1)
 
           setTimeout(() => {
@@ -260,6 +406,8 @@ export function Prompt(props: PromptProps) {
           }, 5000)
 
           if (store.interrupt >= 2) {
+            // Abort the lead session — server-side abort propagation
+            // (session.ts route) will also cancel active teammates
             sdk.client.session.abort({
               sessionID: props.sessionID,
             })
@@ -353,6 +501,19 @@ export function Prompt(props: PromptProps) {
           })
           restoreExtmarksFromParts(updatedNonTextParts)
           input.cursorOffset = Bun.stringWidth(content)
+        },
+      },
+      {
+        title: "Show usage limits",
+        value: "usage.show",
+        slashDescription: "Show usage limits (--current|--all, --used|--remaining)",
+        category: "Provider",
+        slash: {
+          name: "usage",
+        },
+        hidden: sync.data.command.some((x) => x.name === "usage"),
+        onSelect: () => {
+          handleUsageCommand("/usage")
         },
       },
       {
@@ -567,11 +728,27 @@ export function Prompt(props: PromptProps) {
 
   async function submit() {
     if (props.disabled) return
-    if (autocomplete?.visible) return
+    const promptToken = firstToken(store.prompt.input)
+    const customUsageCommand = sync.data.command.some((x) => x.name === "usage")
+    const isBuiltInUsage = promptToken === "/usage" && !customUsageCommand
+    if (autocomplete?.visible && !isBuiltInUsage) return
     if (!store.prompt.input) return
     const trimmed = store.prompt.input.trim()
     if (trimmed === "exit" || trimmed === "quit" || trimmed === ":q") {
       exit()
+      return
+    }
+
+    if (isBuiltInUsage && store.mode !== "shell") {
+      handleUsageCommand(store.prompt.input)
+      input.extmarks.clear()
+      setStore("prompt", {
+        input: "",
+        parts: [],
+      })
+      setStore("extmarkToPartIndex", new Map())
+      props.onSubmit?.()
+      input.clear()
       return
     }
     const selectedModel = local.model.current()
@@ -625,8 +802,31 @@ export function Prompt(props: PromptProps) {
     // Capture mode before it gets reset
     const currentMode = store.mode
     const variant = local.model.variant.current()
+    const token = firstToken(inputText)
+    const isUsage = token === "/usage" && !customUsageCommand
 
-    if (store.mode === "shell") {
+    // Team message interception: when a teammate is selected, send via team_message endpoint
+    if (props.selectedTeammate) {
+      const teammate = props.selectedTeammate
+      try {
+        const res = await fetch(`${sdk.url}/session/${sessionID}/team-message`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            agent: local.agent.current().name,
+            to: teammate,
+            text: inputText,
+          }),
+        })
+        if (!res.ok) {
+          toast.show({ message: `Failed to message @${teammate}`, variant: "error" })
+        }
+      } catch {
+        toast.show({ message: `Failed to message @${teammate}`, variant: "error" })
+      }
+      props.onTeammateMessageSent?.()
+      // Fall through to the clear logic below
+    } else if (store.mode === "shell") {
       sdk.client.session.shell({
         sessionID,
         agent: local.agent.current().name,
@@ -637,6 +837,8 @@ export function Prompt(props: PromptProps) {
         command: inputText,
       })
       setStore("mode", "normal")
+    } else if (isUsage) {
+      handleUsageCommand(inputText)
     } else if (
       inputText.startsWith("/") &&
       iife(() => {
@@ -687,10 +889,12 @@ export function Prompt(props: PromptProps) {
         })
         .catch(() => {})
     }
-    history.append({
-      ...store.prompt,
-      mode: currentMode,
-    })
+    if (!isUsage) {
+      history.append({
+        ...store.prompt,
+        mode: currentMode,
+      })
+    }
     input.extmarks.clear()
     setStore("prompt", {
       input: "",
@@ -888,13 +1092,11 @@ export function Prompt(props: PromptProps) {
               }}
               keyBindings={textareaKeybindings()}
               onKeyDown={async (e) => {
-                if (props.disabled) {
-                  e.preventDefault()
-                  return
-                }
-                // Check clipboard for images before terminal-handled paste runs.
-                // This helps terminals that forward Ctrl+V to the app; Windows
-                // Terminal 1.25+ usually handles Ctrl+V before this path.
+                if (props.disabled) return
+                // Handle clipboard paste (Ctrl+V) - check for images first on Windows
+                // This is needed because Windows terminal doesn't properly send image data
+                // through bracketed paste, so we need to intercept the keypress and
+                // directly read from clipboard before the terminal handles it
                 if (keybind.match("input_paste", e)) {
                   const content = await Clipboard.read()
                   if (content?.mime.startsWith("image/")) {
@@ -941,11 +1143,14 @@ export function Prompt(props: PromptProps) {
                 }
                 if (store.mode === "normal") autocomplete.onKeyDown(e)
                 if (!autocomplete.visible) {
+                  const historyPrevious = keybind.match("history_previous", e)
+                  const historyNext = keybind.match("history_next", e)
                   if (
-                    (keybind.match("history_previous", e) && input.cursorOffset === 0) ||
-                    (keybind.match("history_next", e) && input.cursorOffset === input.plainText.length)
+                    !keybind.leader &&
+                    ((historyPrevious && input.cursorOffset === 0) ||
+                      (historyNext && input.cursorOffset === input.plainText.length))
                   ) {
-                    const direction = keybind.match("history_previous", e) ? -1 : 1
+                    const direction = historyPrevious ? -1 : 1
                     const item = history.move(direction, input.plainText)
 
                     if (item) {
@@ -956,13 +1161,20 @@ export function Prompt(props: PromptProps) {
                       e.preventDefault()
                       if (direction === -1) input.cursorOffset = 0
                       if (direction === 1) input.cursorOffset = input.plainText.length
+                      return
                     }
-                    return
                   }
 
-                  if (keybind.match("history_previous", e) && input.visualCursor.visualRow === 0) input.cursorOffset = 0
-                  if (keybind.match("history_next", e) && input.visualCursor.visualRow === input.height - 1)
+                  if (!keybind.leader && historyPrevious && input.visualCursor.visualRow === 0) {
+                    input.cursorOffset = 0
+                    e.preventDefault()
+                    return
+                  }
+                  if (!keybind.leader && historyNext && input.visualCursor.visualRow === input.height - 1) {
                     input.cursorOffset = input.plainText.length
+                    e.preventDefault()
+                    return
+                  }
                 }
               }}
               onSubmit={submit}
@@ -1102,7 +1314,21 @@ export function Prompt(props: PromptProps) {
           />
         </box>
         <box flexDirection="row" justifyContent="space-between">
-          <Show when={status().type !== "idle"} fallback={<text />}>
+          <Show
+            when={status().type !== "idle"}
+            fallback={
+              <Show when={teamBusy() > 0}>
+                <box flexDirection="row" gap={1} marginLeft={1}>
+                  <Show when={kv.get("animations_enabled", true)} fallback={<text fg={theme.textMuted}>[⋯]</text>}>
+                    <spinner color={spinnerDef().color} frames={spinnerDef().frames} interval={40} />
+                  </Show>
+                  <text fg={theme.textMuted}>
+                    {teamBusy()} teammate{teamBusy() > 1 ? "s" : ""} working
+                  </text>
+                </box>
+              </Show>
+            }
+          >
             <box
               flexDirection="row"
               gap={1}

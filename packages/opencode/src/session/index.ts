@@ -89,6 +89,14 @@ export namespace Session {
   }
 
   export function toRow(info: Info) {
+    const revert = info.revert
+      ? {
+          messageID: info.revert.messageID,
+          partID: info.revert.partID,
+          snapshot: info.revert.snapshot,
+          diff: info.revert.diff,
+        }
+      : null
     return {
       id: info.id,
       project_id: info.projectID,
@@ -103,7 +111,7 @@ export namespace Session {
       summary_deletions: info.summary?.deletions,
       summary_files: info.summary?.files,
       summary_diffs: info.summary?.diffs,
-      revert: info.revert ?? null,
+      revert,
       permission: info.permission,
       time_created: info.time.created,
       time_updated: info.time.updated,
@@ -347,7 +355,12 @@ export namespace Session {
     readonly clearRevert: (sessionID: SessionID) => Effect.Effect<void>
     readonly setSummary: (input: { sessionID: SessionID; summary: Info["summary"] }) => Effect.Effect<void>
     readonly diff: (sessionID: SessionID) => Effect.Effect<Snapshot.FileDiff[]>
-    readonly messages: (input: { sessionID: SessionID; limit?: number }) => Effect.Effect<MessageV2.WithParts[]>
+    readonly messages: (input: {
+      sessionID: SessionID
+      limit?: number
+      before?: MessageID
+      offset?: number
+    }) => Effect.Effect<MessageV2.WithParts[]>
     readonly children: (parentID: SessionID) => Effect.Effect<Info[]>
     readonly remove: (sessionID: SessionID) => Effect.Effect<void>
     readonly updateMessage: (msg: MessageV2.Info) => Effect.Effect<MessageV2.Info>
@@ -604,11 +617,15 @@ export namespace Session {
         )
       })
 
-      const messages = Effect.fn("Session.messages")(function* (input: { sessionID: SessionID; limit?: number }) {
+      const messages = Effect.fn("Session.messages")(function* (input: {
+        sessionID: SessionID
+        limit?: number
+        before?: MessageID
+        offset?: number
+      }) {
         return yield* Effect.promise(async () => {
           const result = [] as MessageV2.WithParts[]
-          for await (const msg of MessageV2.stream(input.sessionID)) {
-            if (input.limit && result.length >= input.limit) break
+          for await (const msg of MessageV2.stream(input)) {
             result.push(msg)
           }
           result.reverse()
@@ -749,8 +766,14 @@ export namespace Session {
 
   export const diff = fn(SessionID.zod, (id) => runPromise((svc) => svc.diff(id)))
 
-  export const messages = fn(z.object({ sessionID: SessionID.zod, limit: z.number().optional() }), (input) =>
-    runPromise((svc) => svc.messages(input)),
+  export const messages = fn(
+    z.object({
+      sessionID: SessionID.zod,
+      limit: z.number().int().positive().optional(),
+      before: MessageID.zod.optional(),
+      offset: z.number().int().nonnegative().optional(),
+    }),
+    (input) => runPromise((svc) => svc.messages(input)),
   )
 
   export function* list(input?: {

@@ -12,7 +12,12 @@ import { withNetworkOptions, resolveNetworkOptions } from "@/cli/network"
 import { Filesystem } from "@/util/filesystem"
 import type { Event } from "@opencode-ai/sdk/v2"
 import type { EventSource } from "./context/sdk"
-import { win32DisableProcessedInput, win32InstallCtrlCGuard, win32SetUtf8CodePage } from "./win32"
+import {
+  win32DisableProcessedInput,
+  win32InstallCtrlCGuard,
+  win32InstallExitReset,
+  win32SetUtf8CodePage,
+} from "./win32"
 import { TuiConfig } from "@/config/tui"
 import { Instance } from "@/project/instance"
 import { writeHeapSnapshot } from "v8"
@@ -104,6 +109,7 @@ export const TuiThreadCommand = cmd({
     // Keep ENABLE_PROCESSED_INPUT cleared even if other code flips it.
     // (Important when running under `bun run` wrappers on Windows.)
     const unguard = win32InstallCtrlCGuard()
+    const unreset = win32InstallExitReset()
     try {
       // Must be the very first thing — disables CTRL_C_EVENT before any Worker
       // spawn or async work so the OS cannot kill the process group.
@@ -131,10 +137,17 @@ export const TuiThreadCommand = cmd({
       }
       const cwd = Filesystem.resolve(process.cwd())
 
+      const env = Object.fromEntries(
+        Object.entries(process.env).filter((entry): entry is [string, string] => entry[1] !== undefined),
+      )
+      const p = env.PATH ?? env.Path
+      if (p) {
+        env.PATH = p
+        env.Path = p
+      }
+
       const worker = new Worker(file, {
-        env: Object.fromEntries(
-          Object.entries(process.env).filter((entry): entry is [string, string] => entry[1] !== undefined),
-        ),
+        env,
       })
       worker.onerror = (e) => {
         Log.Default.error("worker error", {
@@ -232,6 +245,7 @@ export const TuiThreadCommand = cmd({
         await stop()
       }
     } finally {
+      unreset?.()
       unguard?.()
     }
     process.exit(0)

@@ -17,6 +17,8 @@ import { lazy } from "@/util/lazy"
 import { errorHandler } from "./middleware"
 import { InstanceRoutes } from "./instance"
 import { initProjectors } from "./projectors"
+import { ATTACH_ENV_HEADER, decodeAttachEnv } from "@/util/attach-env"
+import { ATTACH_ENV_HEADER, decodeAttachEnv } from "@/util/attach-env"
 
 // @ts-ignore This global is needed to prevent ai-sdk from logging warnings to stdout https://github.com/vercel/ai/blob/2dc67e0ef538307f21368db32d5a12345d98831b/packages/ai/src/logger/log-warnings.ts#L85
 globalThis.AI_SDK_LOG_WARNINGS = false
@@ -160,6 +162,29 @@ export namespace Server {
           return c.json(true)
         },
       )
+      .use(async (c, next) => {
+        if (c.req.path === "/log") return next()
+        const raw = c.req.query("directory") || c.req.header("x-opencode-directory") || process.cwd()
+        const env = decodeAttachEnv(c.req.header(ATTACH_ENV_HEADER) ?? undefined)
+        const directory = Filesystem.resolve(
+          (() => {
+            try {
+              return decodeURIComponent(raw)
+            } catch {
+              return raw
+            }
+          })(),
+        )
+
+        return Instance.provide({
+          directory,
+          env,
+          init: InstanceBootstrap,
+          async fn() {
+            return next()
+          },
+        })
+      })
       .get(
         "/doc",
         openAPIRouteHandler(app, {

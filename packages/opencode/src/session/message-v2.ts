@@ -815,19 +815,22 @@ export namespace MessageV2 {
       sessionID: SessionID.zod,
       limit: z.number().int().positive(),
       before: z.string().optional(),
+      offset: z.number().int().nonnegative().optional(),
     }),
     async (input) => {
       const before = input.before ? cursor.decode(input.before) : undefined
-      const where = before
-        ? and(eq(MessageTable.session_id, input.sessionID), older(before))
-        : eq(MessageTable.session_id, input.sessionID)
       const rows = Database.use((db) =>
         db
           .select()
           .from(MessageTable)
-          .where(where)
+          .where(
+            before
+              ? and(eq(MessageTable.session_id, input.sessionID), older(before))
+              : eq(MessageTable.session_id, input.sessionID),
+          )
           .orderBy(desc(MessageTable.time_created), desc(MessageTable.id))
           .limit(input.limit + 1)
+          .offset(before ? 0 : (input.offset ?? 0))
           .all(),
       )
       if (rows.length === 0) {
@@ -854,19 +857,55 @@ export namespace MessageV2 {
     },
   )
 
-  export const stream = fn(SessionID.zod, async function* (sessionID) {
-    const size = 50
-    let before: string | undefined
-    while (true) {
-      const next = await page({ sessionID, limit: size, before })
-      if (next.items.length === 0) break
-      for (let i = next.items.length - 1; i >= 0; i--) {
-        yield next.items[i]
+  export const stream = fn(
+    z.union([
+      SessionID.zod,
+      z.object({
+        sessionID: SessionID.zod,
+        before: MessageID.zod.optional(),
+        limit: z.number().int().positive().optional(),
+        offset: z.number().int().nonnegative().optional(),
+      }),
+    ]),
+    async function* (input) {
+      const cfg = typeof input === "string" ? { sessionID: input } : input
+      const limit = cfg.limit
+      let before = cfg.before
+      let offset = cfg.before ? 0 : (cfg.offset ?? 0)
+      let count = 0
+      const size = 50
+      while (true) {
+        const remaining = limit ? limit - count : size
+        if (limit && remaining <= 0) break
+        const take = limit ? Math.min(size, remaining) : size
+        const rows = Database.use((db) =>
+          db
+            .select()
+            .from(MessageTable)
+            .where(
+              before
+                ? and(eq(MessageTable.session_id, cfg.sessionID), lt(MessageTable.id, before))
+                : eq(MessageTable.session_id, cfg.sessionID),
+            )
+            .orderBy(desc(MessageTable.time_created), desc(MessageTable.id))
+            .limit(take)
+            .offset(offset)
+            .all(),
+        )
+        if (rows.length === 0) break
+
+        const items = await hydrate(rows)
+        for (const item of items) {
+          yield item
+        }
+
+        count += rows.length
+        if (before) before = rows[rows.length - 1]?.id
+        else offset += rows.length
+        if (rows.length < take) break
       }
-      if (!next.more || !next.cursor) break
-      before = next.cursor
-    }
-  })
+    },
+  )
 
   export const parts = fn(MessageID.zod, async (message_id) => {
     const rows = Database.use((db) =>
@@ -879,7 +918,7 @@ export namespace MessageV2 {
           id: row.id,
           sessionID: row.session_id,
           messageID: row.message_id,
-        }) as MessageV2.Part,
+        }) as unknown as MessageV2.Part,
     )
   })
 
