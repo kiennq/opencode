@@ -88,8 +88,9 @@ function build(shell: string, command: string, mark: string, env: Record<string,
     return [
       ...lines,
       `$ErrorActionPreference = 'Continue'`,
-      `& { ${command} } < $null`,
-      `Write-Output \"${mark}$LASTEXITCODE\"`,
+      `& { ${command} }`,
+      `$__opencode_exit = if ($LASTEXITCODE -is [int]) { $LASTEXITCODE } elseif ($?) { 0 } else { 1 }`,
+      `Write-Output \"${mark}$__opencode_exit\"`,
       "",
     ].join("\n")
   }
@@ -127,9 +128,17 @@ async function create(sessionID: string, shell: string, cwd: string, env: Record
           ? ["--noprofile", "--norc"]
           : []
 
+  const spawnEnv =
+    process.platform === "win32" && Shell.isCmdShell(shell)
+      ? {
+          ...env,
+          PROMPT: "",
+        }
+      : env
+
   const processRef = spawn(shell, args, {
     cwd,
-    env,
+    env: spawnEnv,
     stdio: ["pipe", "pipe", "pipe"],
     detached: false,
     windowsHide: process.platform === "win32",
@@ -400,6 +409,7 @@ export const BashTool = Tool.define("bash", async () => {
         { env: {} },
       )
       const shell = Shell.commandShell(params.command)
+      const shellName = Shell.display(shell)
       log.info("bash tool using shell", { shell })
       const env = {
         ...process.env,
@@ -421,6 +431,7 @@ export const BashTool = Tool.define("bash", async () => {
         metadata: {
           output: "",
           description: params.description,
+          shell: shellName,
         },
       })
 
@@ -453,6 +464,7 @@ export const BashTool = Tool.define("bash", async () => {
               : truncated.content,
           exit: result.exit,
           description: params.description,
+          shell: shellName,
           truncated: truncated.truncated,
           outputPath: truncated.truncated ? truncated.outputPath : undefined,
         },
