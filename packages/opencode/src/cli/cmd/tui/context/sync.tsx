@@ -282,6 +282,7 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
             setStore("message", info.sessionID, [info])
             break
           }
+          const cap = Math.max(100, messages.length)
           const result = Binary.search(messages, info.id, (m) => m.id)
           if (result.found) {
             setStore("message", info.sessionID, result.index, reconcile(info))
@@ -295,7 +296,6 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
             }),
           )
           const updated = store.message[info.sessionID]
-          const cap = 100
           if (updated.length > cap) {
             const excess = updated.length - cap
             const removedMessages = updated.slice(0, excess)
@@ -407,7 +407,6 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
     const args = useArgs()
 
     async function bootstrap() {
-      console.log("bootstrapping")
       fullSyncedSessions.clear()
       // Clear stale permission/question dialogs — backend state is gone after worker recycle/crash
       setStore("permission", reconcile({}))
@@ -555,9 +554,10 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
           currentSessionID = sessionID
 
           if (fullSyncedSessions.has(sessionID)) return
+          const cached = store.message[sessionID]?.length ?? 0
           const [session, messages, todo, diff] = await Promise.all([
             sdk.client.session.get({ sessionID }, { throwOnError: true }),
-            sdk.client.session.messages({ sessionID, limit: 100 }),
+            sdk.client.session.messages({ sessionID, limit: Math.max(100, cached) }),
             sdk.client.session.todo({ sessionID }),
             sdk.client.session.diff({ sessionID }),
           ])
