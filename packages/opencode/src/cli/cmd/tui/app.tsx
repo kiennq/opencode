@@ -3,7 +3,19 @@ import { Clipboard } from "@tui/util/clipboard"
 import { Selection } from "@tui/util/selection"
 import { MouseButton, TextAttributes } from "@opentui/core"
 import { RouteProvider, useRoute } from "@tui/context/route"
-import { Switch, Match, createEffect, untrack, ErrorBoundary, createSignal, onMount, batch, Show, on } from "solid-js"
+import {
+  Switch,
+  Match,
+  createEffect,
+  untrack,
+  ErrorBoundary,
+  createSignal,
+  onMount,
+  onCleanup,
+  batch,
+  Show,
+  on,
+} from "solid-js"
 import { win32DisableProcessedInput, win32FlushInputBuffer, win32InstallCtrlCGuard } from "./win32"
 import { Flag } from "@/flag/flag"
 import semver from "semver"
@@ -57,7 +69,7 @@ async function getTerminalBackgroundColor(): Promise<"dark" | "light"> {
     }
 
     const handler = (data: Buffer) => {
-      const str = data.toString()
+      const str = data.toString("utf8")
       const match = str.match(/\x1b]11;([^\x07\x1b]+)/)
       if (match) {
         cleanup()
@@ -247,6 +259,13 @@ function App(props: { onSnapshot?: () => Promise<string[]> }) {
     renderer.clearSelection()
   })
 
+  // Handle SIGINT (Ctrl+C) to properly cleanup renderer on Windows
+  // Without this, the 60 FPS render loop continues outputting ANSI sequences
+  onMount(() => {
+    const handleSigint = () => exit()
+    process.on("SIGINT", handleSigint)
+    onCleanup(() => process.off("SIGINT", handleSigint))
+  })
   // Wire up console copy-to-clipboard via opentui's onCopySelection callback
   renderer.console.onCopySelection = async (text: string) => {
     if (!text || text.length === 0) return
@@ -690,104 +709,92 @@ function App(props: { onSnapshot?: () => Promise<string[]> }) {
     },
   ])
 
-  sdk.event.on(TuiEvent.CommandExecute.type, (evt) => {
-    command.trigger(evt.properties.command)
-  })
-
-  sdk.event.on(TuiEvent.ToastShow.type, (evt) => {
-    toast.show({
-      title: evt.properties.title,
-      message: evt.properties.message,
-      variant: evt.properties.variant,
-      duration: evt.properties.duration,
-    })
-  })
-
-  sdk.event.on(TuiEvent.SessionSelect.type, (evt) => {
-    route.navigate({
-      type: "session",
-      sessionID: evt.properties.sessionID,
-    })
-  })
-
-  sdk.event.on(SessionApi.Event.Deleted.type, (evt) => {
-    if (route.data.type === "session" && route.data.sessionID === evt.properties.info.id) {
-      route.navigate({ type: "home" })
-      toast.show({
-        variant: "info",
-        message: "The current session was deleted",
+  createEffect(() => {
+    const currentModel = local.model.current()
+    if (!currentModel) return
+    if (currentModel.providerID === "openrouter" && !kv.get("openrouter_warning", false)) {
+      untrack(() => {
+        DialogAlert.show(
+          dialog,
+          "Warning",
+          "While openrouter is a convenient way to access LLMs your request will often be routed to subpar providers that do not work well in our testing.\n\nFor reliable access to models check out OpenCode Zen\nhttps://opencode.ai/zen",
+        ).then(() => kv.set("openrouter_warning", true))
       })
     }
   })
 
-  sdk.event.on(SessionApi.Event.Error.type, (evt) => {
-    const error = evt.properties.error
-    if (error && typeof error === "object" && error.name === "MessageAbortedError") return
-    const message = (() => {
-      if (!error) return "An error occurred"
+  onCleanup(
+    sdk.event.on(TuiEvent.CommandExecute.type, (evt) => {
+      command.trigger(evt.properties.command)
+    }),
+  )
 
-      if (typeof error === "object") {
-        const data = error.data
-        if ("message" in data && typeof data.message === "string") {
-          return data.message
-        }
+  onCleanup(
+    sdk.event.on(TuiEvent.ToastShow.type, (evt) => {
+      toast.show({
+        title: evt.properties.title,
+        message: evt.properties.message,
+        variant: evt.properties.variant,
+        duration: evt.properties.duration,
+      })
+    }),
+  )
+
+  onCleanup(
+    sdk.event.on(TuiEvent.SessionSelect.type, (evt) => {
+      route.navigate({
+        type: "session",
+        sessionID: evt.properties.sessionID,
+      })
+    }),
+  )
+
+  onCleanup(
+    sdk.event.on(SessionApi.Event.Deleted.type, (evt) => {
+      if (route.data.type === "session" && route.data.sessionID === evt.properties.info.id) {
+        route.navigate({ type: "home" })
+        toast.show({
+          variant: "info",
+          message: "The current session was deleted",
+        })
       }
-      return String(error)
-    })()
+    }),
+  )
 
-    toast.show({
-      variant: "error",
-      message,
-      duration: 5000,
-    })
-  })
+  onCleanup(
+    sdk.event.on(SessionApi.Event.Error.type, (evt) => {
+      const error = evt.properties.error
+      if (error && typeof error === "object" && error.name === "MessageAbortedError") return
+      const message = (() => {
+        if (!error) return "An error occurred"
 
-  sdk.event.on("installation.update-available", async (evt) => {
-    const version = evt.properties.version
+        if (typeof error === "object") {
+          const data = error.data
+          if ("message" in data && typeof data.message === "string") {
+            return data.message
+          }
+        }
+        return String(error)
+      })()
 
-    const skipped = kv.get("skipped_version")
-    if (skipped && !semver.gt(version, skipped)) return
-
-    const choice = await DialogConfirm.show(
-      dialog,
-      `Update Available`,
-      `A new release v${version} is available. Would you like to update now?`,
-      "skip",
-    )
-
-    if (choice === false) {
-      kv.set("skipped_version", version)
-      return
-    }
-
-    if (choice !== true) return
-
-    toast.show({
-      variant: "info",
-      message: `Updating to v${version}...`,
-      duration: 30000,
-    })
-
-    const result = await sdk.client.global.upgrade({ target: version })
-
-    if (result.error || !result.data?.success) {
       toast.show({
         variant: "error",
-        title: "Update Failed",
-        message: "Update failed",
+        message,
+        duration: 5000,
+      })
+    }),
+  )
+
+  onCleanup(
+    sdk.event.on(Installation.Event.UpdateAvailable.type, (evt) => {
+      toast.show({
+        variant: "info",
+        title: "Update Available",
+        message: `OpenCode v${evt.properties.version} is available. Run 'opencode upgrade' to update manually.`,
         duration: 10000,
       })
-      return
-    }
-
-    await DialogAlert.show(
-      dialog,
-      "Update Complete",
-      `Successfully updated to OpenCode v${result.data.version}. Please restart the application.`,
-    )
-
-    exit()
-  })
+    }),
+  )
 
   return (
     <box
