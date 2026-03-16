@@ -11,6 +11,7 @@ export interface InstanceContext {
   directory: string
   worktree: string
   project: Project.Info
+  env?: Record<string, string>
 }
 
 const context = Context.create<InstanceContext>("instance")
@@ -63,7 +64,12 @@ function track(directory: string, next: Promise<InstanceContext>) {
 }
 
 export const Instance = {
-  async provide<R>(input: { directory: string; init?: () => Promise<any>; fn: () => R }): Promise<R> {
+  async provide<R>(input: {
+    directory: string
+    env?: Record<string, string>
+    init?: () => Promise<any>
+    fn: () => R
+  }): Promise<R> {
     const directory = Filesystem.resolve(input.directory)
     let existing = cache.get(directory)
     if (!existing) {
@@ -77,9 +83,15 @@ export const Instance = {
       )
     }
     const ctx = await existing
-    return context.provide(ctx, async () => {
-      return input.fn()
-    })
+    return context.provide(
+      {
+        ...ctx,
+        env: input.env,
+      },
+      async () => {
+        return input.fn()
+      },
+    )
   },
   get current() {
     return context.use()
@@ -92,6 +104,9 @@ export const Instance = {
   },
   get project() {
     return context.use().project
+  },
+  get env() {
+    return context.use().env
   },
   /**
    * Check if a path is within the project boundary.

@@ -92,6 +92,13 @@ export namespace Shell {
     return name === "cmd"
   }
 
+  export function display(shell: string) {
+    return path
+      .basename(shell)
+      .replace(/\.exe$/i, "")
+      .toLowerCase()
+  }
+
   export function hasWindowsExpansion(command: string) {
     return /%[a-zA-Z_][a-zA-Z0-9_]*%/.test(command)
   }
@@ -99,10 +106,10 @@ export namespace Shell {
   export function commandShell(command: string) {
     const base = acceptable()
     if (process.platform !== "win32") return base
-    if (!Flag.OPENCODE_PREFER_NATIVE_SHELL) return base
-    if (isPowerShell(command)) return nativeWindowsShell()
-    if (isWindowsCmdBuiltin(command) || hasWindowsExpansion(command)) return process.env.COMSPEC || "cmd.exe"
-    return base
+    const native = nativeWindowsShell()
+    if (isPowerShell(command)) return native
+    if (hasWindowsExpansion(command)) return process.env.COMSPEC || "cmd.exe"
+    return native
   }
   export async function killTree(proc: ChildProcess, opts?: { exited?: () => boolean }): Promise<void> {
     const pid = proc.pid
