@@ -190,7 +190,6 @@ export namespace ProviderTransform {
       model.api.npm === "@ai-sdk/google-vertex/anthropic"
     )
   }
-
   function applyCaching(msgs: ModelMessage[], model: Provider.Model): ModelMessage[] {
     const system = msgs.filter((msg) => msg.role === "system").slice(0, 2)
     const final = msgs.filter((msg) => msg.role !== "system").slice(-2)
@@ -205,6 +204,8 @@ export namespace ProviderTransform {
       providerOptions.openrouter = { cacheControl: { type: "ephemeral" } }
     } else if (npm === "@ai-sdk/openai-compatible") {
       providerOptions.openaiCompatible = { cache_control: { type: "ephemeral" } }
+    } else if (npm === "@ai-sdk/github-copilot" && !isAnthropicModel(model)) {
+      providerOptions.copilot = { copilot_cache_control: { type: "ephemeral" } }
     }
 
     if (Object.keys(providerOptions).length === 0) return msgs
@@ -269,13 +270,13 @@ export namespace ProviderTransform {
   export function message(msgs: ModelMessage[], model: Provider.Model, options: Record<string, unknown>) {
     msgs = unsupportedParts(msgs, model)
     msgs = normalizeMessages(msgs, model, options)
-
     const copilotAnthropic = model.api.npm === "@ai-sdk/github-copilot" && isAnthropicModel(model)
     const explicit =
       !copilotAnthropic &&
       (model.api.npm === "@ai-sdk/anthropic" ||
         model.api.npm === "@ai-sdk/amazon-bedrock" ||
         model.api.npm === "@openrouter/ai-sdk-provider" ||
+        model.api.npm === "@ai-sdk/github-copilot" ||
         model.api.npm === "@ai-sdk/openai-compatible" ||
         model.providerID.includes("bedrock") ||
         isAnthropicModel(model))
