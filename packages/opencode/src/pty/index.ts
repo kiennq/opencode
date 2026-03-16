@@ -129,6 +129,7 @@ export namespace Pty {
     const shellEnv = await Plugin.trigger("shell.env", { cwd }, { env: {} })
     const env = {
       ...process.env,
+      ...(Instance.env ?? {}),
       ...input.env,
       ...shellEnv.env,
       TERM: "xterm-256color",
