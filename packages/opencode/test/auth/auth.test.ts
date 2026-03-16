@@ -56,3 +56,21 @@ test("set and remove are no-ops on keys without trailing slashes", async () => {
   const after = await Auth.all()
   expect(after["anthropic"]).toBeUndefined()
 })
+
+test("oauth auth persists optional usage token", async () => {
+  await Auth.set("github-copilot", {
+    type: "oauth",
+    refresh: "refresh-token",
+    access: "access-token",
+    usage: "usage-token",
+    expires: 123,
+  })
+
+  expect(await Auth.get("github-copilot")).toEqual({
+    type: "oauth",
+    refresh: "refresh-token",
+    access: "access-token",
+    usage: "usage-token",
+    expires: 123,
+  })
+})
