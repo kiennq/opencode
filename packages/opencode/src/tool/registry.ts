@@ -32,6 +32,17 @@ import { pathToFileURL } from "url"
 import { Effect, Layer, ServiceMap } from "effect"
 import { InstanceState } from "@/effect/instance-state"
 import { makeRunPromise } from "@/effect/run-service"
+import {
+  TeamCreateTool,
+  TeamSpawnTool,
+  TeamMessageTool,
+  TeamBroadcastTool,
+  TeamTasksTool,
+  TeamClaimTool,
+  TeamApprovePlanTool,
+  TeamShutdownTool,
+  TeamCleanupTool,
+} from "./team"
 
 export namespace ToolRegistry {
   const log = Log.create({ service: "tool.registry" })

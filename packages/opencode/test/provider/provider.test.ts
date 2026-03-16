@@ -782,7 +782,7 @@ test("existing model supports partial limit.input override", async () => {
     },
     fn: async () => {
       const providers = await Provider.list()
-      const model = providers["anthropic"].models["claude-sonnet-4-20250514"]
+      const model = providers[ProviderID.anthropic].models["claude-sonnet-4-20250514"]
       expect(model.limit.input).toBe(123456)
       expect(model.limit.context).toBeGreaterThan(0)
       expect(model.limit.output).toBeGreaterThan(0)
@@ -824,7 +824,7 @@ test("custom model preserves configured limit.input", async () => {
     directory: tmp.path,
     fn: async () => {
       const providers = await Provider.list()
-      const model = providers["custom-input-limit"].models["model"]
+      const model = providers[ProviderID.make("custom-input-limit")].models["model"]
       expect(model.limit.context).toBe(128000)
       expect(model.limit.input).toBe(64000)
       expect(model.limit.output).toBe(4096)
