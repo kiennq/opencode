@@ -15,6 +15,7 @@ export namespace Auth {
       type: z.literal("oauth"),
       refresh: z.string(),
       access: z.string(),
+      usage: z.string().optional(),
       expires: z.number(),
       accountId: z.string().optional(),
       enterpriseUrl: z.string().optional(),
