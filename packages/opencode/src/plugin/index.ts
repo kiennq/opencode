@@ -183,6 +183,7 @@ export namespace Plugin {
         return state.hooks
       })
 
+<<<<<<< HEAD
       const init = Effect.fn("Plugin.init")(function* () {
         yield* InstanceState.get(cache)
       })
