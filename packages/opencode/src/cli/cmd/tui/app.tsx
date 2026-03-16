@@ -278,10 +278,6 @@ function App(props: { onSnapshot?: () => Promise<string[]> }) {
   }
   const [terminalTitleEnabled, setTerminalTitleEnabled] = createSignal(kv.get("terminal_title_enabled", true))
 
-  createEffect(() => {
-    console.log(JSON.stringify(route.data))
-  })
-
   // Update terminal window title based on current route and session
   createEffect(() => {
     if (!terminalTitleEnabled() || Flag.OPENCODE_DISABLE_TERMINAL_TITLE) return
@@ -664,6 +660,7 @@ function App(props: { onSnapshot?: () => Promise<string[]> }) {
       category: "System",
       hidden: true,
       onSelect: () => {
+        if (process.platform === "win32") return
         process.once("SIGCONT", () => {
           renderer.resume()
         })

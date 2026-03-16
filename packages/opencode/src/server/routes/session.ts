@@ -628,6 +628,7 @@ export const SessionRoutes = lazy(() =>
                 },
                 { message: "Invalid cursor" },
               ),
+            offset: z.coerce.number().optional().meta({ description: "Number of newest messages to skip" }),
           })
           .refine((value) => !value.before || value.limit !== undefined, {
             message: "before requires limit",
@@ -639,13 +640,13 @@ export const SessionRoutes = lazy(() =>
         const sessionID = c.req.valid("param").sessionID
         if (query.limit === undefined) {
           await Session.get(sessionID)
-          const messages = await Session.messages({ sessionID })
+          const messages = await Session.messages({ sessionID, offset: query.offset })
           return c.json(messages)
         }
 
         if (query.limit === 0) {
           await Session.get(sessionID)
-          const messages = await Session.messages({ sessionID })
+          const messages = await Session.messages({ sessionID, offset: query.offset })
           return c.json(messages)
         }
 
@@ -653,6 +654,7 @@ export const SessionRoutes = lazy(() =>
           sessionID,
           limit: query.limit,
           before: query.before,
+          offset: query.offset,
         })
         if (page.cursor) {
           const url = new URL(c.req.url)
