@@ -138,8 +138,8 @@ export namespace Filesystem {
   // We cannot rely on path.resolve() here because git.exe may come from Git Bash, Cygwin, or MSYS2, so we need to translate these paths at the boundary.
   // Also resolves symlinks so that callers using the result as a cache key
   // always get the same canonical path for a given physical directory.
-  export function resolve(p: string): string {
-    const resolved = pathResolve(windowsPath(p))
+  export function resolve(...parts: string[]): string {
+    const resolved = pathResolve(...parts.map(windowsPath))
     try {
       return normalizePath(realpathSync(resolved))
     } catch (e) {

@@ -1,4 +1,5 @@
 sst-env.d.ts
+config.json
 packages/desktop/src/bindings.ts
 packages/app/src/custom-elements.d.ts
 packages/enterprise/src/custom-elements.d.ts
