@@ -86,6 +86,14 @@ export namespace Session {
   }
 
   export function toRow(info: Info) {
+    const revert = info.revert
+      ? {
+          messageID: info.revert.messageID,
+          partID: info.revert.partID,
+          snapshot: info.revert.snapshot,
+          diff: info.revert.diff,
+        }
+      : null
     return {
       id: info.id,
       project_id: info.projectID,
@@ -100,7 +108,7 @@ export namespace Session {
       summary_deletions: info.summary?.deletions,
       summary_files: info.summary?.files,
       summary_diffs: info.summary?.diffs,
-      revert: info.revert ?? null,
+      revert,
       permission: info.permission,
       time_created: info.time.created,
       time_updated: info.time.updated,
@@ -449,10 +457,18 @@ export namespace Session {
     }),
     async (input) => {
       return Database.use((db) => {
+        const revert = input.revert
+          ? {
+              messageID: input.revert.messageID,
+              partID: input.revert.partID,
+              snapshot: input.revert.snapshot,
+              diff: input.revert.diff,
+            }
+          : null
         const row = db
           .update(SessionTable)
           .set({
-            revert: input.revert ?? null,
+            revert,
             summary_additions: input.summary?.additions,
             summary_deletions: input.summary?.deletions,
             summary_files: input.summary?.files,
@@ -524,12 +540,13 @@ export namespace Session {
   export const messages = fn(
     z.object({
       sessionID: SessionID.zod,
-      limit: z.number().optional(),
+      limit: z.number().int().positive().optional(),
+      before: MessageID.zod.optional(),
+      offset: z.number().int().nonnegative().optional(),
     }),
     async (input) => {
       const result = [] as MessageV2.WithParts[]
-      for await (const msg of MessageV2.stream(input.sessionID)) {
-        if (input.limit && result.length >= input.limit) break
+      for await (const msg of MessageV2.stream(input)) {
         result.push(msg)
       }
       result.reverse()
