@@ -34,6 +34,7 @@ import { FileRoutes } from "./routes/file"
 import { ConfigRoutes } from "./routes/config"
 import { ExperimentalRoutes } from "./routes/experimental"
 import { ProviderRoutes } from "./routes/provider"
+import { UsageRoutes } from "./usage"
 import { InstanceBootstrap } from "../project/bootstrap"
 import { NotFoundError } from "../storage/db"
 import type { ContentfulStatusCode } from "hono/utils/http-status"
@@ -252,6 +253,7 @@ export namespace Server {
       .route("/permission", PermissionRoutes())
       .route("/question", QuestionRoutes())
       .route("/provider", ProviderRoutes())
+      .route("/usage", UsageRoutes())
       .route("/", FileRoutes())
       .route("/mcp", McpRoutes())
       .route("/tui", TuiRoutes())
