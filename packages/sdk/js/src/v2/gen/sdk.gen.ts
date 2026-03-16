@@ -143,6 +143,8 @@ import type {
   SessionStatusResponses,
   SessionSummarizeErrors,
   SessionSummarizeResponses,
+  SessionTeamMessageErrors,
+  SessionTeamMessageResponses,
   SessionTodoErrors,
   SessionTodoResponses,
   SessionUnrevertErrors,
@@ -152,6 +154,15 @@ import type {
   SessionUpdateErrors,
   SessionUpdateResponses,
   SubtaskPartInput,
+  TeamBySessionResponses,
+  TeamCancelErrors,
+  TeamCancelResponses,
+  TeamDelegateErrors,
+  TeamDelegateResponses,
+  TeamGetErrors,
+  TeamGetResponses,
+  TeamListResponses,
+  TeamTasksListResponses,
   TextPartInput,
   ToolIdsErrors,
   ToolIdsResponses,
@@ -1988,6 +1999,49 @@ export class Session2 extends HeyApiClient {
   }
 
   /**
+   * Send teammate message
+   *
+   * Send a team message from this session to a teammate or the lead.
+   */
+  public teamMessage<ThrowOnError extends boolean = false>(
+    parameters: {
+      sessionID: string
+      directory?: string
+      workspace?: string
+      to?: string
+      text?: string
+      agent?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "path", key: "sessionID" },
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+            { in: "body", key: "to" },
+            { in: "body", key: "text" },
+            { in: "body", key: "agent" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).post<SessionTeamMessageResponses, SessionTeamMessageErrors, ThrowOnError>({
+      url: "/session/{sessionID}/team-message",
+      ...options,
+      ...params,
+      headers: {
+        "Content-Type": "application/json",
+        ...options?.headers,
+        ...params.headers,
+      },
+    })
+  }
+
+  /**
    * Send async message
    *
    * Create and send a new message to a session asynchronously, starting the session if needed and returning immediately.
@@ -3197,6 +3251,219 @@ export class Mcp extends HeyApiClient {
   }
 }
 
+export class Tasks extends HeyApiClient {
+  /**
+   * List team tasks
+   *
+   * List all tasks for a team.
+   */
+  public list<ThrowOnError extends boolean = false>(
+    parameters: {
+      name: string
+      directory?: string
+      workspace?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "path", key: "name" },
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).get<TeamTasksListResponses, unknown, ThrowOnError>({
+      url: "/team/{name}/tasks",
+      ...options,
+      ...params,
+    })
+  }
+}
+
+export class Team extends HeyApiClient {
+  /**
+   * List teams
+   *
+   * List all teams in this project.
+   */
+  public list<ThrowOnError extends boolean = false>(
+    parameters?: {
+      directory?: string
+      workspace?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).get<TeamListResponses, unknown, ThrowOnError>({
+      url: "/team",
+      ...options,
+      ...params,
+    })
+  }
+
+  /**
+   * Get team
+   *
+   * Retrieve a team by name.
+   */
+  public get<ThrowOnError extends boolean = false>(
+    parameters: {
+      name: string
+      directory?: string
+      workspace?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "path", key: "name" },
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).get<TeamGetResponses, TeamGetErrors, ThrowOnError>({
+      url: "/team/{name}",
+      ...options,
+      ...params,
+    })
+  }
+
+  /**
+   * Find team by session
+   *
+   * Find the team a session belongs to.
+   */
+  public bySession<ThrowOnError extends boolean = false>(
+    parameters: {
+      sessionID: string
+      directory?: string
+      workspace?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "path", key: "sessionID" },
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).get<TeamBySessionResponses, unknown, ThrowOnError>({
+      url: "/team/by-session/{sessionID}",
+      ...options,
+      ...params,
+    })
+  }
+
+  /**
+   * Toggle delegate mode
+   *
+   * Enable or disable delegate mode for a team.
+   */
+  public delegate<ThrowOnError extends boolean = false>(
+    parameters: {
+      name: string
+      directory?: string
+      workspace?: string
+      enabled?: boolean
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "path", key: "name" },
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+            { in: "body", key: "enabled" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).post<TeamDelegateResponses, TeamDelegateErrors, ThrowOnError>({
+      url: "/team/{name}/delegate",
+      ...options,
+      ...params,
+      headers: {
+        "Content-Type": "application/json",
+        ...options?.headers,
+        ...params.headers,
+      },
+    })
+  }
+
+  /**
+   * Cancel teammates
+   *
+   * Cancel active teammates' prompt loops. Pass { member: name } to cancel one, or omit to cancel all.
+   */
+  public cancel<ThrowOnError extends boolean = false>(
+    parameters: {
+      name: string
+      directory?: string
+      workspace?: string
+      member?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "path", key: "name" },
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+            { in: "body", key: "member" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).post<TeamCancelResponses, TeamCancelErrors, ThrowOnError>({
+      url: "/team/{name}/cancel",
+      ...options,
+      ...params,
+      headers: {
+        "Content-Type": "application/json",
+        ...options?.headers,
+        ...params.headers,
+      },
+    })
+  }
+
+  private _tasks?: Tasks
+  get tasks(): Tasks {
+    return (this._tasks ??= new Tasks({ client: this.client }))
+  }
+}
+
 export class Control extends HeyApiClient {
   /**
    * Get next TUI request
@@ -4066,6 +4333,11 @@ export class OpencodeClient extends HeyApiClient {
   private _mcp?: Mcp
   get mcp(): Mcp {
     return (this._mcp ??= new Mcp({ client: this.client }))
+  }
+
+  private _team?: Team
+  get team(): Team {
+    return (this._team ??= new Team({ client: this.client }))
   }
 
   private _tui?: Tui
