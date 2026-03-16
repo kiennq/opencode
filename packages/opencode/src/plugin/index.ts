@@ -64,7 +64,7 @@ export namespace Plugin {
 
       for (let plugin of plugins) {
         // ignore old codex plugin since it is supported first party now
-        if (plugin.includes("opencode-openai-codex-auth") || plugin.includes("opencode-copilot-auth")) continue
+        if (plugin.includes("opencode-openai-codex-auth")) continue
         log.info("loading plugin", { path: plugin })
         if (!plugin.startsWith("file://")) {
           // For git URLs (github:, git+, git://), don't parse @version - use full URL as package name
