@@ -62,24 +62,24 @@ export const { use: usePromptHistory, provider: PromptHistoryProvider } = create
 
     return {
       move(direction: 1 | -1, input: string) {
-        if (!store.history.length) return undefined
-        const current = store.history.at(store.index)
-        if (!current) return undefined
+        const list = store.history
+        if (!list.length) return
+        const current = list.at(store.index)
+        if (!current) return
         if (current.input !== input && input.length) return
-        setStore(
-          produce((draft) => {
-            const next = store.index + direction
-            if (Math.abs(next) > store.history.length) return
-            if (next > 0) return
-            draft.index = next
-          }),
-        )
-        if (store.index === 0)
+
+        const next = store.index + direction
+        if (next > 0) return
+        if (Math.abs(next) > list.length) return
+
+        setStore("index", next)
+
+        if (next === 0)
           return {
             input: "",
             parts: [],
           }
-        return store.history.at(store.index)
+        return list.at(next)
       },
       append(item: PromptInfo) {
         const entry = structuredClone(unwrap(item))
