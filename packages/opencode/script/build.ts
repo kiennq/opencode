@@ -4,7 +4,6 @@ import { $ } from "bun"
 import fs from "fs"
 import path from "path"
 import { fileURLToPath } from "url"
-import solidPlugin from "@opentui/solid/bun-plugin"
 
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = path.dirname(__filename)
@@ -14,6 +13,35 @@ process.chdir(dir)
 
 import { Script } from "@opencode-ai/script"
 import pkg from "../package.json"
+
+const singleFlag = process.argv.includes("--single")
+const baselineFlag = process.argv.includes("--baseline")
+const skipInstall = process.argv.includes("--skip-install")
+const noClean = process.argv.includes("--no-clean")
+const outdirArg = process.argv.indexOf("--outdir")
+const outputDir = outdirArg >= 0 && process.argv[outdirArg + 1] ? process.argv[outdirArg + 1] : "dist"
+
+if (!skipInstall) {
+  await $`bun install --os="*" --cpu="*" @opentui/core@${pkg.dependencies["@opentui/core"]}`
+  await $`bun install --os="*" --cpu="*" @parcel/watcher@${pkg.dependencies["@parcel/watcher"]}`
+  const cmd = [
+    process.execPath,
+    process.argv[1]!,
+    ...process.argv.slice(2).filter((arg) => arg !== "--skip-install"),
+    "--skip-install",
+  ]
+  const proc = Bun.spawn({
+    cmd,
+    cwd: dir,
+    env: process.env,
+    stdin: "inherit",
+    stdout: "inherit",
+    stderr: "inherit",
+  })
+  process.exit(await proc.exited)
+}
+
+const solidPlugin = (await import("@opentui/solid/bun-plugin")).default
 
 const modelsUrl = process.env.OPENCODE_MODELS_URL || "https://models.dev"
 // Fetch and generate models.dev snapshot
@@ -55,13 +83,6 @@ const migrations = await Promise.all(
   }),
 )
 console.log(`Loaded ${migrations.length} migrations`)
-
-const singleFlag = process.argv.includes("--single")
-const baselineFlag = process.argv.includes("--baseline")
-const skipInstall = process.argv.includes("--skip-install")
-const noClean = process.argv.includes("--no-clean")
-const outdirArg = process.argv.indexOf("--outdir")
-const outputDir = outdirArg >= 0 && process.argv[outdirArg + 1] ? process.argv[outdirArg + 1] : "dist"
 
 const allTargets: {
   os: string
@@ -150,10 +171,6 @@ const targets = singleFlag
 if (!noClean) await $`rm -rf ${outputDir}`
 
 const binaries: Record<string, string> = {}
-if (!skipInstall) {
-  await $`bun install --os="*" --cpu="*" @opentui/core@${pkg.dependencies["@opentui/core"]}`
-  await $`bun install --os="*" --cpu="*" @parcel/watcher@${pkg.dependencies["@parcel/watcher"]}`
-}
 for (const item of targets) {
   const name = [
     pkg.name,
