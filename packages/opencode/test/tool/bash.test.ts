@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test"
+import fs from "fs/promises"
 import os from "os"
 import path from "path"
 import { BashTool } from "../../src/tool/bash"
@@ -109,6 +110,102 @@ describe("tool.bash", () => {
       }),
     )
   })
+
+  test(
+    "serializes concurrent calls sharing one session",
+    async () => {
+      await using a = await tmpdir({ git: true })
+      await using b = await tmpdir({ git: true })
+      const testCtx = {
+        ...ctx,
+        sessionID: SessionID.make("ses_parallel"),
+      }
+      const slow =
+        process.platform === "win32" ? "Start-Sleep -Milliseconds 400; Write-Output first" : "sleep 0.4; echo first"
+      const fast = process.platform === "win32" ? "Write-Output second" : "echo second"
+
+      await isolated(() =>
+        Instance.provide({
+          directory: projectRoot,
+          fn: async () => {
+            const bash = await BashTool.init()
+            const result = await Promise.all([
+              bash.execute(
+                {
+                  command: slow,
+                  workdir: a.path,
+                  description: "Run slow command",
+                },
+                testCtx,
+              ),
+              bash.execute(
+                {
+                  command: fast,
+                  workdir: b.path,
+                  description: "Run fast command",
+                },
+                testCtx,
+              ),
+            ])
+
+            expect(result[0].metadata.exit).toBe(0)
+            expect(result[0].output).toContain("first")
+            expect(result[1].metadata.exit).toBe(0)
+            expect(result[1].output).toContain("second")
+          },
+        }),
+      )
+    },
+    { timeout: 30000 },
+  )
+
+  test(
+    "releases prior workdir after reusing one session on windows",
+    async () => {
+      if (process.platform !== "win32") return
+      await using a = await tmpdir({ git: true })
+      await using b = await tmpdir({ git: true })
+      const testCtx = {
+        ...ctx,
+        sessionID: SessionID.make("ses_reuse_cwd"),
+      }
+
+      await isolated(() =>
+        Instance.provide({
+          directory: projectRoot,
+          fn: async () => {
+            const bash = await BashTool.init()
+            const first = await bash.execute(
+              {
+                command: "Write-Output first",
+                workdir: a.path,
+                description: "Run first command",
+              },
+              testCtx,
+            )
+            expect(first.metadata.exit).toBe(0)
+
+            const second = await bash.execute(
+              {
+                command: "Write-Output second",
+                workdir: b.path,
+                description: "Run second command",
+              },
+              testCtx,
+            )
+            expect(second.metadata.exit).toBe(0)
+
+            await fs.rm(b.path, {
+              recursive: true,
+              force: true,
+              maxRetries: 0,
+            })
+          },
+        }),
+      )
+    },
+    { timeout: 30000 },
+  )
 })
 
 describe("tool.bash permissions", () => {

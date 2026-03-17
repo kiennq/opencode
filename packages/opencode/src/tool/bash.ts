@@ -26,7 +26,6 @@ type SessionShell = {
   cwd: string
   env: string
   process: ChildProcessWithoutNullStreams
-  queue: Promise<void>
 }
 
 function envkey(env: Record<string, string>) {
@@ -47,6 +46,26 @@ const shells = Instance.state(
     state.clear()
   },
 )
+
+const runs = Instance.state(
+  () => new Map<string, Promise<void>>(),
+  async (state) => {
+    state.clear()
+  },
+)
+
+function queue<T>(sessionID: string, fn: () => Promise<T>) {
+  const prev = runs().get(sessionID) ?? Promise.resolve()
+  const next = prev.catch(() => {}).then(fn)
+  const done = next.then(
+    () => {},
+    () => {},
+  )
+  runs().set(sessionID, done)
+  return next.finally(() => {
+    if (runs().get(sessionID) === done) runs().delete(sessionID)
+  })
+}
 
 function quotePosix(input: string) {
   return `'${input.replace(/'/g, `'"'"'`)}'`
@@ -82,14 +101,23 @@ function vars(shell: string, env: Record<string, string>) {
   })
 }
 
-function build(shell: string, command: string, mark: string, env: Record<string, string>) {
+function build(
+  shell: string,
+  cwd: string | undefined,
+  command: string,
+  mark: string,
+  env: Record<string, string>,
+  back?: string,
+) {
   const lines = vars(shell, env)
   if (process.platform === "win32" && Shell.isPowerShellShell(shell)) {
     return [
       ...lines,
       `$ErrorActionPreference = 'Continue'`,
+      ...(cwd ? [`Set-Location ${quotePowerShell(cwd)}`] : []),
       `& { ${command} }`,
       `$__opencode_exit = if ($LASTEXITCODE -is [int]) { $LASTEXITCODE } elseif ($?) { 0 } else { 1 }`,
+      ...(back ? [`Set-Location ${quotePowerShell(back)}`] : []),
       `Write-Output \"${mark}$__opencode_exit\"`,
       "",
     ].join("\n")
@@ -103,10 +131,11 @@ function build(shell: string, command: string, mark: string, env: Record<string,
 async function create(sessionID: string, shell: string, cwd: string, env: Record<string, string>) {
   const current = shells().get(sessionID)
   const key = envkey(env)
+  const root = process.platform === "win32" && Shell.isPowerShellShell(shell) ? Instance.directory : cwd
   if (
     current &&
     current.shell === shell &&
-    current.cwd === cwd &&
+    current.cwd === root &&
     current.env === key &&
     !current.process.killed &&
     current.process.exitCode === null
@@ -137,7 +166,7 @@ async function create(sessionID: string, shell: string, cwd: string, env: Record
       : env
 
   const processRef = spawn(shell, args, {
-    cwd,
+    cwd: root,
     env: spawnEnv,
     stdio: ["pipe", "pipe", "pipe"],
     detached: false,
@@ -146,10 +175,9 @@ async function create(sessionID: string, shell: string, cwd: string, env: Record
 
   const created = {
     shell,
-    cwd,
+    cwd: root,
     env: key,
     process: processRef,
-    queue: Promise.resolve(),
   }
   processRef.once("exit", () => {
     const currentShell = shells().get(sessionID)
@@ -169,11 +197,13 @@ async function run(
   timeout: number,
   abort: AbortSignal,
 ) {
-  const session = await create(sessionID, shell, cwd, env)
-  const next = session.queue.then(async () => {
+  return queue(sessionID, async () => {
+    const session = await create(sessionID, shell, cwd, env)
     const mark = marker()
     const regex = new RegExp(`${escapeRegExp(mark)}(-?\\d+)`)
-    const script = build(shell, command, mark, vars)
+    const target = process.platform === "win32" && Shell.isPowerShellShell(shell) ? cwd : undefined
+    const back = process.platform === "win32" && Shell.isPowerShellShell(shell) ? session.cwd : undefined
+    const script = build(shell, target, command, mark, vars, back)
     let output = ""
     let timedOut = false
     let aborted = false
@@ -251,12 +281,6 @@ async function run(
       aborted: result.aborted,
     }
   })
-
-  session.queue = next.then(
-    () => {},
-    () => {},
-  )
-  return next
 }
 
 export const log = Log.create({ service: "bash-tool" })
