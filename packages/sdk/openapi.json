@@ -331,6 +331,82 @@
         ]
       }
     },
+    "/auth/wellknown": {
+      "get": {
+        "operationId": "auth.wellknown.list",
+        "summary": "List well-known auth URLs",
+        "description": "Get a list of all well-known authentication URLs stored in credentials.",
+        "responses": {
+          "200": {
+            "description": "List of well-known URLs",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.auth.wellknown.list({\n  ...\n})"
+          }
+        ]
+      },
+      "post": {
+        "operationId": "auth.wellknown.refresh",
+        "summary": "Authenticate with well-known URL",
+        "description": "Fetch a well-known config from the given URL, run its auth command, and store the resulting token.",
+        "responses": {
+          "200": {
+            "description": "Successfully authenticated",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "boolean"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BadRequestError"
+                }
+              }
+            }
+          }
+        },
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "url": {
+                    "type": "string"
+                  }
+                },
+                "required": ["url"]
+              }
+            }
+          }
+        },
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.auth.wellknown.refresh({\n  ...\n})"
+          }
+        ]
+      }
+    },
     "/project": {
       "get": {
         "operationId": "project.list",
