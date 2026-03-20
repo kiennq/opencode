@@ -236,8 +236,6 @@ for (const item of targets) {
     }
   }
 
-  await $`rm -rf ./dist/${name}/bin/tui`
-  await Bun.file(`dist/${name}/package.json`).write(
   await $`rm -rf ./${outputDir}/${name}/bin/tui`
   await Bun.file(`${outputDir}/${name}/package.json`).write(
     JSON.stringify(
