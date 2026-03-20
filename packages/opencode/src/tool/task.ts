@@ -25,6 +25,18 @@ const parameters = z.object({
   command: z.string().describe("The command that triggered this task").optional(),
 })
 
+const TEAM_TOOLS = [
+  "team_create",
+  "team_spawn",
+  "team_message",
+  "team_broadcast",
+  "team_tasks",
+  "team_claim",
+  "team_approve_plan",
+  "team_shutdown",
+  "team_cleanup",
+] as const
+
 export const TaskTool = Tool.define("task", async (ctx) => {
   const agents = await Agent.list().then((x) => x.filter((a) => a.mode !== "primary"))
 
@@ -99,6 +111,11 @@ export const TaskTool = Tool.define("task", async (ctx) => {
               action: "allow" as const,
               permission: t,
             })) ?? []),
+            ...TEAM_TOOLS.map((t) => ({
+              permission: t,
+              pattern: "*",
+              action: "deny" as const,
+            })),
           ],
         })
       })
@@ -139,6 +156,7 @@ export const TaskTool = Tool.define("task", async (ctx) => {
           todowrite: false,
           todoread: false,
           ...(hasTaskPermission ? {} : { task: false }),
+          ...Object.fromEntries(TEAM_TOOLS.map((t) => [t, false])),
           ...Object.fromEntries((config.experimental?.primary_tools ?? []).map((t) => [t, false])),
         },
         parts: promptParts,
