@@ -1,5 +1,6 @@
 import path from "path"
 import { Effect, Layer, Record, Result, Schema, ServiceMap } from "effect"
+import z from "zod"
 import { makeRunPromise } from "@/effect/run-service"
 import { zod } from "@/util/effect-zod"
 import { Global } from "../global"

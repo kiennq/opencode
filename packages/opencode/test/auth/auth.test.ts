@@ -1,6 +1,10 @@
 import { test, expect } from "bun:test"
 import { Auth } from "../../src/auth"
 
+test("auth module loads without runtime init errors", async () => {
+  await expect(import("../../src/auth")).resolves.toBeDefined()
+})
+
 test("set normalizes trailing slashes in keys", async () => {
   await Auth.set("https://example.com/", {
     type: "wellknown",
