@@ -243,7 +243,7 @@ export namespace TeamMessaging {
    */
   async function autoWake(sessionID: SessionID, from: string) {
     try {
-      const status = SessionStatus.get(sessionID)
+      const status = await SessionStatus.get(sessionID)
       if (status.type !== "idle") return
       let member:
         | {

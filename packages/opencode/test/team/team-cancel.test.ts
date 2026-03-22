@@ -212,14 +212,14 @@ describe("Team.cancelMember", () => {
         })
 
         // Simulate the member being busy
-        SessionStatus.set(member.id, { type: "busy" })
-        expect(SessionStatus.get(member.id).type).toBe("busy")
+        await SessionStatus.set(member.id, { type: "busy" })
+        expect((await SessionStatus.get(member.id)).type).toBe("busy")
 
         const result = await Team.cancelMember("cancel-test-4", "busy-worker")
         expect(result).toBe(true)
 
         // SessionPrompt.cancel sets status to idle
-        expect(SessionStatus.get(member.id).type).toBe("idle")
+        expect((await SessionStatus.get(member.id)).type).toBe("idle")
 
         await Team.setMemberStatus("cancel-test-4", "busy-worker", "shutdown")
         await Team.cleanup("cancel-test-4")
@@ -286,7 +286,7 @@ describe("Team.cancelMember", () => {
               text: "Please continue your work",
             })
 
-            const woke = await waitFor(() => SessionStatus.get(member.id).type === "busy", 5000)
+            const woke = await waitFor(async () => (await SessionStatus.get(member.id)).type === "busy", 5000)
             expect(woke).toBe(true)
 
             const team = await Team.get("cancel-auto-wake")
@@ -296,7 +296,7 @@ describe("Team.cancelMember", () => {
 
             const result = await Team.cancelMember("cancel-auto-wake", "worker")
             expect(result).toBe(true)
-            expect(SessionStatus.get(member.id).type).toBe("idle")
+            expect((await SessionStatus.get(member.id)).type).toBe("idle")
 
             await Team.setMemberStatus("cancel-auto-wake", "worker", "shutdown")
             await Team.cleanup("cancel-auto-wake")
@@ -368,7 +368,7 @@ describe("Team.cancelMember", () => {
               text: "Please retry your work",
             })
 
-            const woke = await waitFor(() => SessionStatus.get(member.id).type === "busy", 5000)
+            const woke = await waitFor(async () => (await SessionStatus.get(member.id)).type === "busy", 5000)
             expect(woke).toBe(true)
 
             const team = await Team.get("cancel-auto-wake-error")
@@ -378,7 +378,7 @@ describe("Team.cancelMember", () => {
 
             const result = await Team.cancelMember("cancel-auto-wake-error", "worker")
             expect(result).toBe(true)
-            expect(SessionStatus.get(member.id).type).toBe("idle")
+            expect((await SessionStatus.get(member.id)).type).toBe("idle")
 
             await Team.setMemberStatus("cancel-auto-wake-error", "worker", "shutdown")
             await Team.cleanup("cancel-auto-wake-error")
@@ -467,15 +467,15 @@ describe("Team.cancelAllMembers", () => {
         await Team.setMemberStatus("cancel-all-2", "worker-c", "shutdown")
 
         // Simulate busy sessions
-        SessionStatus.set(m1.id, { type: "busy" })
-        SessionStatus.set(m2.id, { type: "busy" })
+        await SessionStatus.set(m1.id, { type: "busy" })
+        await SessionStatus.set(m2.id, { type: "busy" })
 
         const result = await Team.cancelAllMembers("cancel-all-2")
         expect(result).toBe(2)
 
         // Both active members should now be idle
-        expect(SessionStatus.get(m1.id).type).toBe("idle")
-        expect(SessionStatus.get(m2.id).type).toBe("idle")
+        expect((await SessionStatus.get(m1.id)).type).toBe("idle")
+        expect((await SessionStatus.get(m2.id)).type).toBe("idle")
 
         // Cleanup
         await Team.setMemberStatus("cancel-all-2", "worker-a", "shutdown")
@@ -511,12 +511,12 @@ describe("Team.cancelAllMembers", () => {
         })
         await Team.setMemberStatus("cancel-all-3", "interrupted-one", "ready")
 
-        SessionStatus.set(m1.id, { type: "busy" })
+        await SessionStatus.set(m1.id, { type: "busy" })
 
         const result = await Team.cancelAllMembers("cancel-all-3")
         expect(result).toBe(1) // Only the active one
 
-        expect(SessionStatus.get(m1.id).type).toBe("idle")
+        expect((await SessionStatus.get(m1.id)).type).toBe("idle")
 
         await Team.setMemberStatus("cancel-all-3", "active-one", "shutdown")
         await Team.setMemberStatus("cancel-all-3", "interrupted-one", "shutdown")
@@ -552,8 +552,8 @@ describe("Abort propagation: lead abort cancels teammates", () => {
           status: "busy",
         })
 
-        SessionStatus.set(m1.id, { type: "busy" })
-        SessionStatus.set(m2.id, { type: "busy" })
+        await SessionStatus.set(m1.id, { type: "busy" })
+        await SessionStatus.set(m2.id, { type: "busy" })
 
         // Simulate what the session.abort route does:
         // 1. Cancel lead session (SessionPrompt.cancel)
@@ -565,8 +565,8 @@ describe("Abort propagation: lead abort cancels teammates", () => {
         const cancelled = await Team.cancelAllMembers(match!.team.name)
         expect(cancelled).toBe(2)
 
-        expect(SessionStatus.get(m1.id).type).toBe("idle")
-        expect(SessionStatus.get(m2.id).type).toBe("idle")
+        expect((await SessionStatus.get(m1.id)).type).toBe("idle")
+        expect((await SessionStatus.get(m2.id)).type).toBe("idle")
 
         await Team.setMemberStatus("abort-prop-1", "worker-x", "shutdown")
         await Team.setMemberStatus("abort-prop-1", "worker-y", "shutdown")
@@ -614,8 +614,8 @@ describe("Abort propagation: lead abort cancels teammates", () => {
           status: "busy",
         })
 
-        SessionStatus.set(m1.id, { type: "busy" })
-        SessionStatus.set(m2.id, { type: "busy" })
+        await SessionStatus.set(m1.id, { type: "busy" })
+        await SessionStatus.set(m2.id, { type: "busy" })
 
         // When a member session is aborted, findBySession returns "member" role
         const match = await Team.findBySession(m1.id)
@@ -624,7 +624,7 @@ describe("Abort propagation: lead abort cancels teammates", () => {
 
         // The route only propagates for role === "lead", so member-b stays busy
         // (cancelAllMembers is NOT called for member aborts)
-        expect(SessionStatus.get(m2.id).type).toBe("busy")
+        expect((await SessionStatus.get(m2.id)).type).toBe("busy")
 
         await Team.setMemberStatus("abort-prop-2", "member-a", "shutdown")
         await Team.setMemberStatus("abort-prop-2", "member-b", "shutdown")
@@ -660,14 +660,14 @@ describe("Cancel vs finish notification", () => {
           status: "busy",
         })
 
-        SessionStatus.set(m1.id, { type: "busy" })
+        await SessionStatus.set(m1.id, { type: "busy" })
 
         // Cancel one member
         const ok = await Team.cancelMember("cancel-notify-1", "will-cancel")
         expect(ok).toBe(true)
 
         // cancelAllMembers also marks sessions
-        SessionStatus.set(m2.id, { type: "busy" })
+        await SessionStatus.set(m2.id, { type: "busy" })
         const count = await Team.cancelAllMembers("cancel-notify-1")
         // m1 is no longer active (was cancelled above), only m2 gets cancelled
         // But m1 status wasn't updated to non-active in Team storage by cancelMember

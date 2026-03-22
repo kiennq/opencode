@@ -246,7 +246,7 @@ describe("Team recovery e2e: full restart cycle", () => {
         queueResponse("I have resumed my research after the restart.")
 
         // Verify the member session is idle (no loop running)
-        const statusBefore = SessionStatus.get(memberSessionID!)
+        const statusBefore = await SessionStatus.get(memberSessionID!)
         expect(statusBefore.type).toBe("idle")
 
         // Send team_message — this should trigger auto-wake
@@ -265,7 +265,7 @@ describe("Team recovery e2e: full restart cycle", () => {
         expect(woke).toBe(true)
 
         // The session status should return to idle after the loop finishes
-        const done = await waitFor(() => SessionStatus.get(memberSessionID!).type === "idle", 10000)
+        const done = await waitFor(async () => (await SessionStatus.get(memberSessionID!)).type === "idle", 10000)
         expect(done).toBe(true)
       },
     })
