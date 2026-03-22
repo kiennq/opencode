@@ -1,7 +1,7 @@
 import { createStore, produce } from "solid-js/store"
 import { createMemo, createSignal, For, onMount, Show } from "solid-js"
 import { useKeyboard, useRenderer } from "@opentui/solid"
-import type { TextareaRenderable, PasteEvent, KeyBinding } from "@opentui/core"
+import { decodePasteBytes, type TextareaRenderable, type PasteEvent, type KeyBinding } from "@opentui/core"
 import { useKeybind } from "../../context/keybind"
 import { selectedForeground, tint, useTheme } from "../../context/theme"
 import type { QuestionAnswer, QuestionRequest } from "@opencode-ai/sdk/v2"
@@ -49,7 +49,7 @@ function CustomAnswerTextarea(props: {
         keyBindings={props.bindings}
         onPaste={(event: PasteEvent) => {
           event.preventDefault()
-          const text = event.text.replace(/\r\n/g, "\n").replace(/\r/g, "\n").trim()
+          const text = decodePasteBytes(event.bytes).replace(/\r\n/g, "\n").replace(/\r/g, "\n").trim()
           if (!text || !textarea) return
           textarea.insertText(text)
           // Use setTimeout to ensure scroll position is stable after text insertion
