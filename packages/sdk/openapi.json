@@ -7721,6 +7721,47 @@
         ]
       }
     },
+    "/instance/reload": {
+      "post": {
+        "operationId": "instance.reload",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "directory",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "workspace",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "summary": "Reload instance",
+        "description": "Soft reload the current OpenCode instance so runtime config and discovered content are refreshed.",
+        "responses": {
+          "200": {
+            "description": "Instance reloaded",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "boolean"
+                }
+              }
+            }
+          }
+        },
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.instance.reload({\n  ...\n})"
+          }
+        ]
+      }
+    },
     "/path": {
       "get": {
         "operationId": "path.get",
