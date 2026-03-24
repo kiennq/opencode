@@ -1690,6 +1690,52 @@ test("project config overrides remote well-known config", async () => {
   }
 })
 
+test(
+  "deeptest: instance reload picks up changed global config without process restart",
+  async () => {
+    await using globalTmp = await tmpdir()
+    await using tmp = await tmpdir({ git: true })
+    const prev = Global.Path.config
+    ;(Global.Path as { config: string }).config = globalTmp.path
+    Config.global.reset()
+
+    try {
+      await writeConfig(globalTmp.path, {
+        $schema: "https://opencode.ai/config.json",
+        model: "before/reload",
+      })
+
+      await Instance.provide({
+        directory: tmp.path,
+        fn: async () => {
+          expect((await Config.get()).model).toBe("before/reload")
+
+          await writeConfig(globalTmp.path, {
+            $schema: "https://opencode.ai/config.json",
+            model: "after/reload",
+          })
+
+          // deeptest: reload should invalidate the cached global config so the
+          // same runtime can observe updated admin/user settings without restart.
+          // Suggested fix: reset Config.global during instance reload.
+          await Instance.reload({
+            directory: tmp.path,
+            project: Instance.project,
+            worktree: Instance.worktree,
+          })
+
+          expect((await Config.get()).model).toBe("after/reload")
+        },
+      })
+    } finally {
+      await Instance.disposeAll()
+      ;(Global.Path as { config: string }).config = prev
+      Config.global.reset()
+    }
+  },
+  { timeout: 20000 },
+)
+
 test("wellknown URL with trailing slash is normalized", async () => {
   const originalFetch = globalThis.fetch
   let fetchedUrl: string | undefined
