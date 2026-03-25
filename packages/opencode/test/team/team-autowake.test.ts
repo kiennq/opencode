@@ -227,7 +227,12 @@ describe("autoWake: send to busy recipient", () => {
         })
 
         // Set retry state — autoWake should skip (type !== "idle")
-        await SessionStatus.set(member.id, { type: "retry", attempt: 1, message: "rate limited", next: Date.now() + 5000 })
+        await SessionStatus.set(member.id, {
+          type: "retry",
+          attempt: 1,
+          message: "rate limited",
+          next: Date.now() + 5000,
+        })
         expect((await SessionStatus.get(member.id)).type).toBe("retry")
 
         await TeamMessaging.send({
