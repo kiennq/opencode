@@ -30,6 +30,12 @@ Sync upstream carefully, keep intentional fork behavior, and avoid carrying forw
 5. Resolve conflicts by taking upstream structure where it replaces old implementation details, then re-apply any intentional fork behavior that still matters.
 6. Verify the result and push with `--force-with-lease` if the rebase rewrote history.
 
+## Autonomy
+
+- If the user asked to sync or rebase onto `upstream/dev`, proceed without asking for confirmation unless blocked by missing access or an irreversible safety issue outside normal rebase/push workflow.
+- When upstream was force-pushed or the diff looks unexpectedly large, do not stop just because the change is surprising. Measure the actual commit divergence, continue with best-effort conflict resolution, and preserve fork-only behavior unless it has clearly landed upstream.
+- Prefer making the best documented judgment call over pausing for confirmation when the user's standing intent is to complete the sync.
+
 ## Conflict Guidance
 
 - Keep both sides when upstream and fork changes are independent.
