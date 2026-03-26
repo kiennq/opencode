@@ -43,7 +43,6 @@ import {
   TeamShutdownTool,
   TeamCleanupTool,
 } from "./team"
-import { makeRuntime } from "@/effect/run-service"
 
 export namespace ToolRegistry {
   const log = Log.create({ service: "tool.registry" })
