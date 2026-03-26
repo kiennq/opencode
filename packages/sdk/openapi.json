@@ -8919,6 +8919,483 @@
         },
         "required": ["type", "properties"]
       },
+      "Event.team.created": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": "string",
+            "const": "team.created"
+          },
+          "properties": {
+            "type": "object",
+            "properties": {
+              "team": {
+                "type": "object",
+                "properties": {
+                  "name": {
+                    "type": "string",
+                    "pattern": "^[a-z0-9][a-z0-9-]{0,63}$"
+                  },
+                  "leadSessionID": {
+                    "type": "string"
+                  },
+                  "members": {
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "name": {
+                          "type": "string",
+                          "pattern": "^[a-z0-9][a-z0-9-]{0,63}$"
+                        },
+                        "sessionID": {
+                          "type": "string"
+                        },
+                        "agent": {
+                          "type": "string"
+                        },
+                        "status": {
+                          "type": "string",
+                          "enum": ["ready", "busy", "shutdown_requested", "shutdown", "error"]
+                        },
+                        "execution_status": {
+                          "type": "string",
+                          "enum": [
+                            "idle",
+                            "starting",
+                            "running",
+                            "cancel_requested",
+                            "cancelling",
+                            "cancelled",
+                            "completing",
+                            "completed",
+                            "failed",
+                            "timed_out"
+                          ]
+                        },
+                        "prompt": {
+                          "type": "string"
+                        },
+                        "model": {
+                          "type": "string"
+                        },
+                        "planApproval": {
+                          "type": "string",
+                          "enum": ["none", "pending", "approved", "rejected"]
+                        }
+                      },
+                      "required": ["name", "sessionID", "agent", "status"]
+                    }
+                  },
+                  "created": {
+                    "type": "number"
+                  },
+                  "delegate": {
+                    "type": "boolean"
+                  },
+                  "delegate_permissions": {
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "permission": {
+                          "type": "string"
+                        },
+                        "pattern": {
+                          "type": "string"
+                        },
+                        "action": {
+                          "type": "string",
+                          "enum": ["allow", "deny", "ask"]
+                        }
+                      },
+                      "required": ["permission", "pattern", "action"]
+                    }
+                  }
+                },
+                "required": ["name", "leadSessionID", "members", "created"]
+              }
+            },
+            "required": ["team"]
+          }
+        },
+        "required": ["type", "properties"]
+      },
+      "Event.team.member.spawned": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": "string",
+            "const": "team.member.spawned"
+          },
+          "properties": {
+            "type": "object",
+            "properties": {
+              "teamName": {
+                "type": "string"
+              },
+              "member": {
+                "type": "object",
+                "properties": {
+                  "name": {
+                    "type": "string",
+                    "pattern": "^[a-z0-9][a-z0-9-]{0,63}$"
+                  },
+                  "sessionID": {
+                    "type": "string"
+                  },
+                  "agent": {
+                    "type": "string"
+                  },
+                  "status": {
+                    "type": "string",
+                    "enum": ["ready", "busy", "shutdown_requested", "shutdown", "error"]
+                  },
+                  "execution_status": {
+                    "type": "string",
+                    "enum": [
+                      "idle",
+                      "starting",
+                      "running",
+                      "cancel_requested",
+                      "cancelling",
+                      "cancelled",
+                      "completing",
+                      "completed",
+                      "failed",
+                      "timed_out"
+                    ]
+                  },
+                  "prompt": {
+                    "type": "string"
+                  },
+                  "model": {
+                    "type": "string"
+                  },
+                  "planApproval": {
+                    "type": "string",
+                    "enum": ["none", "pending", "approved", "rejected"]
+                  }
+                },
+                "required": ["name", "sessionID", "agent", "status"]
+              }
+            },
+            "required": ["teamName", "member"]
+          }
+        },
+        "required": ["type", "properties"]
+      },
+      "Event.team.member.status": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": "string",
+            "const": "team.member.status"
+          },
+          "properties": {
+            "type": "object",
+            "properties": {
+              "teamName": {
+                "type": "string"
+              },
+              "memberName": {
+                "type": "string"
+              },
+              "status": {
+                "type": "string",
+                "enum": ["ready", "busy", "shutdown_requested", "shutdown", "error"]
+              }
+            },
+            "required": ["teamName", "memberName", "status"]
+          }
+        },
+        "required": ["type", "properties"]
+      },
+      "Event.team.member.execution": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": "string",
+            "const": "team.member.execution"
+          },
+          "properties": {
+            "type": "object",
+            "properties": {
+              "teamName": {
+                "type": "string"
+              },
+              "memberName": {
+                "type": "string"
+              },
+              "status": {
+                "type": "string",
+                "enum": [
+                  "idle",
+                  "starting",
+                  "running",
+                  "cancel_requested",
+                  "cancelling",
+                  "cancelled",
+                  "completing",
+                  "completed",
+                  "failed",
+                  "timed_out"
+                ]
+              }
+            },
+            "required": ["teamName", "memberName", "status"]
+          }
+        },
+        "required": ["type", "properties"]
+      },
+      "Event.team.message": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": "string",
+            "const": "team.message"
+          },
+          "properties": {
+            "type": "object",
+            "properties": {
+              "teamName": {
+                "type": "string"
+              },
+              "from": {
+                "type": "string"
+              },
+              "to": {
+                "type": "string"
+              },
+              "text": {
+                "type": "string"
+              }
+            },
+            "required": ["teamName", "from", "to", "text"]
+          }
+        },
+        "required": ["type", "properties"]
+      },
+      "Event.team.broadcast": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": "string",
+            "const": "team.broadcast"
+          },
+          "properties": {
+            "type": "object",
+            "properties": {
+              "teamName": {
+                "type": "string"
+              },
+              "from": {
+                "type": "string"
+              },
+              "text": {
+                "type": "string"
+              }
+            },
+            "required": ["teamName", "from", "text"]
+          }
+        },
+        "required": ["type", "properties"]
+      },
+      "Event.team.task.updated": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": "string",
+            "const": "team.task.updated"
+          },
+          "properties": {
+            "type": "object",
+            "properties": {
+              "teamName": {
+                "type": "string"
+              },
+              "tasks": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "string"
+                    },
+                    "content": {
+                      "type": "string"
+                    },
+                    "status": {
+                      "type": "string",
+                      "enum": ["pending", "in_progress", "completed", "cancelled", "blocked"]
+                    },
+                    "priority": {
+                      "type": "string",
+                      "enum": ["high", "medium", "low"]
+                    },
+                    "assignee": {
+                      "type": "string"
+                    },
+                    "depends_on": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    }
+                  },
+                  "required": ["id", "content", "status", "priority"]
+                }
+              }
+            },
+            "required": ["teamName", "tasks"]
+          }
+        },
+        "required": ["type", "properties"]
+      },
+      "Event.team.task.claimed": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": "string",
+            "const": "team.task.claimed"
+          },
+          "properties": {
+            "type": "object",
+            "properties": {
+              "teamName": {
+                "type": "string"
+              },
+              "taskId": {
+                "type": "string"
+              },
+              "memberName": {
+                "type": "string"
+              }
+            },
+            "required": ["teamName", "taskId", "memberName"]
+          }
+        },
+        "required": ["type", "properties"]
+      },
+      "Event.team.shutdown.request": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": "string",
+            "const": "team.shutdown.request"
+          },
+          "properties": {
+            "type": "object",
+            "properties": {
+              "teamName": {
+                "type": "string"
+              },
+              "memberName": {
+                "type": "string"
+              }
+            },
+            "required": ["teamName", "memberName"]
+          }
+        },
+        "required": ["type", "properties"]
+      },
+      "Event.team.plan.approval": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": "string",
+            "const": "team.plan.approval"
+          },
+          "properties": {
+            "type": "object",
+            "properties": {
+              "teamName": {
+                "type": "string"
+              },
+              "memberName": {
+                "type": "string"
+              },
+              "approved": {
+                "type": "boolean"
+              },
+              "feedback": {
+                "type": "string"
+              }
+            },
+            "required": ["teamName", "memberName", "approved"]
+          }
+        },
+        "required": ["type", "properties"]
+      },
+      "Event.team.message.read": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": "string",
+            "const": "team.message.read"
+          },
+          "properties": {
+            "type": "object",
+            "properties": {
+              "teamName": {
+                "type": "string"
+              },
+              "agentName": {
+                "type": "string"
+              },
+              "count": {
+                "type": "number"
+              }
+            },
+            "required": ["teamName", "agentName", "count"]
+          }
+        },
+        "required": ["type", "properties"]
+      },
+      "Event.team.cleaned": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": "string",
+            "const": "team.cleaned"
+          },
+          "properties": {
+            "type": "object",
+            "properties": {
+              "teamName": {
+                "type": "string"
+              },
+              "leadSessionID": {
+                "type": "string"
+              },
+              "delegate": {
+                "type": "boolean"
+              },
+              "delegate_permissions": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "permission": {
+                      "type": "string"
+                    },
+                    "pattern": {
+                      "type": "string"
+                    },
+                    "action": {
+                      "type": "string",
+                      "enum": ["allow", "deny", "ask"]
+                    }
+                  },
+                  "required": ["permission", "pattern", "action"]
+                }
+              }
+            },
+            "required": ["teamName", "leadSessionID", "delegate"]
+          }
+        },
+        "required": ["type", "properties"]
+      },
       "Event.tui.prompt.append": {
         "type": "object",
         "properties": {
@@ -9416,483 +9893,6 @@
               }
             },
             "required": ["message"]
-          }
-        },
-        "required": ["type", "properties"]
-      },
-      "Event.team.created": {
-        "type": "object",
-        "properties": {
-          "type": {
-            "type": "string",
-            "const": "team.created"
-          },
-          "properties": {
-            "type": "object",
-            "properties": {
-              "team": {
-                "type": "object",
-                "properties": {
-                  "name": {
-                    "type": "string",
-                    "pattern": "^[a-z0-9][a-z0-9-]{0,63}$"
-                  },
-                  "leadSessionID": {
-                    "type": "string"
-                  },
-                  "members": {
-                    "type": "array",
-                    "items": {
-                      "type": "object",
-                      "properties": {
-                        "name": {
-                          "type": "string",
-                          "pattern": "^[a-z0-9][a-z0-9-]{0,63}$"
-                        },
-                        "sessionID": {
-                          "type": "string"
-                        },
-                        "agent": {
-                          "type": "string"
-                        },
-                        "status": {
-                          "type": "string",
-                          "enum": ["ready", "busy", "shutdown_requested", "shutdown", "error"]
-                        },
-                        "execution_status": {
-                          "type": "string",
-                          "enum": [
-                            "idle",
-                            "starting",
-                            "running",
-                            "cancel_requested",
-                            "cancelling",
-                            "cancelled",
-                            "completing",
-                            "completed",
-                            "failed",
-                            "timed_out"
-                          ]
-                        },
-                        "prompt": {
-                          "type": "string"
-                        },
-                        "model": {
-                          "type": "string"
-                        },
-                        "planApproval": {
-                          "type": "string",
-                          "enum": ["none", "pending", "approved", "rejected"]
-                        }
-                      },
-                      "required": ["name", "sessionID", "agent", "status"]
-                    }
-                  },
-                  "created": {
-                    "type": "number"
-                  },
-                  "delegate": {
-                    "type": "boolean"
-                  },
-                  "delegate_permissions": {
-                    "type": "array",
-                    "items": {
-                      "type": "object",
-                      "properties": {
-                        "permission": {
-                          "type": "string"
-                        },
-                        "pattern": {
-                          "type": "string"
-                        },
-                        "action": {
-                          "type": "string",
-                          "enum": ["allow", "deny", "ask"]
-                        }
-                      },
-                      "required": ["permission", "pattern", "action"]
-                    }
-                  }
-                },
-                "required": ["name", "leadSessionID", "members", "created"]
-              }
-            },
-            "required": ["team"]
-          }
-        },
-        "required": ["type", "properties"]
-      },
-      "Event.team.member.spawned": {
-        "type": "object",
-        "properties": {
-          "type": {
-            "type": "string",
-            "const": "team.member.spawned"
-          },
-          "properties": {
-            "type": "object",
-            "properties": {
-              "teamName": {
-                "type": "string"
-              },
-              "member": {
-                "type": "object",
-                "properties": {
-                  "name": {
-                    "type": "string",
-                    "pattern": "^[a-z0-9][a-z0-9-]{0,63}$"
-                  },
-                  "sessionID": {
-                    "type": "string"
-                  },
-                  "agent": {
-                    "type": "string"
-                  },
-                  "status": {
-                    "type": "string",
-                    "enum": ["ready", "busy", "shutdown_requested", "shutdown", "error"]
-                  },
-                  "execution_status": {
-                    "type": "string",
-                    "enum": [
-                      "idle",
-                      "starting",
-                      "running",
-                      "cancel_requested",
-                      "cancelling",
-                      "cancelled",
-                      "completing",
-                      "completed",
-                      "failed",
-                      "timed_out"
-                    ]
-                  },
-                  "prompt": {
-                    "type": "string"
-                  },
-                  "model": {
-                    "type": "string"
-                  },
-                  "planApproval": {
-                    "type": "string",
-                    "enum": ["none", "pending", "approved", "rejected"]
-                  }
-                },
-                "required": ["name", "sessionID", "agent", "status"]
-              }
-            },
-            "required": ["teamName", "member"]
-          }
-        },
-        "required": ["type", "properties"]
-      },
-      "Event.team.member.status": {
-        "type": "object",
-        "properties": {
-          "type": {
-            "type": "string",
-            "const": "team.member.status"
-          },
-          "properties": {
-            "type": "object",
-            "properties": {
-              "teamName": {
-                "type": "string"
-              },
-              "memberName": {
-                "type": "string"
-              },
-              "status": {
-                "type": "string",
-                "enum": ["ready", "busy", "shutdown_requested", "shutdown", "error"]
-              }
-            },
-            "required": ["teamName", "memberName", "status"]
-          }
-        },
-        "required": ["type", "properties"]
-      },
-      "Event.team.member.execution": {
-        "type": "object",
-        "properties": {
-          "type": {
-            "type": "string",
-            "const": "team.member.execution"
-          },
-          "properties": {
-            "type": "object",
-            "properties": {
-              "teamName": {
-                "type": "string"
-              },
-              "memberName": {
-                "type": "string"
-              },
-              "status": {
-                "type": "string",
-                "enum": [
-                  "idle",
-                  "starting",
-                  "running",
-                  "cancel_requested",
-                  "cancelling",
-                  "cancelled",
-                  "completing",
-                  "completed",
-                  "failed",
-                  "timed_out"
-                ]
-              }
-            },
-            "required": ["teamName", "memberName", "status"]
-          }
-        },
-        "required": ["type", "properties"]
-      },
-      "Event.team.message": {
-        "type": "object",
-        "properties": {
-          "type": {
-            "type": "string",
-            "const": "team.message"
-          },
-          "properties": {
-            "type": "object",
-            "properties": {
-              "teamName": {
-                "type": "string"
-              },
-              "from": {
-                "type": "string"
-              },
-              "to": {
-                "type": "string"
-              },
-              "text": {
-                "type": "string"
-              }
-            },
-            "required": ["teamName", "from", "to", "text"]
-          }
-        },
-        "required": ["type", "properties"]
-      },
-      "Event.team.broadcast": {
-        "type": "object",
-        "properties": {
-          "type": {
-            "type": "string",
-            "const": "team.broadcast"
-          },
-          "properties": {
-            "type": "object",
-            "properties": {
-              "teamName": {
-                "type": "string"
-              },
-              "from": {
-                "type": "string"
-              },
-              "text": {
-                "type": "string"
-              }
-            },
-            "required": ["teamName", "from", "text"]
-          }
-        },
-        "required": ["type", "properties"]
-      },
-      "Event.team.task.updated": {
-        "type": "object",
-        "properties": {
-          "type": {
-            "type": "string",
-            "const": "team.task.updated"
-          },
-          "properties": {
-            "type": "object",
-            "properties": {
-              "teamName": {
-                "type": "string"
-              },
-              "tasks": {
-                "type": "array",
-                "items": {
-                  "type": "object",
-                  "properties": {
-                    "id": {
-                      "type": "string"
-                    },
-                    "content": {
-                      "type": "string"
-                    },
-                    "status": {
-                      "type": "string",
-                      "enum": ["pending", "in_progress", "completed", "cancelled", "blocked"]
-                    },
-                    "priority": {
-                      "type": "string",
-                      "enum": ["high", "medium", "low"]
-                    },
-                    "assignee": {
-                      "type": "string"
-                    },
-                    "depends_on": {
-                      "type": "array",
-                      "items": {
-                        "type": "string"
-                      }
-                    }
-                  },
-                  "required": ["id", "content", "status", "priority"]
-                }
-              }
-            },
-            "required": ["teamName", "tasks"]
-          }
-        },
-        "required": ["type", "properties"]
-      },
-      "Event.team.task.claimed": {
-        "type": "object",
-        "properties": {
-          "type": {
-            "type": "string",
-            "const": "team.task.claimed"
-          },
-          "properties": {
-            "type": "object",
-            "properties": {
-              "teamName": {
-                "type": "string"
-              },
-              "taskId": {
-                "type": "string"
-              },
-              "memberName": {
-                "type": "string"
-              }
-            },
-            "required": ["teamName", "taskId", "memberName"]
-          }
-        },
-        "required": ["type", "properties"]
-      },
-      "Event.team.shutdown.request": {
-        "type": "object",
-        "properties": {
-          "type": {
-            "type": "string",
-            "const": "team.shutdown.request"
-          },
-          "properties": {
-            "type": "object",
-            "properties": {
-              "teamName": {
-                "type": "string"
-              },
-              "memberName": {
-                "type": "string"
-              }
-            },
-            "required": ["teamName", "memberName"]
-          }
-        },
-        "required": ["type", "properties"]
-      },
-      "Event.team.plan.approval": {
-        "type": "object",
-        "properties": {
-          "type": {
-            "type": "string",
-            "const": "team.plan.approval"
-          },
-          "properties": {
-            "type": "object",
-            "properties": {
-              "teamName": {
-                "type": "string"
-              },
-              "memberName": {
-                "type": "string"
-              },
-              "approved": {
-                "type": "boolean"
-              },
-              "feedback": {
-                "type": "string"
-              }
-            },
-            "required": ["teamName", "memberName", "approved"]
-          }
-        },
-        "required": ["type", "properties"]
-      },
-      "Event.team.message.read": {
-        "type": "object",
-        "properties": {
-          "type": {
-            "type": "string",
-            "const": "team.message.read"
-          },
-          "properties": {
-            "type": "object",
-            "properties": {
-              "teamName": {
-                "type": "string"
-              },
-              "agentName": {
-                "type": "string"
-              },
-              "count": {
-                "type": "number"
-              }
-            },
-            "required": ["teamName", "agentName", "count"]
-          }
-        },
-        "required": ["type", "properties"]
-      },
-      "Event.team.cleaned": {
-        "type": "object",
-        "properties": {
-          "type": {
-            "type": "string",
-            "const": "team.cleaned"
-          },
-          "properties": {
-            "type": "object",
-            "properties": {
-              "teamName": {
-                "type": "string"
-              },
-              "leadSessionID": {
-                "type": "string"
-              },
-              "delegate": {
-                "type": "boolean"
-              },
-              "delegate_permissions": {
-                "type": "array",
-                "items": {
-                  "type": "object",
-                  "properties": {
-                    "permission": {
-                      "type": "string"
-                    },
-                    "pattern": {
-                      "type": "string"
-                    },
-                    "action": {
-                      "type": "string",
-                      "enum": ["allow", "deny", "ask"]
-                    }
-                  },
-                  "required": ["permission", "pattern", "action"]
-                }
-              }
-            },
-            "required": ["teamName", "leadSessionID", "delegate"]
           }
         },
         "required": ["type", "properties"]
@@ -11698,42 +11698,6 @@
             "$ref": "#/components/schemas/Event.todo.updated"
           },
           {
-            "$ref": "#/components/schemas/Event.tui.prompt.append"
-          },
-          {
-            "$ref": "#/components/schemas/Event.tui.command.execute"
-          },
-          {
-            "$ref": "#/components/schemas/Event.tui.toast.show"
-          },
-          {
-            "$ref": "#/components/schemas/Event.tui.session.select"
-          },
-          {
-            "$ref": "#/components/schemas/Event.mcp.tools.changed"
-          },
-          {
-            "$ref": "#/components/schemas/Event.mcp.browser.open.failed"
-          },
-          {
-            "$ref": "#/components/schemas/Event.command.executed"
-          },
-          {
-            "$ref": "#/components/schemas/Event.session.diff"
-          },
-          {
-            "$ref": "#/components/schemas/Event.session.error"
-          },
-          {
-            "$ref": "#/components/schemas/Event.vcs.branch.updated"
-          },
-          {
-            "$ref": "#/components/schemas/Event.workspace.ready"
-          },
-          {
-            "$ref": "#/components/schemas/Event.workspace.failed"
-          },
-          {
             "$ref": "#/components/schemas/Event.team.created"
           },
           {
@@ -11768,6 +11732,42 @@
           },
           {
             "$ref": "#/components/schemas/Event.team.cleaned"
+          },
+          {
+            "$ref": "#/components/schemas/Event.tui.prompt.append"
+          },
+          {
+            "$ref": "#/components/schemas/Event.tui.command.execute"
+          },
+          {
+            "$ref": "#/components/schemas/Event.tui.toast.show"
+          },
+          {
+            "$ref": "#/components/schemas/Event.tui.session.select"
+          },
+          {
+            "$ref": "#/components/schemas/Event.mcp.tools.changed"
+          },
+          {
+            "$ref": "#/components/schemas/Event.mcp.browser.open.failed"
+          },
+          {
+            "$ref": "#/components/schemas/Event.command.executed"
+          },
+          {
+            "$ref": "#/components/schemas/Event.session.diff"
+          },
+          {
+            "$ref": "#/components/schemas/Event.session.error"
+          },
+          {
+            "$ref": "#/components/schemas/Event.vcs.branch.updated"
+          },
+          {
+            "$ref": "#/components/schemas/Event.workspace.ready"
+          },
+          {
+            "$ref": "#/components/schemas/Event.workspace.failed"
           },
           {
             "$ref": "#/components/schemas/Event.pty.created"
