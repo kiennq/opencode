@@ -439,7 +439,6 @@ export namespace Team {
   }): Promise<{ sessionID: string; label: string }> {
     const { Session } = await import("../session")
     const { SessionPrompt } = await import("../session/prompt")
-    const { Instance: Inst } = await import("../project/instance")
 
     const label = `${input.model.providerID}/${input.model.modelID}`
 
@@ -460,9 +459,8 @@ export namespace Team {
       )
     }
 
-    const session = await Session.createNext({
+    const session = await Session.create({
       parentID: input.parentSessionID,
-      directory: Inst.directory,
       title: `${input.name} (@${input.agent.name} teammate, ${label})${input.planApproval ? " [plan mode]" : ""}`,
       permission: rules,
     })
