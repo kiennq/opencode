@@ -42,6 +42,30 @@ async function resolveRelative(instruction: string): Promise<string[]> {
   return Filesystem.globUp(instruction, Flag.OPENCODE_CONFIG_DIR, Flag.OPENCODE_CONFIG_DIR).catch(() => [])
 }
 
+function globbed(part: string) {
+  return /[*?[\]{}()!+@]/.test(part)
+}
+
+async function resolveAbsolute(instruction: string) {
+  const root = path.parse(instruction).root
+  const rest = instruction.slice(root.length).split(path.sep)
+  const idx = rest.findIndex(globbed)
+  if (idx === -1) {
+    return Glob.scan(path.basename(instruction), {
+      cwd: path.dirname(instruction),
+      absolute: true,
+      include: "file",
+    }).catch(() => [])
+  }
+  const cwd = path.join(root, ...rest.slice(0, idx))
+  const pattern = rest.slice(idx).join("/")
+  return Glob.scan(pattern, {
+    cwd,
+    absolute: true,
+    include: "file",
+  }).catch(() => [])
+}
+
 export namespace InstructionPrompt {
   const state = Instance.state(() => {
     return {
@@ -99,11 +123,7 @@ export namespace InstructionPrompt {
           instruction = path.join(os.homedir(), instruction.slice(2))
         }
         const matches = path.isAbsolute(instruction)
-          ? await Glob.scan(path.basename(instruction), {
-              cwd: path.dirname(instruction),
-              absolute: true,
-              include: "file",
-            }).catch(() => [])
+          ? await resolveAbsolute(instruction)
           : await resolveRelative(instruction)
         matches.forEach((p) => {
           paths.add(path.resolve(p))
