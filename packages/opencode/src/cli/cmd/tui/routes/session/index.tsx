@@ -19,7 +19,7 @@ import { useRoute, useRouteData } from "@tui/context/route"
 import { useSync } from "@tui/context/sync"
 import { SplitBorder } from "@tui/component/border"
 import { Spinner } from "@tui/component/spinner"
-import { selectedForeground, useTheme } from "@tui/context/theme"
+import { useTheme } from "@tui/context/theme"
 import {
   BoxRenderable,
   ScrollBoxRenderable,
@@ -61,6 +61,7 @@ import { DialogConfirm } from "@tui/ui/dialog-confirm"
 import { DialogTimeline } from "./dialog-timeline"
 import { DialogForkFromTimeline } from "./dialog-fork-from-timeline"
 import { DialogSessionRename } from "../../component/dialog-session-rename"
+import { Footer } from "./footer"
 import { Sidebar } from "./sidebar"
 import { SubagentFooter } from "./subagent-footer.tsx"
 import { Flag } from "@/flag/flag"
@@ -177,15 +178,26 @@ export function Session() {
   const [animationsEnabled, setAnimationsEnabled] = kv.signal("animations_enabled", true)
   const [showGenericToolOutput, setShowGenericToolOutput] = kv.signal("generic_tool_output_visibility", false)
 
+  // Teammate selection state for Shift+Up/Down inline messaging
+  const [selectedTeammate, setSelectedTeammate] = createSignal<string | null>(null)
+  const teamInfo = createMemo(() => sync.data.team[route.sessionID])
+  const teamMembers = createMemo(() => {
+    const info = teamInfo()
+    if (!info?.members?.length) return []
+    return info.members.filter((m: any) => m.sessionID && m.status !== "shutdown")
+  })
+
   const wide = createMemo(() => dimensions().width > 120)
   const sidebarVisible = createMemo(() => {
-    if (session()?.parentID) return false
+    // Hide sidebar for task subagents (child sessions) but not for teammates
+    if (session()?.parentID && !sync.data.team[route.sessionID]) return false
     if (sidebarOpen()) return true
     if (sidebar() === "auto" && wide()) return true
     return false
   })
   const showTimestamps = createMemo(() => timestamps() === "show")
-  const contentWidth = createMemo(() => dimensions().width - (sidebarVisible() ? 42 : 0) - 4)
+  const sidebarWidth = createMemo(() => kv.get("sidebar_width", 42) as number)
+  const contentWidth = createMemo(() => dimensions().width - (sidebarVisible() ? sidebarWidth() : 0) - 4)
 
   const scrollAcceleration = createMemo(() => {
     const tui = tuiConfig
@@ -282,6 +294,60 @@ export function Session() {
     if (!session()?.parentID) return
     if (keybind.match("app_exit", evt)) {
       exit()
+    }
+  })
+
+  // Escape in a teammate child session: cancel that teammate's prompt loop
+  useKeyboard((evt) => {
+    if (evt.name !== "escape") return
+    const s = session()
+    if (!s?.parentID) return
+    // Only for teammate sessions (not subagent views)
+    const team = sync.data.team[route.sessionID]
+    if (!team) return
+    const status = sync.data.session_status?.[route.sessionID]
+    if (status?.type !== "busy") return
+    evt.preventDefault()
+    sdk.client.session.abort({ sessionID: route.sessionID }).catch(() => {})
+  })
+
+  // Shift+Up/Down: Cycle through teammates for inline messaging (only when team is active)
+  useKeyboard((evt) => {
+    // Escape deselects the current teammate
+    if (evt.name === "escape" && selectedTeammate()) {
+      evt.preventDefault()
+      setSelectedTeammate(null)
+      return
+    }
+
+    if (!evt.shift) return
+    if (evt.name !== "up" && evt.name !== "down") return
+    const members = teamMembers()
+    if (members.length === 0) return
+
+    evt.preventDefault()
+
+    const current = selectedTeammate()
+    if (current === null) {
+      // Select first/last teammate
+      setSelectedTeammate(evt.name === "down" ? members[0].name : members[members.length - 1].name)
+    } else {
+      const idx = members.findIndex((m: any) => m.name === current)
+      if (evt.name === "down") {
+        // Next teammate or deselect (wrap to null)
+        if (idx >= members.length - 1) {
+          setSelectedTeammate(null) // Deselect — back to normal prompt
+        } else {
+          setSelectedTeammate(members[idx + 1].name)
+        }
+      } else {
+        // Previous teammate or deselect
+        if (idx <= 0) {
+          setSelectedTeammate(null)
+        } else {
+          setSelectedTeammate(members[idx - 1].name)
+        }
+      }
     }
   })
 
@@ -951,7 +1017,6 @@ export function Session() {
       category: "Session",
       enabled: !!session()?.parentID,
       hidden: true,
-      enabled: !!session()?.parentID,
       onSelect: childSessionHandler((dialog) => {
         const parentID = session()?.parentID
         if (parentID) {
@@ -986,6 +1051,121 @@ export function Session() {
         moveChild(-1)
         dialog.clear()
       }),
+    },
+    {
+      title: "Next teammate",
+      value: "team.next",
+      keybind: "team_next" as any,
+      category: "Team",
+      hidden: true,
+      enabled: !!sync.data.team[route.sessionID],
+      onSelect: (dialog) => {
+        const teamInfo = sync.data.team[route.sessionID]
+        if (!teamInfo?.members?.length) {
+          dialog.clear()
+          return
+        }
+        const members = teamInfo.members.filter((m: any) => m.sessionID)
+        if (members.length === 0) {
+          dialog.clear()
+          return
+        }
+        // Find current position (lead or member)
+        const currentIdx = members.findIndex((m: any) => m.sessionID === route.sessionID)
+        if (currentIdx >= 0) {
+          // Currently viewing a member — go to next member or wrap to lead
+          const nextIdx = (currentIdx + 1) % members.length
+          navigate({ type: "session", sessionID: members[nextIdx].sessionID })
+        } else {
+          // Currently viewing lead — go to first member
+          navigate({ type: "session", sessionID: members[0].sessionID })
+        }
+        dialog.clear()
+      },
+    },
+    {
+      title: "Previous teammate",
+      value: "team.previous",
+      keybind: "team_previous" as any,
+      category: "Team",
+      hidden: true,
+      enabled: !!sync.data.team[route.sessionID],
+      onSelect: (dialog) => {
+        const teamInfo = sync.data.team[route.sessionID]
+        if (!teamInfo?.members?.length) {
+          dialog.clear()
+          return
+        }
+        const members = teamInfo.members.filter((m: any) => m.sessionID)
+        if (members.length === 0) {
+          dialog.clear()
+          return
+        }
+        const currentIdx = members.findIndex((m: any) => m.sessionID === route.sessionID)
+        if (currentIdx >= 0) {
+          // Currently viewing a member — go to previous member or wrap to last
+          const prevIdx = (currentIdx - 1 + members.length) % members.length
+          navigate({ type: "session", sessionID: members[prevIdx].sessionID })
+        } else {
+          // Currently viewing lead — go to last member
+          navigate({ type: "session", sessionID: members[members.length - 1].sessionID })
+        }
+        dialog.clear()
+      },
+    },
+    {
+      title: "Go to team lead",
+      value: "team.lead",
+      category: "Team",
+      hidden: true,
+      enabled: !!sync.data.team[route.sessionID],
+      onSelect: (dialog) => {
+        const teamInfo = sync.data.team[route.sessionID]
+        if (!teamInfo) {
+          dialog.clear()
+          return
+        }
+        // Find the lead session
+        for (const [sid, entry] of Object.entries(sync.data.team)) {
+          const e = entry as any
+          if (e?.teamName === teamInfo.teamName && e?.role === "lead") {
+            navigate({ type: "session", sessionID: sid })
+            dialog.clear()
+            return
+          }
+        }
+        dialog.clear()
+      },
+    },
+    {
+      title: "Toggle delegate mode",
+      value: "team.delegate.toggle",
+      keybind: "team_delegate" as any,
+      slash: { name: "delegate" },
+      category: "Team",
+      enabled: !!sync.data.team[route.sessionID] && sync.data.team[route.sessionID]?.role === "lead",
+      onSelect: async (dialog) => {
+        const info = sync.data.team[route.sessionID]
+        if (!info || info.role !== "lead") {
+          dialog.clear()
+          return
+        }
+        const isDelegate = info.delegate
+        try {
+          await fetch(`${sdk.url}/team/${info.teamName}/delegate`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ enabled: !isDelegate }),
+          })
+          toast.show({
+            message: !isDelegate ? "Delegate mode enabled — coordination only" : "Delegate mode disabled",
+            variant: "info",
+          })
+        } catch {
+          toast.show({ message: "Failed to toggle delegate mode", variant: "error" })
+        }
+        dialog.clear()
+      },
     },
   ])
 
@@ -1059,148 +1239,163 @@ export function Session() {
       <box flexDirection="row">
         <box flexGrow={1} paddingBottom={1} paddingLeft={2} paddingRight={2} gap={1}>
           <Show when={session()}>
-            <scrollbox
-              ref={(r) => (scroll = r)}
-              viewportOptions={{
-                paddingRight: showScrollbar() ? 1 : 0,
-              }}
-              verticalScrollbarOptions={{
-                paddingLeft: 1,
-                visible: showScrollbar(),
-                trackOptions: {
-                  backgroundColor: theme.backgroundElement,
-                  foregroundColor: theme.border,
-                },
-              }}
-              stickyScroll={true}
-              stickyStart="bottom"
-              flexGrow={1}
-              scrollAcceleration={scrollAcceleration()}
-            >
-              <box height={1} />
-              <For each={messages()}>
-                {(message, index) => (
-                  <Switch>
-                    <Match when={message.id === revert()?.messageID}>
-                      {(function () {
-                        const command = useCommandDialog()
-                        const [hover, setHover] = createSignal(false)
-                        const dialog = useDialog()
+            <>
+              <scrollbox
+                ref={(r) => (scroll = r)}
+                viewportOptions={{
+                  paddingRight: showScrollbar() ? 1 : 0,
+                }}
+                verticalScrollbarOptions={{
+                  paddingLeft: 1,
+                  visible: showScrollbar(),
+                  trackOptions: {
+                    backgroundColor: theme.backgroundElement,
+                    foregroundColor: theme.border,
+                  },
+                }}
+                stickyScroll={true}
+                stickyStart="bottom"
+                flexGrow={1}
+                scrollAcceleration={scrollAcceleration()}
+              >
+                <box height={1} />
+                <For each={messages()}>
+                  {(message, index) => (
+                    <Switch>
+                      <Match when={message.id === revert()?.messageID}>
+                        {(function () {
+                          const command = useCommandDialog()
+                          const [hover, setHover] = createSignal(false)
+                          const dialog = useDialog()
 
-                        const handleUnrevert = async () => {
-                          const confirmed = await DialogConfirm.show(
-                            dialog,
-                            "Confirm Redo",
-                            "Are you sure you want to restore the reverted messages?",
-                          )
-                          if (confirmed) {
-                            command.trigger("session.redo")
+                          const handleUnrevert = async () => {
+                            const confirmed = await DialogConfirm.show(
+                              dialog,
+                              "Confirm Redo",
+                              "Are you sure you want to restore the reverted messages?",
+                            )
+                            if (confirmed) {
+                              command.trigger("session.redo")
+                            }
                           }
-                        }
 
-                        return (
-                          <box
-                            onMouseOver={() => setHover(true)}
-                            onMouseOut={() => setHover(false)}
-                            onMouseUp={handleUnrevert}
-                            marginTop={1}
-                            flexShrink={0}
-                            border={["left"]}
-                            customBorderChars={SplitBorder.customBorderChars}
-                            borderColor={theme.backgroundPanel}
-                          >
+                          return (
                             <box
-                              paddingTop={1}
-                              paddingBottom={1}
-                              paddingLeft={2}
-                              backgroundColor={hover() ? theme.backgroundElement : theme.backgroundPanel}
+                              onMouseOver={() => setHover(true)}
+                              onMouseOut={() => setHover(false)}
+                              onMouseUp={handleUnrevert}
+                              marginTop={1}
+                              flexShrink={0}
+                              border={["left"]}
+                              customBorderChars={SplitBorder.customBorderChars}
+                              borderColor={theme.backgroundPanel}
                             >
-                              <text fg={theme.textMuted}>{revert()!.reverted.length} message reverted</text>
-                              <text fg={theme.textMuted}>
-                                <span style={{ fg: theme.text }}>{keybind.print("messages_redo")}</span> or /redo to
-                                restore
-                              </text>
-                              <Show when={revert()!.diffFiles?.length}>
-                                <box marginTop={1}>
-                                  <For each={revert()!.diffFiles}>
-                                    {(file) => (
-                                      <text fg={theme.text}>
-                                        {file.filename}
-                                        <Show when={file.additions > 0}>
-                                          <span style={{ fg: theme.diffAdded }}> +{file.additions}</span>
-                                        </Show>
-                                        <Show when={file.deletions > 0}>
-                                          <span style={{ fg: theme.diffRemoved }}> -{file.deletions}</span>
-                                        </Show>
-                                      </text>
-                                    )}
-                                  </For>
-                                </box>
-                              </Show>
+                              <box
+                                paddingTop={1}
+                                paddingBottom={1}
+                                paddingLeft={2}
+                                backgroundColor={hover() ? theme.backgroundElement : theme.backgroundPanel}
+                              >
+                                <text fg={theme.textMuted}>{revert()!.reverted.length} message reverted</text>
+                                <text fg={theme.textMuted}>
+                                  <span style={{ fg: theme.text }}>{keybind.print("messages_redo")}</span> or /redo to
+                                  restore
+                                </text>
+                                <Show when={revert()!.diffFiles?.length}>
+                                  <box marginTop={1}>
+                                    <For each={revert()!.diffFiles}>
+                                      {(file) => (
+                                        <text fg={theme.text}>
+                                          {file.filename}
+                                          <Show when={file.additions > 0}>
+                                            <span style={{ fg: theme.diffAdded }}> +{file.additions}</span>
+                                          </Show>
+                                          <Show when={file.deletions > 0}>
+                                            <span style={{ fg: theme.diffRemoved }}> -{file.deletions}</span>
+                                          </Show>
+                                        </text>
+                                      )}
+                                    </For>
+                                  </box>
+                                </Show>
+                              </box>
                             </box>
-                          </box>
-                        )
-                      })()}
-                    </Match>
-                    <Match when={revert()?.messageID && message.id >= revert()!.messageID}>
-                      <></>
-                    </Match>
-                    <Match when={message.role === "user"}>
-                      <UserMessage
-                        index={index()}
-                        onMouseUp={() => {
-                          if (renderer.getSelection()?.getSelectedText()) return
-                          dialog.replace(() => (
-                            <DialogMessage
-                              messageID={message.id}
-                              sessionID={route.sessionID}
-                              setPrompt={(promptInfo) => prompt.set(promptInfo)}
-                            />
-                          ))
-                        }}
-                        message={message as UserMessage}
-                        parts={sync.data.part[message.id] ?? []}
-                        pending={pending()}
-                      />
-                    </Match>
-                    <Match when={message.role === "assistant"}>
-                      <AssistantMessage
-                        last={lastAssistant()?.id === message.id}
-                        message={message as AssistantMessage}
-                        parts={sync.data.part[message.id] ?? []}
-                      />
-                    </Match>
-                  </Switch>
-                )}
-              </For>
-            </scrollbox>
-            <box flexShrink={0}>
-              <Show when={permissions().length > 0}>
-                <PermissionPrompt request={permissions()[0]} />
+                          )
+                        })()}
+                      </Match>
+                      <Match when={revert()?.messageID && message.id >= revert()!.messageID}>
+                        <></>
+                      </Match>
+                      <Match when={message.role === "user"}>
+                        <UserMessage
+                          index={index()}
+                          onMouseUp={() => {
+                            if (renderer.getSelection()?.getSelectedText()) return
+                            dialog.replace(() => (
+                              <DialogMessage
+                                messageID={message.id}
+                                sessionID={route.sessionID}
+                                setPrompt={(promptInfo) => prompt.set(promptInfo)}
+                              />
+                            ))
+                          }}
+                          message={message as UserMessage}
+                          parts={sync.data.part[message.id] ?? []}
+                          pending={pending()}
+                        />
+                      </Match>
+                      <Match when={message.role === "assistant"}>
+                        <AssistantMessage
+                          last={lastAssistant()?.id === message.id}
+                          message={message as AssistantMessage}
+                          parts={sync.data.part[message.id] ?? []}
+                        />
+                      </Match>
+                    </Switch>
+                  )}
+                </For>
+              </scrollbox>
+              <box flexShrink={0}>
+                <Show when={permissions().length > 0}>
+                  <PermissionPrompt request={permissions()[0]} />
+                </Show>
+                <Show when={permissions().length === 0 && questions().length > 0}>
+                  <QuestionPrompt request={questions()[0]} />
+                </Show>
+                <Show when={session()?.parentID}>
+                  <SubagentFooter />
+                </Show>
+                <Show when={selectedTeammate()}>
+                  <box paddingLeft={3} flexShrink={0}>
+                    <text fg={theme.primary}>
+                      Messaging: <span style={{ bold: true }}>@{selectedTeammate()}</span>
+                      <span style={{ fg: theme.textMuted }}> (Shift+Up/Down to change, Esc to deselect)</span>
+                    </text>
+                  </box>
+                </Show>
+                <Prompt
+                  visible={!session()?.parentID && permissions().length === 0 && questions().length === 0}
+                  ref={(r) => {
+                    prompt = r
+                    promptRef.set(r)
+                    // Apply initial prompt when prompt component mounts (e.g., from fork)
+                    if (route.initialPrompt) {
+                      r.set(route.initialPrompt)
+                    }
+                  }}
+                  disabled={permissions().length > 0 || questions().length > 0}
+                  selectedTeammate={selectedTeammate()}
+                  onTeammateMessageSent={() => setSelectedTeammate(null)}
+                  onSubmit={() => {
+                    toBottom()
+                  }}
+                  sessionID={route.sessionID}
+                />
+              </box>
+              <Show when={!sidebarVisible() || !wide()}>
+                <Footer />
               </Show>
-              <Show when={permissions().length === 0 && questions().length > 0}>
-                <QuestionPrompt request={questions()[0]} />
-              </Show>
-              <Show when={session()?.parentID}>
-                <SubagentFooter />
-              </Show>
-              <Prompt
-                visible={!session()?.parentID && permissions().length === 0 && questions().length === 0}
-                ref={(r) => {
-                  prompt = r
-                  promptRef.set(r)
-                  // Apply initial prompt when prompt component mounts (e.g., from fork)
-                  if (route.initialPrompt) {
-                    r.set(route.initialPrompt)
-                  }
-                }}
-                disabled={permissions().length > 0 || questions().length > 0}
-                onSubmit={() => {
-                  toBottom()
-                }}
-                sessionID={route.sessionID}
-              />
-            </box>
+            </>
           </Show>
           <Toast />
         </box>
@@ -1253,8 +1448,7 @@ function UserMessage(props: {
   const { theme } = useTheme()
   const [hover, setHover] = createSignal(false)
   const queued = createMemo(() => props.pending && props.message.id > props.pending)
-  const color = createMemo(() => local.agent.color(props.message.agent))
-  const queuedFg = createMemo(() => selectedForeground(theme, color()))
+  const color = createMemo(() => (queued() ? theme.accent : local.agent.color(props.message.agent)))
   const metadataVisible = createMemo(() => queued() || ctx.showTimestamps())
 
   const compaction = createMemo(() => props.parts.find((x) => x.type === "compaction"))
@@ -1316,7 +1510,7 @@ function UserMessage(props: {
               }
             >
               <text fg={theme.textMuted}>
-                <span style={{ bg: color(), fg: queuedFg(), bold: true }}> QUEUED </span>
+                <span style={{ bg: theme.accent, fg: theme.backgroundPanel, bold: true }}> QUEUED </span>
               </text>
             </Show>
           </box>

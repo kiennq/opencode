@@ -362,6 +362,33 @@ test("merges keybind overrides across precedence layers", async () => {
   })
 })
 
+test("loads team keybind overrides from tui config", async () => {
+  await using tmp = await tmpdir({
+    init: async (dir) => {
+      await Bun.write(
+        path.join(dir, "tui.json"),
+        JSON.stringify({
+          keybinds: {
+            team_next: "<leader>j",
+            team_previous: "<leader>k",
+            team_delegate: "<leader>d",
+          },
+        }),
+      )
+    },
+  })
+
+  await Instance.provide({
+    directory: tmp.path,
+    fn: async () => {
+      const config = await TuiConfig.get()
+      expect(config.keybinds?.team_next).toBe("<leader>j")
+      expect(config.keybinds?.team_previous).toBe("<leader>k")
+      expect(config.keybinds?.team_delegate).toBe("<leader>d")
+    },
+  })
+})
+
 test("OPENCODE_TUI_CONFIG provides settings when no project config exists", async () => {
   await using tmp = await tmpdir({
     init: async (dir) => {
