@@ -28,6 +28,13 @@ function client() {
 }
 
 describe("toggleMcp", () => {
+  test("v2 root does not export node-only server helpers", async () => {
+    const mod = await import("../src/v2/index.js")
+    expect("createOpencodeServer" in mod).toBe(false)
+    expect("createOpencodeTui" in mod).toBe(false)
+    expect("createOpencode" in mod).toBe(false)
+  })
+
   test("disconnects connected servers", async () => {
     const sdk = client()
     await toggleMcp(sdk.value as any, "demo", { status: "connected" })
