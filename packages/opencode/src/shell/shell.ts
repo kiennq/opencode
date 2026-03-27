@@ -88,13 +88,6 @@ export namespace Shell {
     return name === "cmd"
   }
 
-  export function display(shell: string) {
-    return path
-      .basename(shell)
-      .replace(/\.exe$/i, "")
-      .toLowerCase()
-  }
-
   export function hasWindowsExpansion(command: string) {
     return /%[a-zA-Z_][a-zA-Z0-9_]*%/.test(command)
   }

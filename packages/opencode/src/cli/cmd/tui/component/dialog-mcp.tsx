@@ -7,6 +7,7 @@ import { useTheme } from "../context/theme"
 import { Keybind } from "@/util/keybind"
 import { TextAttributes } from "@opentui/core"
 import { useSDK } from "@tui/context/sdk"
+import { useToast } from "../ui/toast"
 
 function Status(props: { enabled: boolean; loading: boolean }) {
   const { theme } = useTheme()
@@ -23,6 +24,7 @@ export function DialogMcp() {
   const local = useLocal()
   const sync = useSync()
   const sdk = useSDK()
+  const toast = useToast()
   const [, setRef] = createSignal<DialogSelectRef<unknown>>()
   const [loading, setLoading] = createSignal<string | null>(null)
 
@@ -54,18 +56,26 @@ export function DialogMcp() {
         if (loading() !== null) return
 
         setLoading(option.value)
+        const unsub = sdk.event.on("mcp.browser.open.failed", (event) => {
+          if (event.properties.mcpName !== option.value) return
+          toast.show({
+            title: "Open the MCP auth URL in your browser",
+            message: event.properties.url,
+            variant: "warning",
+            duration: 8000,
+          })
+        })
         try {
-          await local.mcp.toggle(option.value)
-          // Refresh MCP status from server
-          const status = await sdk.client.mcp.status()
-          if (status.data) {
-            sync.set("mcp", status.data)
+          const result = await local.mcp.toggle(option.value)
+          if (result.data) {
+            sync.set("mcp", result.data)
           } else {
             console.error("Failed to refresh MCP status: no data returned")
           }
         } catch (error) {
           console.error("Failed to toggle MCP:", error)
         } finally {
+          unsub()
           setLoading(null)
         }
       },
