@@ -300,6 +300,34 @@ export namespace Server {
           return c.json(true)
         },
       )
+      .post(
+        "/instance/reload",
+        describeRoute({
+          summary: "Reload instance",
+          description:
+            "Soft reload the current OpenCode instance so runtime config and discovered content are refreshed.",
+          operationId: "instance.reload",
+          responses: {
+            200: {
+              description: "Instance reloaded",
+              content: {
+                "application/json": {
+                  schema: resolver(z.boolean()),
+                },
+              },
+            },
+          },
+        }),
+        async (c) => {
+          await Instance.reload({
+            directory: Instance.directory,
+            project: Instance.project,
+            worktree: Instance.worktree,
+            init: InstanceBootstrap,
+          })
+          return c.json(true)
+        },
+      )
       .get(
         "/path",
         describeRoute({

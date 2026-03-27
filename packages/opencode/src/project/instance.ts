@@ -135,6 +135,8 @@ export const Instance = {
   async reload(input: { directory: string; init?: () => Promise<any>; project?: Project.Info; worktree?: string }) {
     const directory = Filesystem.resolve(input.directory)
     Log.Default.info("reloading instance", { directory })
+    const { Config } = await import("../config/config")
+    await Config.invalidate(true)
     await Promise.all([State.dispose(directory), disposeInstance(directory)])
     cache.delete(directory)
     const next = track(directory, boot({ ...input, directory }))
