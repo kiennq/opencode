@@ -5,6 +5,7 @@ import { Log } from "../util/log"
 import { createOpencodeClient } from "@opencode-ai/sdk"
 import { BunProc } from "../bun"
 import { Flag } from "../flag/flag"
+import { Installation } from "../installation"
 import { CodexAuthPlugin } from "./codex"
 import { Session } from "../session"
 import { NamedError } from "@opencode-ai/util/error"
@@ -47,7 +48,7 @@ export namespace Plugin {
   const INTERNAL_PLUGINS: PluginInstance[] = [CodexAuthPlugin, CopilotAuthPlugin, GitlabAuthPlugin, PoeAuthPlugin]
 
   // Old npm package names for plugins that are now built-in — skip if users still have them in config
-  const DEPRECATED_PLUGIN_PACKAGES = ["opencode-openai-codex-auth", "opencode-copilot-auth"]
+  const DEPRECATED_PLUGIN_PACKAGES = ["opencode-openai-codex-auth"]
 
   export const layer = Layer.effect(
     Service,
@@ -74,6 +75,7 @@ export namespace Plugin {
             const cfg = await Config.get()
             const input: PluginInput = {
               client,
+              version: Installation.VERSION,
               project: ctx.project,
               worktree: ctx.worktree,
               directory: ctx.directory,

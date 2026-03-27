@@ -309,6 +309,7 @@ export namespace MessageV2 {
         compacted: z.number().optional(),
       }),
       attachments: FilePart.array().optional(),
+      summary: z.string().optional(),
     })
     .meta({
       ref: "ToolStateCompleted",
