@@ -168,3 +168,33 @@ describe("InstructionPrompt.systemPaths OPENCODE_CONFIG_DIR", () => {
     }
   })
 })
+
+describe("InstructionPrompt.systemPaths instructions", () => {
+  test("loads absolute recursive instruction globs", async () => {
+    await using tmp = await tmpdir({
+      config: {
+        instructions: [path.join("ABSOLUTE_PLACEHOLDER", "instructions", "**", "*.md")],
+      },
+      init: async (dir) => {
+        const root = path.join(dir, "instructions")
+        const one = path.join(root, "one.md")
+        const two = path.join(root, "nested", "two.md")
+        await Bun.write(one, "# One")
+        await Bun.write(two, "# Two")
+        const cfg = path.join(dir, "opencode.json")
+        const text = await Bun.file(cfg).text()
+        await Bun.write(cfg, text.replace("ABSOLUTE_PLACEHOLDER", dir.replace(/\\/g, "\\\\")))
+        return { one, two }
+      },
+    })
+
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        const paths = await InstructionPrompt.systemPaths()
+        expect(paths.has(path.resolve(tmp.extra.one))).toBe(true)
+        expect(paths.has(path.resolve(tmp.extra.two))).toBe(true)
+      },
+    })
+  })
+})
