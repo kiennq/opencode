@@ -95,6 +95,42 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
       vcs: VcsInfo | undefined
       path: Path
       workspaceList: Workspace[]
+      team: {
+        [sessionID: string]: {
+          teamName: string
+          role: "lead" | "member"
+          memberName?: string
+          delegate?: boolean
+          members: Array<{
+            name: string
+            sessionID: string
+            agent: string
+            status: "ready" | "busy" | "shutdown_requested" | "shutdown" | "error"
+            execution_status:
+              | "idle"
+              | "starting"
+              | "running"
+              | "cancel_requested"
+              | "cancelling"
+              | "cancelled"
+              | "completing"
+              | "completed"
+              | "failed"
+              | "timed_out"
+            /** Model in "providerID/modelID" format */
+            model?: string
+            planApproval?: "none" | "pending" | "approved" | "rejected"
+          }>
+          tasks: Array<{
+            id: string
+            content: string
+            status: string
+            priority: string
+            assignee?: string
+            depends_on?: string[]
+          }>
+        }
+      }
     }>({
       provider_next: {
         all: [],
@@ -123,6 +159,7 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
       vcs: undefined,
       path: { state: "", config: "", worktree: "", directory: "" },
       workspaceList: [],
+      team: {},
     })
 
     const sdk = useSDK()
@@ -225,32 +262,27 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
           break
 
         case "session.deleted": {
-          const sessionID = event.properties.info.id
-          fullSyncedSessions.delete(sessionID)
-          const result = Binary.search(store.session, sessionID, (s) => s.id)
-          if (result.found) {
-            setStore(
-              "session",
-              produce((draft) => {
-                draft.splice(result.index, 1)
-              }),
-            )
-          }
+          const id = event.properties.info.id
+          const result = Binary.search(store.session, id, (s) => s.id)
+          const messages = store.message[id]
+          fullSyncedSessions.delete(id)
           setStore(
             produce((draft) => {
-              delete draft.session_diff[sessionID]
-              delete draft.session_status[sessionID]
-              delete draft.todo[sessionID]
-              delete draft.question[sessionID]
-              delete draft.permission[sessionID]
-              // Clean up messages and parts
-              const messages = draft.message[sessionID]
+              if (result.found) {
+                draft.session.splice(result.index, 1)
+              }
               if (messages) {
                 for (const msg of messages) {
-                  delete draft.part[msg.id]
+                  if (msg?.id) delete draft.part[msg.id]
                 }
               }
-              delete draft.message[sessionID]
+              delete draft.message[id]
+              delete draft.session_diff[id]
+              delete draft.todo[id]
+              delete draft.session_status[id]
+              delete draft.permission[id]
+              delete draft.question[id]
+              delete draft.team[id]
             }),
           )
           break
@@ -395,6 +427,111 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
 
         case "vcs.branch.updated": {
           setStore("vcs", { branch: event.properties.branch })
+          break
+        }
+        case "command.updated": {
+          setStore("command", reconcile(event.properties))
+          break
+        }
+
+        default: {
+          const raw = event as any
+          if (typeof raw.type !== "string" || !raw.type.startsWith("team.")) break
+
+          switch (raw.type) {
+            case "team.created": {
+              const team = raw.properties.team
+              setStore("team", team.leadSessionID, {
+                teamName: team.name,
+                role: "lead",
+                delegate: team.delegate,
+                members: team.members ?? [],
+                tasks: [],
+              })
+              break
+            }
+            case "team.member.spawned": {
+              const { teamName, member } = raw.properties
+              for (const [sid, entry] of Object.entries(store.team)) {
+                const e = entry as any
+                if (e?.teamName === teamName) {
+                  setStore("team", sid, "members", (prev: any[]) => [...(prev ?? []), member])
+                }
+              }
+              setStore("team", member.sessionID, {
+                teamName,
+                role: "member",
+                memberName: member.name,
+                members: [],
+                tasks: [],
+              })
+              break
+            }
+            case "team.member.status": {
+              const { teamName, memberName, status } = raw.properties
+              for (const [sid, entry] of Object.entries(store.team)) {
+                const e = entry as any
+                if (e?.teamName === teamName && e?.members) {
+                  const idx = e.members.findIndex((m: any) => m.name === memberName)
+                  if (idx >= 0) {
+                    setStore("team", sid, "members", idx, "status", status)
+                  }
+                }
+              }
+              break
+            }
+            case "team.member.execution": {
+              const { teamName, memberName, status } = raw.properties
+              for (const [sid, entry] of Object.entries(store.team)) {
+                const e = entry as any
+                if (e?.teamName === teamName && e?.members) {
+                  const idx = e.members.findIndex((m: any) => m.name === memberName)
+                  if (idx >= 0) {
+                    setStore("team", sid, "members", idx, "execution_status", status)
+                  }
+                }
+              }
+              break
+            }
+            case "team.task.updated": {
+              const { teamName, tasks: newTasks } = raw.properties
+              for (const [sid, entry] of Object.entries(store.team)) {
+                const e = entry as any
+                if (e?.teamName === teamName) {
+                  setStore("team", sid, "tasks", reconcile(newTasks))
+                }
+              }
+              break
+            }
+            case "team.task.claimed": {
+              const { teamName, taskId, memberName } = raw.properties
+              for (const [sid, entry] of Object.entries(store.team)) {
+                const e = entry as any
+                if (e?.teamName === teamName && e?.tasks) {
+                  const idx = e.tasks.findIndex((t: any) => t.id === taskId)
+                  if (idx >= 0) {
+                    setStore("team", sid, "tasks", idx, "status", "in_progress")
+                    setStore("team", sid, "tasks", idx, "assignee", memberName)
+                  }
+                }
+              }
+              break
+            }
+            case "team.cleaned": {
+              const { teamName } = raw.properties
+              setStore(
+                "team",
+                produce((draft: any) => {
+                  for (const [sid, entry] of Object.entries(draft)) {
+                    if ((entry as any)?.teamName === teamName) {
+                      delete draft[sid]
+                    }
+                  }
+                }),
+              )
+              break
+            }
+          }
           break
         }
       }
@@ -575,6 +712,24 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
             }),
           )
           fullSyncedSessions.add(sessionID)
+
+          // Fetch team context for this session (non-blocking).
+          if (!store.team[sessionID]) {
+            fetch(`${sdk.url}/team/by-session/${sessionID}`)
+              .then((r: Response) => r.json())
+              .then((data: any) => {
+                if (!data) return
+                setStore("team", sessionID, {
+                  teamName: data.team.name,
+                  role: data.role,
+                  memberName: data.memberName,
+                  delegate: data.team.delegate,
+                  members: data.team.members ?? [],
+                  tasks: data.tasks ?? [],
+                })
+              })
+              .catch(() => {}) // Team fetch is non-critical
+          }
         },
       },
       workspace: {

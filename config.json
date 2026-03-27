@@ -538,15 +538,6 @@
                         "deny"
                       ]
                     },
-                    "todoread": {
-                      "ref": "PermissionActionConfig",
-                      "type": "string",
-                      "enum": [
-                        "ask",
-                        "allow",
-                        "deny"
-                      ]
-                    },
                     "question": {
                       "ref": "PermissionActionConfig",
                       "type": "string",
@@ -1041,15 +1032,6 @@
                       ]
                     },
                     "todowrite": {
-                      "ref": "PermissionActionConfig",
-                      "type": "string",
-                      "enum": [
-                        "ask",
-                        "allow",
-                        "deny"
-                      ]
-                    },
-                    "todoread": {
                       "ref": "PermissionActionConfig",
                       "type": "string",
                       "enum": [
@@ -1553,15 +1535,6 @@
                     ]
                   },
                   "todowrite": {
-                    "ref": "PermissionActionConfig",
-                    "type": "string",
-                    "enum": [
-                      "ask",
-                      "allow",
-                      "deny"
-                    ]
-                  },
-                  "todoread": {
                     "ref": "PermissionActionConfig",
                     "type": "string",
                     "enum": [
@@ -2077,15 +2050,6 @@
                         "deny"
                       ]
                     },
-                    "todoread": {
-                      "ref": "PermissionActionConfig",
-                      "type": "string",
-                      "enum": [
-                        "ask",
-                        "allow",
-                        "deny"
-                      ]
-                    },
                     "question": {
                       "ref": "PermissionActionConfig",
                       "type": "string",
@@ -2580,15 +2544,6 @@
                       ]
                     },
                     "todowrite": {
-                      "ref": "PermissionActionConfig",
-                      "type": "string",
-                      "enum": [
-                        "ask",
-                        "allow",
-                        "deny"
-                      ]
-                    },
-                    "todoread": {
                       "ref": "PermissionActionConfig",
                       "type": "string",
                       "enum": [
@@ -3099,15 +3054,6 @@
                         "deny"
                       ]
                     },
-                    "todoread": {
-                      "ref": "PermissionActionConfig",
-                      "type": "string",
-                      "enum": [
-                        "ask",
-                        "allow",
-                        "deny"
-                      ]
-                    },
                     "question": {
                       "ref": "PermissionActionConfig",
                       "type": "string",
@@ -3602,15 +3548,6 @@
                       ]
                     },
                     "todowrite": {
-                      "ref": "PermissionActionConfig",
-                      "type": "string",
-                      "enum": [
-                        "ask",
-                        "allow",
-                        "deny"
-                      ]
-                    },
-                    "todoread": {
                       "ref": "PermissionActionConfig",
                       "type": "string",
                       "enum": [
@@ -4121,15 +4058,6 @@
                         "deny"
                       ]
                     },
-                    "todoread": {
-                      "ref": "PermissionActionConfig",
-                      "type": "string",
-                      "enum": [
-                        "ask",
-                        "allow",
-                        "deny"
-                      ]
-                    },
                     "question": {
                       "ref": "PermissionActionConfig",
                       "type": "string",
@@ -4624,15 +4552,6 @@
                       ]
                     },
                     "todowrite": {
-                      "ref": "PermissionActionConfig",
-                      "type": "string",
-                      "enum": [
-                        "ask",
-                        "allow",
-                        "deny"
-                      ]
-                    },
-                    "todoread": {
                       "ref": "PermissionActionConfig",
                       "type": "string",
                       "enum": [
@@ -5143,15 +5062,6 @@
                         "deny"
                       ]
                     },
-                    "todoread": {
-                      "ref": "PermissionActionConfig",
-                      "type": "string",
-                      "enum": [
-                        "ask",
-                        "allow",
-                        "deny"
-                      ]
-                    },
                     "question": {
                       "ref": "PermissionActionConfig",
                       "type": "string",
@@ -5647,15 +5557,6 @@
                     ]
                   },
                   "todowrite": {
-                    "ref": "PermissionActionConfig",
-                    "type": "string",
-                    "enum": [
-                      "ask",
-                      "allow",
-                      "deny"
-                    ]
-                  },
-                  "todoread": {
                     "ref": "PermissionActionConfig",
                     "type": "string",
                     "enum": [
@@ -6643,15 +6544,6 @@
               ]
             },
             "todowrite": {
-              "ref": "PermissionActionConfig",
-              "type": "string",
-              "enum": [
-                "ask",
-                "allow",
-                "deny"
-              ]
-            },
-            "todoread": {
               "ref": "PermissionActionConfig",
               "type": "string",
               "enum": [

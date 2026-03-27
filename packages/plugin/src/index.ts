@@ -144,7 +144,6 @@ export type AuthOAuthResult = { url: string; instructions: string } & (
                 usage?: string
                 enterpriseUrl?: string
                 accountId?: string
-                enterpriseUrl?: string
               }
             | { key: string }
           ))
@@ -167,7 +166,6 @@ export type AuthOAuthResult = { url: string; instructions: string } & (
                 usage?: string
                 enterpriseUrl?: string
                 accountId?: string
-                enterpriseUrl?: string
               }
             | { key: string }
           ))
