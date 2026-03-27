@@ -12,6 +12,8 @@ import { SessionStatus } from "@/session/status"
 import { SessionSummary } from "@/session/summary"
 import { Todo } from "../../session/todo"
 import { Agent } from "../../agent/agent"
+import { TeamMessaging } from "../../team/messaging"
+import { Team } from "../../team"
 import { Snapshot } from "@/snapshot"
 import { Log } from "../../util/log"
 import { Permission } from "@/permission"
@@ -381,7 +383,15 @@ export const SessionRoutes = lazy(() =>
         }),
       ),
       async (c) => {
-        await SessionPrompt.cancel(c.req.valid("param").sessionID)
+        const sessionID = c.req.valid("param").sessionID
+        await SessionPrompt.cancel(sessionID)
+
+        try {
+          const match = await Team.findBySession(sessionID)
+          if (match?.role === "lead") {
+            await Team.cancelAllMembers(match.team.name)
+          }
+        } catch {}
         return c.json(true)
       },
     )
@@ -813,6 +823,52 @@ export const SessionRoutes = lazy(() =>
         }
         const part = await Session.updatePart(body)
         return c.json(part)
+      },
+    )
+    .post(
+      "/:sessionID/team-message",
+      describeRoute({
+        summary: "Send teammate message",
+        description: "Send a team message from this session to a teammate or the lead.",
+        operationId: "session.team_message",
+        responses: {
+          200: {
+            description: "Team message sent",
+            content: {
+              "application/json": {
+                schema: resolver(z.object({ ok: z.boolean() })),
+              },
+            },
+          },
+          ...errors(400, 404),
+        },
+      }),
+      validator(
+        "param",
+        z.object({
+          sessionID: SessionID.zod,
+        }),
+      ),
+      validator(
+        "json",
+        z.object({
+          to: z.string(),
+          text: z.string(),
+          agent: z.string().optional(),
+        }),
+      ),
+      async (c) => {
+        const sessionID = c.req.valid("param").sessionID
+        const body = c.req.valid("json")
+        const team = await Team.findBySession(sessionID)
+        if (!team) return c.json({ error: "Session is not part of a team" }, 404)
+        await TeamMessaging.send({
+          teamName: team.team.name,
+          from: team.role === "lead" ? "lead" : team.memberName!,
+          to: body.to,
+          text: body.text,
+        })
+        return c.json({ ok: true })
       },
     )
     .post(
