@@ -180,6 +180,8 @@ export namespace Plugin {
       hooks.push(await server(input, Config.pluginOptions(load.item)))
     }
   }
+  // Old npm package names for plugins that are now built-in — skip if users still have them in config
+  const DEPRECATED_PLUGIN_PACKAGES = ["opencode-openai-codex-auth"]
 
   export const layer = Layer.effect(
     Service,
@@ -206,6 +208,7 @@ export namespace Plugin {
           const cfg = yield* config.get()
           const input: PluginInput = {
             client,
+            version: Installation.VERSION,
             project: ctx.project,
             worktree: ctx.worktree,
             directory: ctx.directory,

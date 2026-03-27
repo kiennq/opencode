@@ -1,108 +1,65 @@
 ---
 name: sync-to-upstream
-description: Use this when rebasing the fork's dev branch onto upstream/dev. Covers fetching, rebasing, conflict resolution strategy, and force-pushing. Applies to the kiennq/opencode fork tracking anomalyco/opencode.
+description: Use when syncing this fork's dev branch with upstream/dev, especially when rebasing, resolving conflicts, or updating the fork after rewritten history.
 ---
 
-## Use this when
+# Sync To Upstream
 
-- User asks to rebase on upstream, sync with upstream, or pull upstream changes
-- Resolving conflicts during rebase onto upstream/dev
+## Overview
+
+Sync upstream carefully, keep intentional fork behavior, and avoid carrying forward one-off conflict notes that no longer generalize.
+
+## When to Use
+
+- Rebasing `dev` onto `upstream/dev`
+- Resolving conflicts during an upstream sync
+- Updating `origin/dev` after a rebase
 
 ## Prerequisites
 
-- Remotes: `origin` = `kiennq/opencode`, `upstream` = `anomalyco/opencode`
-- Default branch: `dev` (not main/master)
-- Working tree must be clean before rebasing
+- Working tree is clean
+- Remotes are correct
+- Local `dev` includes the latest `origin/dev` commits before rebasing onto upstream
 
 ## Workflow
 
-### 1. Fetch and assess
+1. Fetch `origin` and `upstream`.
+2. If the user did not name a specific upstream change, review the latest upstream changes first so conflict resolution uses current upstream reality rather than stale assumptions.
+3. Make sure local `dev` is current with `origin/dev` so fork commits are not lost.
+4. Rebase onto `upstream/dev`.
+5. Resolve conflicts by taking upstream structure where it replaces old implementation details, then re-apply any intentional fork behavior that still matters.
+6. Verify the result and push with `--force-with-lease` if the rebase rewrote history.
 
-```bash
-git fetch origin --quiet && git fetch upstream --quiet
-git log --oneline dev..upstream/dev          # count new commits
-git log --oneline --stat dev..upstream/dev -- packages/opencode/  # check for conflict-prone files
-```
+## Autonomy
 
-### 2. Ensure local dev is on top of origin/dev
+- If the user asked to sync or rebase onto `upstream/dev`, proceed without asking for confirmation unless blocked by missing access or an irreversible safety issue outside normal rebase/push workflow.
+- When upstream was force-pushed or the diff looks unexpectedly large, do not stop just because the change is surprising. Measure the actual commit divergence, continue with best-effort conflict resolution, and preserve fork-only behavior unless it has clearly landed upstream.
+- Prefer making the best documented judgment call over pausing for confirmation when the user's standing intent is to complete the sync.
 
-Before rebasing onto upstream, make sure local `dev` includes all commits from `origin/dev`.
-This prevents losing any commits pushed to the fork from other machines or collaborators.
+## Conflict Guidance
 
-```bash
-# If local dev is behind origin/dev, fast-forward first
-git merge-base --is-ancestor origin/dev dev || git rebase origin/dev
-```
+- Keep both sides when upstream and fork changes are independent.
+- Prefer upstream for broad architectural rewrites, then layer back fork-specific behavior only where it is still required.
+- Preserve intentional fork behavior that affects user configuration or supported workflows.
 
-If `origin/dev` has diverged (e.g. after a previous force-push from another machine), reset:
+## Fork Decisions To Preserve
 
-```bash
-git reset --hard origin/dev
-```
+- Configured `copilot-auth` plugins must remain allowed after upstream syncs.
+- Do not reintroduce logic that filters, skips, or blocks user-configured `copilot-auth` plugins during plugin loading.
 
-### 3. Rebase onto upstream
+## Verification
 
-```bash
-git rebase upstream/dev
-```
+- Confirm there are no remaining conflict markers.
+- Confirm the sync decision used fresh upstream information, especially when no specific upstream change was provided.
+- Review recent history and the final diff for accidental drops.
+- Run the most relevant targeted verification for any behavior touched during conflict resolution.
 
-### 4. Resolve conflicts (if any)
+## Quick Checklist
 
-Known conflict-prone areas and resolution strategy:
-
-| File                                         | Our fork changes                                                         | Resolution strategy                                                                                                                   |
-| -------------------------------------------- | ------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------- |
-| `src/pty/index.ts`                           | Buffer chunk optimization (bufferChunks/bufferSize)                      | **Take upstream** — their cursor-based reconnection system is more important; our chunk approach is incompatible with cursor tracking |
-| `src/config/config.ts`                       | Shell metadata, attach env fields                                        | **Merge both** — keep upstream's new fields AND our additions                                                                         |
-| `src/session/index.ts`                       | FileTime import, offset pagination, session list merge                   | **Merge both** — keep all imports from both sides                                                                                     |
-| `src/cli/cmd/tui/component/dialog-model.tsx` | Lazy DialogProvider import, PROVIDER_PRIORITY, popularProvidersList memo | **Take ours** for `popularProvidersList()` since `createDialogProviderOptions` isn't imported in our lazy-import version              |
-| `src/provider/transform.ts`                  | Expanded Anthropic detection, whitespace trim                            | **Merge both** — our detection expansions layer on top of upstream                                                                    |
-| `src/tool/bash.ts`                           | Ring buffer (10MB cap)                                                   | **Take ours** if upstream still uses simple approach; watch for upstream ring buffer adoption                                         |
-| `src/question/index.ts`                      | Timeout + rejected event                                                 | **Take ours** if upstream removed timeouts                                                                                            |
-
-General conflict resolution rules:
-
-- **Imports**: Keep all imports from both sides; remove duplicates
-- **Config schema fields**: Keep both upstream's new fields AND our additions
-- **Core algorithms** (buffer, compaction overflow): Prefer upstream's approach if architecturally different, then layer our custom config options as early-exit checks
-- **UI components**: Keep our lazy imports and memo patterns; use upstream's refactored component structure
-
-### 5. After resolving each file
-
-```bash
-git add <resolved-files>
-git rebase --continue
-```
-
-### 6. Verify and push
-
-```bash
-git log --oneline -5                                    # verify history looks correct
-git push origin dev --force-with-lease --no-verify      # force push
-```
-
-If push fails with "stale info" (GitHub 500 during previous push):
-
-```bash
-git fetch origin dev --quiet && git push origin dev --force-with-lease --no-verify
-```
-
-### 7. Post-rebase checks
-
-- New `.yml` workflow files from upstream need renaming to `.yml.disabled` (we disable upstream CI)
-- Pre-push hook may fail on `@opencode-ai/desktop` typecheck due to missing `@tauri-apps/plugin-clipboard-manager` — use `--no-verify` to bypass
-
-## Our fork's additions (must preserve)
-
-- **Persistent shell** — Windows native routing, shell metadata in bash tool output
-- **Attach env propagation** — `x-opencode-env` header, compressed fallback env in attach/server/pty paths
-- **Offset pagination** — `session list` API supports `before` cursor for incremental timeline loading
-- **TUI prompt fixes** — leader-key guard on history navigation, leader-down session shortcut
-
-## Quick checklist
-
-- [ ] Working tree clean before rebase
-- [ ] Fetched both origin and upstream
-- [ ] No conflict markers remain after resolution (`rg "<<<<<<|======|>>>>>>"`)
-- [ ] Force push with `--force-with-lease --no-verify`
-- [ ] Check for new upstream workflow files to disable
+- [ ] Working tree clean
+- [ ] Fetched `origin` and `upstream`
+- [ ] Reviewed latest upstream changes when no specific upstream change was named
+- [ ] Local `dev` includes `origin/dev`
+- [ ] No conflict markers remain
+- [ ] Targeted verification completed
+- [ ] Used `--force-with-lease` only when needed
