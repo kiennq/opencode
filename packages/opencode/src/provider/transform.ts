@@ -51,19 +51,27 @@ export namespace ProviderTransform {
     model: Provider.Model,
     options: Record<string, unknown>,
   ): ModelMessage[] {
-    // Anthropic rejects messages with empty content - filter out empty string messages
-    // and remove empty text/reasoning parts from array content
-    if (model.api.npm === "@ai-sdk/anthropic" || model.api.npm === "@ai-sdk/amazon-bedrock") {
+    const anthropic =
+      model.providerID === "anthropic" ||
+      model.api.id.includes("anthropic") ||
+      model.api.id.includes("claude") ||
+      model.id.includes("anthropic") ||
+      model.id.includes("claude") ||
+      model.api.npm === "@ai-sdk/anthropic" ||
+      model.api.npm === "@ai-sdk/amazon-bedrock"
+
+    // Anthropic rejects messages with empty content - remove empty/whitespace text blocks
+    if (anthropic) {
       msgs = msgs
         .map((msg) => {
           if (typeof msg.content === "string") {
-            if (msg.content === "") return undefined
+            if (msg.content.trim() === "") return undefined
             return msg
           }
           if (!Array.isArray(msg.content)) return msg
           const filtered = msg.content.filter((part) => {
             if (part.type === "text" || part.type === "reasoning") {
-              return part.text !== ""
+              return part.text.trim() !== ""
             }
             return true
           })
@@ -189,33 +197,39 @@ export namespace ProviderTransform {
     return msgs
   }
 
+  function isAnthropicModel(model: Provider.Model) {
+    return (
+      model.providerID === "anthropic" ||
+      model.api.id.includes("anthropic") ||
+      model.api.id.includes("claude") ||
+      model.id.includes("anthropic") ||
+      model.id.includes("claude") ||
+      model.api.npm === "@ai-sdk/anthropic" ||
+      model.api.npm === "@ai-sdk/google-vertex/anthropic"
+    )
+  }
+
   function applyCaching(msgs: ModelMessage[], model: Provider.Model): ModelMessage[] {
     const system = msgs.filter((msg) => msg.role === "system").slice(0, 2)
     const final = msgs.filter((msg) => msg.role !== "system").slice(-2)
 
-    const providerOptions = {
-      anthropic: {
-        cacheControl: { type: "ephemeral" },
-      },
-      openrouter: {
-        cacheControl: { type: "ephemeral" },
-      },
-      bedrock: {
-        cachePoint: { type: "default" },
-      },
-      openaiCompatible: {
-        cache_control: { type: "ephemeral" },
-      },
-      copilot: {
-        copilot_cache_control: { type: "ephemeral" },
-      },
+    const providerOptions: Record<string, any> = {}
+    const npm = model.api.npm
+    if (npm === "@ai-sdk/anthropic") {
+      providerOptions.anthropic = { cacheControl: { type: "ephemeral" } }
+    } else if (npm === "@ai-sdk/amazon-bedrock" || model.providerID.includes("bedrock")) {
+      providerOptions.bedrock = { cachePoint: { type: "default" } }
+    } else if (npm === "@openrouter/ai-sdk-provider") {
+      providerOptions.openrouter = { cacheControl: { type: "ephemeral" } }
+    } else if (npm === "@ai-sdk/openai-compatible") {
+      providerOptions.openaiCompatible = { cache_control: { type: "ephemeral" } }
     }
+
+    if (Object.keys(providerOptions).length === 0) return msgs
 
     for (const msg of unique([...system, ...final])) {
       const useMessageLevelOptions =
-        model.providerID === "anthropic" ||
-        model.providerID.includes("bedrock") ||
-        model.api.npm === "@ai-sdk/amazon-bedrock"
+        npm === "@ai-sdk/anthropic" || npm === "@ai-sdk/amazon-bedrock" || model.providerID.includes("bedrock")
       const shouldUseContentOptions = !useMessageLevelOptions && Array.isArray(msg.content) && msg.content.length > 0
 
       if (shouldUseContentOptions) {
@@ -278,15 +292,17 @@ export namespace ProviderTransform {
   export function message(msgs: ModelMessage[], model: Provider.Model, options: Record<string, unknown>) {
     msgs = unsupportedParts(msgs, model)
     msgs = normalizeMessages(msgs, model, options)
-    if (
-      (model.providerID === "anthropic" ||
-        model.api.id.includes("anthropic") ||
-        model.api.id.includes("claude") ||
-        model.id.includes("anthropic") ||
-        model.id.includes("claude") ||
-        model.api.npm === "@ai-sdk/anthropic") &&
-      model.api.npm !== "@ai-sdk/gateway"
-    ) {
+
+    const copilotAnthropic = model.api.npm === "@ai-sdk/github-copilot" && isAnthropicModel(model)
+    const explicit =
+      !copilotAnthropic &&
+      (model.api.npm === "@ai-sdk/anthropic" ||
+        model.api.npm === "@ai-sdk/amazon-bedrock" ||
+        model.api.npm === "@openrouter/ai-sdk-provider" ||
+        model.api.npm === "@ai-sdk/openai-compatible" ||
+        model.providerID.includes("bedrock") ||
+        isAnthropicModel(model))
+    if (explicit && model.api.npm !== "@ai-sdk/gateway") {
       msgs = applyCaching(msgs, model)
     }
 
@@ -781,7 +797,16 @@ export namespace ProviderTransform {
       }
     }
 
-    if (input.model.providerID === "openai" || input.providerOptions?.setCacheKey) {
+    // promptCacheKey improves cache hit rate for automatic prefix-caching
+    // providers by routing requests with the same session to the same cache.
+    if (
+      input.model.providerID === "openai" ||
+      input.model.providerID === "azure" ||
+      input.model.providerID === "deepseek" ||
+      input.model.api.npm === "@ai-sdk/azure" ||
+      (input.model.api.npm === "@ai-sdk/github-copilot" && !isAnthropicModel(input.model)) ||
+      input.providerOptions?.setCacheKey
+    ) {
       result["promptCacheKey"] = input.sessionID
     }
 

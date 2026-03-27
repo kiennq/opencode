@@ -5,6 +5,7 @@ import path from "path"
 import { Effect, FileSystem, ServiceMap } from "effect"
 import { ChildProcess, ChildProcessSpawner } from "effect/unstable/process"
 import type { Config } from "../../src/config/config"
+import { Filesystem } from "../../src/util/filesystem"
 import { Instance } from "../../src/project/instance"
 
 // Strip null bytes from paths (defensive fix for CI environment issues)
@@ -43,11 +44,27 @@ export async function tmpdir<T>(options?: TmpDirOptions<T>) {
   const dirpath = sanitizePath(path.join(os.tmpdir(), "opencode-test-" + Math.random().toString(36).slice(2)))
   await fs.mkdir(dirpath, { recursive: true })
   if (options?.git) {
-    await $`git init`.cwd(dirpath).quiet()
-    await $`git config core.fsmonitor false`.cwd(dirpath).quiet()
-    await $`git config user.email "test@opencode.test"`.cwd(dirpath).quiet()
-    await $`git config user.name "Test"`.cwd(dirpath).quiet()
-    await $`git commit --allow-empty -m "root commit ${dirpath}"`.cwd(dirpath).quiet()
+    const init = await $`git init`.cwd(dirpath).nothrow().quiet()
+    if (init.exitCode !== 0) {
+      console.error("git init failed", {
+        dirpath,
+        exitCode: init.exitCode,
+        stdout: init.stdout.toString(),
+        stderr: init.stderr.toString(),
+      })
+    }
+    await $`git config core.fsmonitor false`.cwd(dirpath).nothrow().quiet()
+    await $`git config user.email "test@opencode.test"`.cwd(dirpath).nothrow().quiet()
+    await $`git config user.name "Test"`.cwd(dirpath).nothrow().quiet()
+    const commit = await $`git commit --allow-empty -m "root commit ${dirpath}"`.cwd(dirpath).nothrow().quiet()
+    if (commit.exitCode !== 0) {
+      console.error("git commit failed", {
+        dirpath,
+        exitCode: commit.exitCode,
+        stdout: commit.stdout.toString(),
+        stderr: commit.stderr.toString(),
+      })
+    }
   }
   if (options?.config) {
     await Bun.write(
@@ -58,7 +75,7 @@ export async function tmpdir<T>(options?: TmpDirOptions<T>) {
       }),
     )
   }
-  const realpath = sanitizePath(await fs.realpath(dirpath))
+  const realpath = Filesystem.normalize(sanitizePath(await fs.realpath(dirpath)))
   const extra = await options?.init?.(realpath)
   const result = {
     [Symbol.asyncDispose]: async () => {

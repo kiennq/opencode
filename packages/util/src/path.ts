@@ -12,6 +12,11 @@ export function getDirectory(path: string | undefined) {
   return parts.slice(0, parts.length - 1).join("/") + "/"
 }
 
+export function normalize(path: string | undefined) {
+  if (!path) return ""
+  return path.replace(/\\/g, "/")
+}
+
 export function getFileExtension(path: string | undefined) {
   if (!path) return ""
   const parts = path.split(".")

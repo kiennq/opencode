@@ -1063,6 +1063,17 @@ export namespace Provider {
       database[providerID] = parsed
     }
 
+    // Force github-copilot models to use @ai-sdk/github-copilot instead of @ai-sdk/openai-compatible.
+    // Models like gpt-5.3-codex require the /responses endpoint, which only @ai-sdk/github-copilot supports.
+    // This must run after config processing to catch user-defined models not present in models.dev.
+    for (const providerID of ["github-copilot", "github-copilot-enterprise"]) {
+      if (database[providerID]) {
+        for (const model of Object.values(database[providerID].models)) {
+          model.api.npm = "@ai-sdk/github-copilot"
+        }
+      }
+    }
+
     // load env
     const env = Env.all()
     for (const [id, provider] of Object.entries(database)) {
@@ -1194,7 +1205,7 @@ export namespace Provider {
     return {
       models: languages,
       providers,
-      sdk,
+      sdk: new Map(),
       modelLoaders,
       varsLoaders,
     }
@@ -1326,7 +1337,7 @@ export namespace Provider {
 
       let installedPath: string
       if (!model.api.npm.startsWith("file://")) {
-        installedPath = await BunProc.install(model.api.npm, "latest")
+        installedPath = await BunProc.install(model.api.npm, "latest", model.providerID)
       } else {
         log.info("loading local provider", { pkg: model.api.npm })
         installedPath = model.api.npm
