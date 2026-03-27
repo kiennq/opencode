@@ -11,6 +11,7 @@ import { useToast } from "../ui/toast"
 import { Provider } from "@/provider/provider"
 import { useArgs } from "./args"
 import { useSDK } from "./sdk"
+import { toggleMcp } from "@opencode-ai/sdk/v2"
 import { RGBA } from "@opentui/core"
 import { Filesystem } from "@/util/filesystem"
 
@@ -368,13 +369,7 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
       },
       async toggle(name: string) {
         const status = sync.data.mcp[name]
-        if (status?.status === "connected") {
-          // Disable: disconnect the MCP
-          await sdk.client.mcp.disconnect({ name })
-        } else {
-          // Enable/Retry: connect the MCP (handles disabled, failed, and other states)
-          await sdk.client.mcp.connect({ name })
-        }
+        return await toggleMcp(sdk.client, name, status)
       },
     }
 

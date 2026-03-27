@@ -268,6 +268,182 @@ export type EventTodoUpdated = {
   }
 }
 
+export type EventTeamCreated = {
+  type: "team.created"
+  properties: {
+    team: {
+      name: string
+      leadSessionID: string
+      members: Array<{
+        name: string
+        sessionID: string
+        agent: string
+        status: "ready" | "busy" | "shutdown_requested" | "shutdown" | "error"
+        execution_status?:
+          | "idle"
+          | "starting"
+          | "running"
+          | "cancel_requested"
+          | "cancelling"
+          | "cancelled"
+          | "completing"
+          | "completed"
+          | "failed"
+          | "timed_out"
+        prompt?: string
+        model?: string
+        planApproval?: "none" | "pending" | "approved" | "rejected"
+      }>
+      created: number
+      delegate?: boolean
+      delegate_permissions?: Array<{
+        permission: string
+        pattern: string
+        action: "allow" | "deny" | "ask"
+      }>
+    }
+  }
+}
+
+export type EventTeamMemberSpawned = {
+  type: "team.member.spawned"
+  properties: {
+    teamName: string
+    member: {
+      name: string
+      sessionID: string
+      agent: string
+      status: "ready" | "busy" | "shutdown_requested" | "shutdown" | "error"
+      execution_status?:
+        | "idle"
+        | "starting"
+        | "running"
+        | "cancel_requested"
+        | "cancelling"
+        | "cancelled"
+        | "completing"
+        | "completed"
+        | "failed"
+        | "timed_out"
+      prompt?: string
+      model?: string
+      planApproval?: "none" | "pending" | "approved" | "rejected"
+    }
+  }
+}
+
+export type EventTeamMemberStatus = {
+  type: "team.member.status"
+  properties: {
+    teamName: string
+    memberName: string
+    status: "ready" | "busy" | "shutdown_requested" | "shutdown" | "error"
+  }
+}
+
+export type EventTeamMemberExecution = {
+  type: "team.member.execution"
+  properties: {
+    teamName: string
+    memberName: string
+    status:
+      | "idle"
+      | "starting"
+      | "running"
+      | "cancel_requested"
+      | "cancelling"
+      | "cancelled"
+      | "completing"
+      | "completed"
+      | "failed"
+      | "timed_out"
+  }
+}
+
+export type EventTeamMessage = {
+  type: "team.message"
+  properties: {
+    teamName: string
+    from: string
+    to: string
+    text: string
+  }
+}
+
+export type EventTeamBroadcast = {
+  type: "team.broadcast"
+  properties: {
+    teamName: string
+    from: string
+    text: string
+  }
+}
+
+export type EventTeamTaskUpdated = {
+  type: "team.task.updated"
+  properties: {
+    teamName: string
+    tasks: Array<{
+      id: string
+      content: string
+      status: "pending" | "in_progress" | "completed" | "cancelled" | "blocked"
+      priority: "high" | "medium" | "low"
+      assignee?: string
+      depends_on?: Array<string>
+    }>
+  }
+}
+
+export type EventTeamTaskClaimed = {
+  type: "team.task.claimed"
+  properties: {
+    teamName: string
+    taskId: string
+    memberName: string
+  }
+}
+
+export type EventTeamShutdownRequest = {
+  type: "team.shutdown.request"
+  properties: {
+    teamName: string
+    memberName: string
+  }
+}
+
+export type EventTeamPlanApproval = {
+  type: "team.plan.approval"
+  properties: {
+    teamName: string
+    memberName: string
+    approved: boolean
+    feedback?: string
+  }
+}
+
+export type EventTeamMessageRead = {
+  type: "team.message.read"
+  properties: {
+    teamName: string
+    agentName: string
+    count: number
+  }
+}
+
+export type EventTeamCleaned = {
+  type: "team.cleaned"
+  properties: {
+    teamName: string
+    leadSessionID: string
+    delegate: boolean
+    delegate_permissions?: Array<{
+      permission: string
+      pattern: string
+      action: "allow" | "deny" | "ask"
+    }>
+  }
+}
+
 export type EventTuiPromptAppend = {
   type: "tui.prompt.append"
   properties: {
@@ -458,182 +634,6 @@ export type EventWorkspaceFailed = {
   type: "workspace.failed"
   properties: {
     message: string
-  }
-}
-
-export type EventTeamCreated = {
-  type: "team.created"
-  properties: {
-    team: {
-      name: string
-      leadSessionID: string
-      members: Array<{
-        name: string
-        sessionID: string
-        agent: string
-        status: "ready" | "busy" | "shutdown_requested" | "shutdown" | "error"
-        execution_status?:
-          | "idle"
-          | "starting"
-          | "running"
-          | "cancel_requested"
-          | "cancelling"
-          | "cancelled"
-          | "completing"
-          | "completed"
-          | "failed"
-          | "timed_out"
-        prompt?: string
-        model?: string
-        planApproval?: "none" | "pending" | "approved" | "rejected"
-      }>
-      created: number
-      delegate?: boolean
-      delegate_permissions?: Array<{
-        permission: string
-        pattern: string
-        action: "allow" | "deny" | "ask"
-      }>
-    }
-  }
-}
-
-export type EventTeamMemberSpawned = {
-  type: "team.member.spawned"
-  properties: {
-    teamName: string
-    member: {
-      name: string
-      sessionID: string
-      agent: string
-      status: "ready" | "busy" | "shutdown_requested" | "shutdown" | "error"
-      execution_status?:
-        | "idle"
-        | "starting"
-        | "running"
-        | "cancel_requested"
-        | "cancelling"
-        | "cancelled"
-        | "completing"
-        | "completed"
-        | "failed"
-        | "timed_out"
-      prompt?: string
-      model?: string
-      planApproval?: "none" | "pending" | "approved" | "rejected"
-    }
-  }
-}
-
-export type EventTeamMemberStatus = {
-  type: "team.member.status"
-  properties: {
-    teamName: string
-    memberName: string
-    status: "ready" | "busy" | "shutdown_requested" | "shutdown" | "error"
-  }
-}
-
-export type EventTeamMemberExecution = {
-  type: "team.member.execution"
-  properties: {
-    teamName: string
-    memberName: string
-    status:
-      | "idle"
-      | "starting"
-      | "running"
-      | "cancel_requested"
-      | "cancelling"
-      | "cancelled"
-      | "completing"
-      | "completed"
-      | "failed"
-      | "timed_out"
-  }
-}
-
-export type EventTeamMessage = {
-  type: "team.message"
-  properties: {
-    teamName: string
-    from: string
-    to: string
-    text: string
-  }
-}
-
-export type EventTeamBroadcast = {
-  type: "team.broadcast"
-  properties: {
-    teamName: string
-    from: string
-    text: string
-  }
-}
-
-export type EventTeamTaskUpdated = {
-  type: "team.task.updated"
-  properties: {
-    teamName: string
-    tasks: Array<{
-      id: string
-      content: string
-      status: "pending" | "in_progress" | "completed" | "cancelled" | "blocked"
-      priority: "high" | "medium" | "low"
-      assignee?: string
-      depends_on?: Array<string>
-    }>
-  }
-}
-
-export type EventTeamTaskClaimed = {
-  type: "team.task.claimed"
-  properties: {
-    teamName: string
-    taskId: string
-    memberName: string
-  }
-}
-
-export type EventTeamShutdownRequest = {
-  type: "team.shutdown.request"
-  properties: {
-    teamName: string
-    memberName: string
-  }
-}
-
-export type EventTeamPlanApproval = {
-  type: "team.plan.approval"
-  properties: {
-    teamName: string
-    memberName: string
-    approved: boolean
-    feedback?: string
-  }
-}
-
-export type EventTeamMessageRead = {
-  type: "team.message.read"
-  properties: {
-    teamName: string
-    agentName: string
-    count: number
-  }
-}
-
-export type EventTeamCleaned = {
-  type: "team.cleaned"
-  properties: {
-    teamName: string
-    leadSessionID: string
-    delegate: boolean
-    delegate_permissions?: Array<{
-      permission: string
-      pattern: string
-      action: "allow" | "deny" | "ask"
-    }>
   }
 }
 
@@ -1209,18 +1209,6 @@ export type Event =
   | EventFileEdited
   | EventFileWatcherUpdated
   | EventTodoUpdated
-  | EventTuiPromptAppend
-  | EventTuiCommandExecute
-  | EventTuiToastShow
-  | EventTuiSessionSelect
-  | EventMcpToolsChanged
-  | EventMcpBrowserOpenFailed
-  | EventCommandExecuted
-  | EventSessionDiff
-  | EventSessionError
-  | EventVcsBranchUpdated
-  | EventWorkspaceReady
-  | EventWorkspaceFailed
   | EventTeamCreated
   | EventTeamMemberSpawned
   | EventTeamMemberStatus
@@ -1233,6 +1221,18 @@ export type Event =
   | EventTeamPlanApproval
   | EventTeamMessageRead
   | EventTeamCleaned
+  | EventTuiPromptAppend
+  | EventTuiCommandExecute
+  | EventTuiToastShow
+  | EventTuiSessionSelect
+  | EventMcpToolsChanged
+  | EventMcpBrowserOpenFailed
+  | EventCommandExecuted
+  | EventSessionDiff
+  | EventSessionError
+  | EventVcsBranchUpdated
+  | EventWorkspaceReady
+  | EventWorkspaceFailed
   | EventPtyCreated
   | EventPtyUpdated
   | EventPtyExited

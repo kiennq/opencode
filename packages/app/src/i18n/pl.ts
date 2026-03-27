@@ -422,7 +422,9 @@ export const dict = {
   "error.chain.didYouMean": "Czy miałeś na myśli: {{suggestions}}",
   "error.chain.modelNotFound": "Model nie znaleziony: {{provider}}/{{model}}",
   "error.chain.checkConfig": "Sprawdź swoją konfigurację (opencode.json) nazwy dostawców/modeli",
-  "error.chain.mcpFailed": 'MCP server "{{name}}" failed. Note, OpenCode does not support MCP authentication yet.',
+  "error.chain.mcpFailed":
+    'MCP server "{{name}}" failed. If it requires authentication, enable it from the MCP UI or run opencode mcp auth.',
+  "mcp.auth.browserOpenFailed.title": "Open the MCP auth URL in your browser",
   "error.chain.providerAuthFailed": "Uwierzytelnianie dostawcy nie powiodło się ({{provider}}): {{message}}",
   "error.chain.providerInitFailed":
     'Nie udało się zainicjować dostawcy "{{provider}}". Sprawdź poświadczenia i konfigurację.',
