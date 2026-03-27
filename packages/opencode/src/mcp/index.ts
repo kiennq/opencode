@@ -29,6 +29,7 @@ import { InstanceState } from "@/effect/instance-state"
 import { makeRuntime } from "@/effect/run-service"
 import { ChildProcess, ChildProcessSpawner } from "effect/unstable/process"
 import * as CrossSpawnSpawner from "@/effect/cross-spawn-spawner"
+import { compatTransport } from "./version"
 
 export namespace MCP {
   const log = Log.create({ service: "mcp" })
@@ -345,7 +346,7 @@ export namespace MCP {
                   return bus
                     .publish(TuiEvent.ToastShow, {
                       title: "MCP Authentication Required",
-                      message: `Server "${key}" requires authentication. Run: opencode mcp auth ${key}`,
+                      message: `Server "${key}" requires authentication. Enable it from the MCP UI to start authentication.`,
                       variant: "warning",
                       duration: 8000,
                     })

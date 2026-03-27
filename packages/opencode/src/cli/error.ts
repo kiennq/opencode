@@ -7,7 +7,7 @@ import { UI } from "./ui"
 
 export function FormatError(input: unknown) {
   if (MCP.Failed.isInstance(input))
-    return `MCP server "${input.data.name}" failed. Note, opencode does not support MCP authentication yet.`
+    return `MCP server "${input.data.name}" failed. If it requires authentication, enable it from the MCP UI or run opencode mcp auth.`
   if (Provider.ModelNotFoundError.isInstance(input)) {
     const { providerID, modelID, suggestions } = input.data
     return [
