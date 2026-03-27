@@ -644,6 +644,23 @@ function App(props: { onSnapshot?: () => Promise<string[]> }) {
       category: "System",
     },
     {
+      title: "Reload runtime",
+      value: "app.reload",
+      slash: {
+        name: "reload",
+      },
+      onSelect: async (dialog) => {
+        dialog.clear()
+        const result = await sdk.client.instance.reload()
+        if (result.error) {
+          toast.show({ message: "Failed to reload runtime", variant: "error", duration: 4000 })
+          return
+        }
+        toast.show({ message: "Runtime reloaded", variant: "success", duration: 3000 })
+      },
+      category: "System",
+    },
+    {
       title: "Switch theme",
       value: "theme.switch",
       keybind: "theme_list",
