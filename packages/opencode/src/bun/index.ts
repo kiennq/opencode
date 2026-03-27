@@ -2,6 +2,7 @@ import z from "zod"
 import { Global } from "../global"
 import { Log } from "../util/log"
 import path from "path"
+import fs from "fs/promises"
 import { Filesystem } from "../util/filesystem"
 import { NamedError } from "@opencode-ai/util/error"
 import { Lock } from "../util/lock"
@@ -11,6 +12,17 @@ import { Process } from "../util/process"
 
 export namespace BunProc {
   const log = Log.create({ service: "bun" })
+
+  export function isGitUrl(pkg: string) {
+    return pkg.startsWith("github:") || pkg.startsWith("git+") || pkg.startsWith("git://")
+  }
+
+  interface PackageJson {
+    dependencies?: Record<string, string>
+    opencode?: {
+      providers?: Record<string, string>
+    }
+  }
 
   export async function run(cmd: string[], options?: Process.RunOptions) {
     const full = [which(), ...cmd]
@@ -50,24 +62,126 @@ export namespace BunProc {
     }),
   )
 
-  export async function install(pkg: string, version = "latest") {
-    // Use lock to ensure only one install at a time
+  async function readPackageJson(): Promise<PackageJson> {
+    return Filesystem.readJson<PackageJson>(path.join(Global.Path.cache, "package.json")).catch(() => ({}))
+  }
+
+  async function writePackageJson(parsed: PackageJson) {
+    await Filesystem.writeJson(path.join(Global.Path.cache, "package.json"), parsed)
+  }
+
+  async function track(provider: string, pkg: string) {
+    const parsed = await readPackageJson()
+    if (!parsed.opencode) parsed.opencode = {}
+    if (!parsed.opencode.providers) parsed.opencode.providers = {}
+    parsed.opencode.providers[provider] = pkg
+    await writePackageJson(parsed)
+  }
+
+  // github: installs raw source — build if the entry point is missing.
+  async function buildIfNeeded(mod: string) {
+    const pkg = path.join(mod, "package.json")
+    if (!(await Filesystem.exists(pkg))) return
+    const json = await Filesystem.readJson<{
+      main?: string
+      exports?: Record<string, any>
+      scripts?: Record<string, string>
+    }>(pkg)
+    const entry = json.main ?? json.exports?.["."]?.import ?? json.exports?.["."]
+    if (!entry || !json.scripts?.build) return
+    const entryPath = path.join(mod, entry)
+    if (await Filesystem.exists(entryPath)) return
+    log.info("building github package", { mod, entry })
+    await BunProc.run(["install", "--frozen-lockfile"], { cwd: mod }).catch(() =>
+      BunProc.run(["install"], { cwd: mod }),
+    )
+    // Build may partially succeed (e.g. bundler passes but tsc fails).
+    // Accept the result if the entry point was produced.
+    await BunProc.run(["run", "build"], { cwd: mod }).catch(async () => {
+      if (!(await Filesystem.exists(entryPath))) throw new Error(`build failed and entry point missing: ${entry}`)
+      log.info("build exited non-zero but entry point exists, continuing", { entry })
+    })
+  }
+
+  export async function install(pkg: string, version = "latest", provider?: string) {
     using _ = await Lock.write("bun-install")
+
+    // Ensure cache directory exists with a package.json so bun doesn't traverse up
+    // to find a parent workspace (e.g., if user has package.json in home directory)
+    await fs.mkdir(Global.Path.cache, { recursive: true })
+    const pkgJsonPath = path.join(Global.Path.cache, "package.json")
+    if (!(await Filesystem.exists(pkgJsonPath))) {
+      await Filesystem.writeJson(pkgJsonPath, {})
+    }
+
+    // github:user/repo, git+https://..., git://... — the module name is the package.json "name" from the
+    // repo, not the repo name. Look up by dependency value to find the cached name.
+    // Always reinstall git URLs to fetch latest commits
+    if (isGitUrl(pkg)) {
+      const parsed = await readPackageJson()
+      const deps = parsed.dependencies ?? {}
+      const name = Object.keys(deps).find((k) => deps[k] === pkg)
+      if (name) {
+        const mod = path.join(Global.Path.cache, "node_modules", name)
+        if (await Filesystem.exists(mod)) {
+          await buildIfNeeded(mod)
+          if (provider) await track(provider, pkg)
+          return mod
+        }
+      }
+      // Remove any existing version of the same package to avoid bun's
+      // DependencyLoop error (e.g. switching from npm to github, or between forks).
+      const repo = pkg.replace("github:", "").split("#")[0].split("/").pop()!
+      if (repo && deps[repo] && deps[repo] !== pkg) {
+        log.info("removing stale package before github install", { pkg: repo, old: deps[repo] })
+        await BunProc.run(["remove", "--cwd", Global.Path.cache, repo]).catch(() => {})
+      }
+      const args = ["add", "--force", "--exact", ...(proxied() ? ["--no-cache"] : []), "--cwd", Global.Path.cache, pkg]
+      log.info("installing package", { pkg })
+      await BunProc.run(args, { cwd: Global.Path.cache }).catch((e) => {
+        throw new InstallFailedError({ pkg, version })
+      })
+      const installed = await readPackageJson()
+      const resolved = Object.keys(installed.dependencies ?? {}).find((k) => installed.dependencies![k] === pkg)
+      if (!resolved) throw new InstallFailedError({ pkg, version })
+      const mod = path.join(Global.Path.cache, "node_modules", resolved)
+      await buildIfNeeded(mod)
+      if (provider) await track(provider, pkg)
+      return mod
+    }
 
     const mod = path.join(Global.Path.cache, "node_modules", pkg)
     const pkgjsonPath = path.join(Global.Path.cache, "package.json")
-    const parsed = await Filesystem.readJson<{ dependencies: Record<string, string> }>(pkgjsonPath).catch(async () => {
-      const result = { dependencies: {} as Record<string, string> }
+    const parsed = await Filesystem.readJson<{
+      dependencies: Record<string, string>
+      opencode?: { providers?: Record<string, string> }
+    }>(pkgjsonPath).catch(async () => {
+      const result: { dependencies: Record<string, string>; opencode?: { providers?: Record<string, string> } } = {
+        dependencies: {},
+      }
       await Filesystem.writeJson(pkgjsonPath, result)
       return result
     })
     if (!parsed.dependencies) parsed.dependencies = {} as Record<string, string>
     const dependencies = parsed.dependencies
+    const oldPkg = provider ? parsed.opencode?.providers?.[provider] : undefined
+    const switched = oldPkg && oldPkg !== pkg
     const modExists = await Filesystem.exists(mod)
     const cachedVersion = dependencies[pkg]
 
     if (!modExists || !cachedVersion) {
       // continue to install
+    } else if (version !== "latest" && cachedVersion === version) {
+      if (provider) await track(provider, pkg)
+      if (switched) {
+        const providers = parsed.opencode?.providers ?? {}
+        const used = Object.entries(providers).some(([p, name]) => p !== provider && name === oldPkg)
+        if (!used) {
+          log.info("removing unused package", { pkg: oldPkg })
+          await BunProc.run(["remove", "--cwd", Global.Path.cache, oldPkg]).catch(() => {})
+        }
+      }
+      return mod
     } else if (version === "latest") {
       if (!online()) return mod
       const stale = await PackageRegistry.isOutdated(pkg, cachedVersion, Global.Path.cache)
@@ -89,24 +203,10 @@ export namespace BunProc {
       pkg + "@" + version,
     ]
 
-    // Let Bun handle registry resolution:
-    // - If .npmrc files exist, Bun will use them automatically
-    // - If no .npmrc files exist, Bun will default to https://registry.npmjs.org
-    // - No need to pass --registry flag
-    log.info("installing package using Bun's default registry resolution", {
-      pkg,
-      version,
-    })
+    log.info("installing package", { pkg, version })
 
-    await BunProc.run(args, {
-      cwd: Global.Path.cache,
-    }).catch((e) => {
-      throw new InstallFailedError(
-        { pkg, version },
-        {
-          cause: e,
-        },
-      )
+    await BunProc.run(args, { cwd: Global.Path.cache }).catch((e) => {
+      throw new InstallFailedError({ pkg, version }, { cause: e })
     })
 
     // Resolve actual version from installed package when using "latest"
@@ -118,6 +218,21 @@ export namespace BunProc {
       )
       if (installedPkg?.version) {
         resolvedVersion = installedPkg.version
+      }
+    }
+
+    // Track provider switching and remove unused packages
+    if (provider) {
+      parsed.opencode = parsed.opencode ?? {}
+      parsed.opencode.providers = parsed.opencode.providers ?? {}
+      parsed.opencode.providers[provider] = pkg
+    }
+    if (switched) {
+      const providers = parsed.opencode?.providers ?? {}
+      const used = Object.entries(providers).some(([p, name]) => p !== provider && name === oldPkg)
+      if (!used) {
+        log.info("removing unused package", { pkg: oldPkg })
+        await BunProc.run(["remove", "--cwd", Global.Path.cache, oldPkg!]).catch(() => {})
       }
     }
 

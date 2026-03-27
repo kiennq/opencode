@@ -660,7 +660,7 @@ describe("tool.bash permissions", () => {
         ).rejects.toThrow(err.message)
         const extDirReq = requests.find((r) => r.permission === "external_directory")
         expect(extDirReq).toBeDefined()
-        expect(extDirReq!.patterns).toContain(glob(path.join(os.tmpdir(), "*")))
+        expect(extDirReq!.patterns).toContain(Filesystem.normalize(path.join(os.tmpdir(), "*")))
       },
     })
   })
@@ -786,7 +786,7 @@ describe("tool.bash permissions", () => {
           ),
         ).rejects.toThrow(err.message)
         const extDirReq = requests.find((r) => r.permission === "external_directory")
-        const expected = glob(path.join(outerTmp.path, "*"))
+        const expected = Filesystem.normalize(path.join(outerTmp.path, "*"))
         expect(extDirReq).toBeDefined()
         expect(extDirReq!.patterns).toContain(expected)
         expect(extDirReq!.always).toContain(expected)

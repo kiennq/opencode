@@ -107,4 +107,16 @@ export namespace Shell {
   export const preferred = lazy(() => select(process.env.SHELL))
 
   export const acceptable = lazy(() => select(process.env.SHELL, { acceptable: true }))
+  const UNIX_SHELLS = new Set(["bash", "sh", "zsh", "fish", "nu"])
+
+  export function isUnixLike(shell: string): boolean {
+    const base = path
+      .basename(shell)
+      .toLowerCase()
+      .replace(/\.exe$/, "")
+    return UNIX_SHELLS.has(base)
+  }
+
+  export const pwsh = lazy(() => which("pwsh") ?? undefined)
+  export const powershell = lazy(() => which("powershell") ?? which("powershell.exe") ?? undefined)
 }
