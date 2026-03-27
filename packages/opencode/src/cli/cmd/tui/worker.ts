@@ -149,7 +149,17 @@ export const rpc = {
     })
   },
   async reload() {
-    await Config.invalidate(true)
+    await Instance.provide({
+      directory: process.cwd(),
+      fn: async () => {
+        await Instance.reload({
+          directory: Instance.directory,
+          project: Instance.project,
+          worktree: Instance.worktree,
+          init: InstanceBootstrap,
+        })
+      },
+    })
   },
   async setWorkspace(input: { workspaceID?: string }) {
     startEventStream({ directory: process.cwd(), workspaceID: input.workspaceID })
