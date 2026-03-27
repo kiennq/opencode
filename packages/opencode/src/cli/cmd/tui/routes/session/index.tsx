@@ -1015,7 +1015,6 @@ export function Session() {
       value: "session.parent",
       keybind: "session_parent",
       category: "Session",
-      enabled: !!session()?.parentID,
       hidden: true,
       onSelect: childSessionHandler((dialog) => {
         const parentID = session()?.parentID

@@ -1,4 +1,5 @@
 export * from "./client.js"
+export * from "./mcp-toggle.js"
 export * from "./server.js"
 
 import { createOpencodeClient } from "./client.js"

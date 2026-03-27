@@ -7,6 +7,7 @@ import { Dialog } from "@opencode-ai/ui/dialog"
 import { List } from "@opencode-ai/ui/list"
 import { Switch } from "@opencode-ai/ui/switch"
 import { showToast } from "@opencode-ai/ui/toast"
+import { toggleMcp } from "@opencode-ai/sdk/v2"
 import { useLanguage } from "@/context/language"
 
 const statusLabels = {
@@ -72,14 +73,19 @@ export const DialogSelectMcp: Component = () => {
   const toggle = useMutation(() => ({
     mutationFn: async (name: string) => {
       const status = sync.data.mcp[name]
-      if (status?.status === "connected") {
-        await sdk.client.mcp.disconnect({ name })
-      } else {
-        await sdk.client.mcp.connect({ name })
+      const unsub = sdk.event.on("mcp.browser.open.failed", (event) => {
+        if (event.properties.mcpName !== name) return
+        showToast({
+          title: language.t("mcp.auth.browserOpenFailed.title"),
+          description: event.properties.url,
+        })
+      })
+      try {
+        const result = await toggleMcp(sdk.client, name, status)
+        if (result.data) sync.set("mcp", result.data)
+      } finally {
+        unsub()
       }
-
-      const result = await sdk.client.mcp.status()
-      if (result.data) sync.set("mcp", result.data)
     },
   }))
 

@@ -4,6 +4,7 @@ import { Icon } from "@opencode-ai/ui/icon"
 import { Switch } from "@opencode-ai/ui/switch"
 import { Tabs } from "@opencode-ai/ui/tabs"
 import { useMutation } from "@tanstack/solid-query"
+import { toggleMcp } from "@opencode-ai/sdk/v2"
 import { showToast } from "@opencode-ai/ui/toast"
 import { useNavigate } from "@solidjs/router"
 import { type Accessor, createEffect, createMemo, For, type JSXElement, onCleanup, Show } from "solid-js"
@@ -141,9 +142,19 @@ const useMcpToggleMutation = () => {
   return useMutation(() => ({
     mutationFn: async (name: string) => {
       const status = sync.data.mcp[name]
-      await (status?.status === "connected" ? sdk.client.mcp.disconnect({ name }) : sdk.client.mcp.connect({ name }))
-      const result = await sdk.client.mcp.status()
-      if (result.data) sync.set("mcp", result.data)
+      const unsub = sdk.event.on("mcp.browser.open.failed", (event) => {
+        if (event.properties.mcpName !== name) return
+        showToast({
+          title: language.t("mcp.auth.browserOpenFailed.title"),
+          description: event.properties.url,
+        })
+      })
+      try {
+        const result = await toggleMcp(sdk.client, name, status)
+        if (result.data) sync.set("mcp", result.data)
+      } finally {
+        unsub()
+      }
     },
     onError: (err) => {
       showToast({
