@@ -32,6 +32,17 @@ import { pathToFileURL } from "url"
 import { Effect, Layer, ServiceMap } from "effect"
 import { InstanceState } from "@/effect/instance-state"
 import { makeRuntime } from "@/effect/run-service"
+import {
+  TeamCreateTool,
+  TeamSpawnTool,
+  TeamMessageTool,
+  TeamBroadcastTool,
+  TeamTasksTool,
+  TeamClaimTool,
+  TeamApprovePlanTool,
+  TeamShutdownTool,
+  TeamCleanupTool,
+} from "./team"
 
 export namespace ToolRegistry {
   const log = Log.create({ service: "tool.registry" })
@@ -129,6 +140,15 @@ export namespace ToolRegistry {
           CodeSearchTool,
           SkillTool,
           ApplyPatchTool,
+          TeamCreateTool,
+          TeamSpawnTool,
+          TeamMessageTool,
+          TeamBroadcastTool,
+          TeamTasksTool,
+          TeamClaimTool,
+          TeamApprovePlanTool,
+          TeamShutdownTool,
+          TeamCleanupTool,
           ...(Flag.OPENCODE_EXPERIMENTAL_LSP_TOOL ? [LspTool] : []),
           ...(cfg.experimental?.batch_tool === true ? [BatchTool] : []),
           ...(Flag.OPENCODE_EXPERIMENTAL_PLAN_MODE && Flag.OPENCODE_CLIENT === "cli" ? [PlanExitTool] : []),

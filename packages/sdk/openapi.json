@@ -356,6 +356,82 @@
         ]
       }
     },
+    "/auth/wellknown": {
+      "get": {
+        "operationId": "auth.wellknown.list",
+        "summary": "List well-known auth URLs",
+        "description": "Get a list of all well-known authentication URLs stored in credentials.",
+        "responses": {
+          "200": {
+            "description": "List of well-known URLs",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.auth.wellknown.list({\n  ...\n})"
+          }
+        ]
+      },
+      "post": {
+        "operationId": "auth.wellknown.refresh",
+        "summary": "Authenticate with well-known URL",
+        "description": "Fetch a well-known config from the given URL, run its auth command, and store the resulting token.",
+        "responses": {
+          "200": {
+            "description": "Successfully authenticated",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "boolean"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BadRequestError"
+                }
+              }
+            }
+          }
+        },
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "url": {
+                    "type": "string"
+                  }
+                },
+                "required": ["url"]
+              }
+            }
+          }
+        },
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.auth.wellknown.refresh({\n  ...\n})"
+          }
+        ]
+      }
+    },
     "/project": {
       "get": {
         "operationId": "project.list",
@@ -2906,6 +2982,77 @@
         ]
       }
     },
+    "/session/{sessionID}/resume": {
+      "post": {
+        "operationId": "session.resume",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "directory",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "workspace",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "sessionID",
+            "schema": {
+              "type": "string",
+              "pattern": "^ses.*"
+            },
+            "required": true,
+            "description": "Session ID"
+          }
+        ],
+        "summary": "Resume session",
+        "description": "Resume processing a session that has pending messages without creating a new user message.",
+        "responses": {
+          "200": {
+            "description": "Resumed session",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "boolean"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BadRequestError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NotFoundError"
+                }
+              }
+            }
+          }
+        },
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.session.resume({\n  ...\n})"
+          }
+        ]
+      }
+    },
     "/session/{sessionID}/message": {
       "get": {
         "operationId": "session.messages",
@@ -2949,6 +3096,14 @@
             "schema": {
               "type": "string"
             }
+          },
+          {
+            "in": "query",
+            "name": "offset",
+            "schema": {
+              "type": "number"
+            },
+            "description": "Number of newest messages to skip"
           }
         ],
         "summary": "Get session messages",
@@ -3505,6 +3660,103 @@
           {
             "lang": "js",
             "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.part.update({\n  ...\n})"
+          }
+        ]
+      }
+    },
+    "/session/{sessionID}/team-message": {
+      "post": {
+        "operationId": "session.team_message",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "directory",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "workspace",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "sessionID",
+            "schema": {
+              "type": "string",
+              "pattern": "^ses.*"
+            },
+            "required": true
+          }
+        ],
+        "summary": "Send teammate message",
+        "description": "Send a team message from this session to a teammate or the lead.",
+        "responses": {
+          "200": {
+            "description": "Team message sent",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "ok": {
+                      "type": "boolean"
+                    }
+                  },
+                  "required": ["ok"]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BadRequestError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NotFoundError"
+                }
+              }
+            }
+          }
+        },
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "to": {
+                    "type": "string"
+                  },
+                  "text": {
+                    "type": "string"
+                  },
+                  "agent": {
+                    "type": "string"
+                  }
+                },
+                "required": ["to", "text"]
+              }
+            }
+          }
+        },
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.session.team_message({\n  ...\n})"
           }
         ]
       }
@@ -4967,6 +5219,332 @@
         ]
       }
     },
+    "/usage": {
+      "get": {
+        "operationId": "usage.get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "directory",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "workspace",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "provider",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "refresh",
+            "schema": {
+              "type": "boolean"
+            }
+          },
+          {
+            "in": "query",
+            "name": "command",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "modelProviderID",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "showUsageProviderScope",
+            "schema": {
+              "type": "string",
+              "enum": ["current", "all"]
+            }
+          },
+          {
+            "in": "query",
+            "name": "showUsageValueMode",
+            "schema": {
+              "type": "string",
+              "enum": ["used", "remaining"]
+            }
+          }
+        ],
+        "summary": "Get usage",
+        "description": "Fetch usage limits for authenticated providers.",
+        "responses": {
+          "200": {
+            "description": "Usage response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "entries": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "provider": {
+                            "type": "string"
+                          },
+                          "displayName": {
+                            "type": "string"
+                          },
+                          "snapshot": {
+                            "type": "object",
+                            "properties": {
+                              "primary": {
+                                "anyOf": [
+                                  {
+                                    "type": "object",
+                                    "properties": {
+                                      "usedPercent": {
+                                        "type": "number"
+                                      },
+                                      "windowMinutes": {
+                                        "anyOf": [
+                                          {
+                                            "type": "number"
+                                          },
+                                          {
+                                            "type": "null"
+                                          }
+                                        ]
+                                      },
+                                      "resetsAt": {
+                                        "anyOf": [
+                                          {
+                                            "type": "number"
+                                          },
+                                          {
+                                            "type": "null"
+                                          }
+                                        ]
+                                      }
+                                    },
+                                    "required": ["usedPercent", "windowMinutes", "resetsAt"]
+                                  },
+                                  {
+                                    "type": "null"
+                                  }
+                                ]
+                              },
+                              "secondary": {
+                                "anyOf": [
+                                  {
+                                    "type": "object",
+                                    "properties": {
+                                      "usedPercent": {
+                                        "type": "number"
+                                      },
+                                      "windowMinutes": {
+                                        "anyOf": [
+                                          {
+                                            "type": "number"
+                                          },
+                                          {
+                                            "type": "null"
+                                          }
+                                        ]
+                                      },
+                                      "resetsAt": {
+                                        "anyOf": [
+                                          {
+                                            "type": "number"
+                                          },
+                                          {
+                                            "type": "null"
+                                          }
+                                        ]
+                                      }
+                                    },
+                                    "required": ["usedPercent", "windowMinutes", "resetsAt"]
+                                  },
+                                  {
+                                    "type": "null"
+                                  }
+                                ]
+                              },
+                              "tertiary": {
+                                "anyOf": [
+                                  {
+                                    "type": "object",
+                                    "properties": {
+                                      "usedPercent": {
+                                        "type": "number"
+                                      },
+                                      "windowMinutes": {
+                                        "anyOf": [
+                                          {
+                                            "type": "number"
+                                          },
+                                          {
+                                            "type": "null"
+                                          }
+                                        ]
+                                      },
+                                      "resetsAt": {
+                                        "anyOf": [
+                                          {
+                                            "type": "number"
+                                          },
+                                          {
+                                            "type": "null"
+                                          }
+                                        ]
+                                      }
+                                    },
+                                    "required": ["usedPercent", "windowMinutes", "resetsAt"]
+                                  },
+                                  {
+                                    "type": "null"
+                                  }
+                                ]
+                              },
+                              "credits": {
+                                "anyOf": [
+                                  {
+                                    "type": "object",
+                                    "properties": {
+                                      "hasCredits": {
+                                        "type": "boolean"
+                                      },
+                                      "unlimited": {
+                                        "type": "boolean"
+                                      },
+                                      "balance": {
+                                        "anyOf": [
+                                          {
+                                            "type": "string"
+                                          },
+                                          {
+                                            "type": "null"
+                                          }
+                                        ]
+                                      },
+                                      "total": {
+                                        "anyOf": [
+                                          {
+                                            "type": "number"
+                                          },
+                                          {
+                                            "type": "null"
+                                          }
+                                        ]
+                                      },
+                                      "used": {
+                                        "anyOf": [
+                                          {
+                                            "type": "number"
+                                          },
+                                          {
+                                            "type": "null"
+                                          }
+                                        ]
+                                      },
+                                      "remaining": {
+                                        "anyOf": [
+                                          {
+                                            "type": "number"
+                                          },
+                                          {
+                                            "type": "null"
+                                          }
+                                        ]
+                                      }
+                                    },
+                                    "required": ["hasCredits", "unlimited", "balance"]
+                                  },
+                                  {
+                                    "type": "null"
+                                  }
+                                ]
+                              },
+                              "planType": {
+                                "anyOf": [
+                                  {
+                                    "type": "string",
+                                    "enum": [
+                                      "guest",
+                                      "free",
+                                      "go",
+                                      "plus",
+                                      "pro",
+                                      "free_workspace",
+                                      "team",
+                                      "business",
+                                      "education",
+                                      "quorum",
+                                      "k12",
+                                      "enterprise",
+                                      "edu"
+                                    ]
+                                  },
+                                  {
+                                    "type": "null"
+                                  }
+                                ]
+                              },
+                              "updatedAt": {
+                                "type": "number"
+                              }
+                            },
+                            "required": ["primary", "secondary", "tertiary", "credits", "planType", "updatedAt"]
+                          }
+                        },
+                        "required": ["provider", "displayName", "snapshot"]
+                      }
+                    },
+                    "error": {
+                      "type": "string"
+                    },
+                    "errors": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "provider": {
+                            "type": "string"
+                          },
+                          "message": {
+                            "type": "string"
+                          }
+                        },
+                        "required": ["provider", "message"]
+                      }
+                    },
+                    "mode": {
+                      "type": "string",
+                      "enum": ["used", "remaining"]
+                    }
+                  },
+                  "required": ["entries"]
+                }
+              }
+            }
+          }
+        },
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.usage.get({\n  ...\n})"
+          }
+        ]
+      }
+    },
     "/find": {
       "get": {
         "operationId": "find.text",
@@ -5902,6 +6480,538 @@
         ]
       }
     },
+    "/team": {
+      "get": {
+        "operationId": "team.list",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "directory",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "workspace",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "summary": "List teams",
+        "description": "List all teams in this project.",
+        "responses": {
+          "200": {
+            "description": "List of teams",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "name": {
+                        "type": "string",
+                        "pattern": "^[a-z0-9][a-z0-9-]{0,63}$"
+                      },
+                      "leadSessionID": {
+                        "type": "string"
+                      },
+                      "members": {
+                        "type": "array",
+                        "items": {
+                          "type": "object",
+                          "properties": {
+                            "name": {
+                              "type": "string",
+                              "pattern": "^[a-z0-9][a-z0-9-]{0,63}$"
+                            },
+                            "sessionID": {
+                              "type": "string"
+                            },
+                            "agent": {
+                              "type": "string"
+                            },
+                            "status": {
+                              "type": "string",
+                              "enum": ["ready", "busy", "shutdown_requested", "shutdown", "error"]
+                            },
+                            "execution_status": {
+                              "type": "string",
+                              "enum": [
+                                "idle",
+                                "starting",
+                                "running",
+                                "cancel_requested",
+                                "cancelling",
+                                "cancelled",
+                                "completing",
+                                "completed",
+                                "failed",
+                                "timed_out"
+                              ]
+                            },
+                            "prompt": {
+                              "type": "string"
+                            },
+                            "model": {
+                              "type": "string"
+                            },
+                            "planApproval": {
+                              "type": "string",
+                              "enum": ["none", "pending", "approved", "rejected"]
+                            }
+                          },
+                          "required": ["name", "sessionID", "agent", "status"]
+                        }
+                      },
+                      "created": {
+                        "type": "number"
+                      },
+                      "delegate": {
+                        "type": "boolean"
+                      },
+                      "delegate_permissions": {
+                        "type": "array",
+                        "items": {
+                          "type": "object",
+                          "properties": {
+                            "permission": {
+                              "type": "string"
+                            },
+                            "pattern": {
+                              "type": "string"
+                            },
+                            "action": {
+                              "type": "string",
+                              "enum": ["allow", "deny", "ask"]
+                            }
+                          },
+                          "required": ["permission", "pattern", "action"]
+                        }
+                      }
+                    },
+                    "required": ["name", "leadSessionID", "members", "created"]
+                  }
+                }
+              }
+            }
+          }
+        },
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.team.list({\n  ...\n})"
+          }
+        ]
+      }
+    },
+    "/team/{name}": {
+      "get": {
+        "operationId": "team.get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "directory",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "workspace",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "name",
+            "schema": {
+              "type": "string"
+            },
+            "required": true
+          }
+        ],
+        "summary": "Get team",
+        "description": "Retrieve a team by name.",
+        "responses": {
+          "200": {
+            "description": "Team info",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "name": {
+                      "type": "string",
+                      "pattern": "^[a-z0-9][a-z0-9-]{0,63}$"
+                    },
+                    "leadSessionID": {
+                      "type": "string"
+                    },
+                    "members": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "name": {
+                            "type": "string",
+                            "pattern": "^[a-z0-9][a-z0-9-]{0,63}$"
+                          },
+                          "sessionID": {
+                            "type": "string"
+                          },
+                          "agent": {
+                            "type": "string"
+                          },
+                          "status": {
+                            "type": "string",
+                            "enum": ["ready", "busy", "shutdown_requested", "shutdown", "error"]
+                          },
+                          "execution_status": {
+                            "type": "string",
+                            "enum": [
+                              "idle",
+                              "starting",
+                              "running",
+                              "cancel_requested",
+                              "cancelling",
+                              "cancelled",
+                              "completing",
+                              "completed",
+                              "failed",
+                              "timed_out"
+                            ]
+                          },
+                          "prompt": {
+                            "type": "string"
+                          },
+                          "model": {
+                            "type": "string"
+                          },
+                          "planApproval": {
+                            "type": "string",
+                            "enum": ["none", "pending", "approved", "rejected"]
+                          }
+                        },
+                        "required": ["name", "sessionID", "agent", "status"]
+                      }
+                    },
+                    "created": {
+                      "type": "number"
+                    },
+                    "delegate": {
+                      "type": "boolean"
+                    },
+                    "delegate_permissions": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "permission": {
+                            "type": "string"
+                          },
+                          "pattern": {
+                            "type": "string"
+                          },
+                          "action": {
+                            "type": "string",
+                            "enum": ["allow", "deny", "ask"]
+                          }
+                        },
+                        "required": ["permission", "pattern", "action"]
+                      }
+                    }
+                  },
+                  "required": ["name", "leadSessionID", "members", "created"]
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NotFoundError"
+                }
+              }
+            }
+          }
+        },
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.team.get({\n  ...\n})"
+          }
+        ]
+      }
+    },
+    "/team/{name}/tasks": {
+      "get": {
+        "operationId": "team.tasks.list",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "directory",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "workspace",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "name",
+            "schema": {
+              "type": "string"
+            },
+            "required": true
+          }
+        ],
+        "summary": "List team tasks",
+        "description": "List all tasks for a team.",
+        "responses": {
+          "200": {
+            "description": "List of tasks",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "id": {
+                        "type": "string"
+                      },
+                      "content": {
+                        "type": "string"
+                      },
+                      "status": {
+                        "type": "string",
+                        "enum": ["pending", "in_progress", "completed", "cancelled", "blocked"]
+                      },
+                      "priority": {
+                        "type": "string",
+                        "enum": ["high", "medium", "low"]
+                      },
+                      "assignee": {
+                        "type": "string"
+                      },
+                      "depends_on": {
+                        "type": "array",
+                        "items": {
+                          "type": "string"
+                        }
+                      }
+                    },
+                    "required": ["id", "content", "status", "priority"]
+                  }
+                }
+              }
+            }
+          }
+        },
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.team.tasks.list({\n  ...\n})"
+          }
+        ]
+      }
+    },
+    "/team/by-session/{sessionID}": {
+      "get": {
+        "operationId": "team.bySession",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "directory",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "workspace",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "sessionID",
+            "schema": {
+              "type": "string"
+            },
+            "required": true
+          }
+        ],
+        "summary": "Find team by session",
+        "description": "Find the team a session belongs to.",
+        "responses": {
+          "200": {
+            "description": "Team info with role and tasks"
+          }
+        },
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.team.bySession({\n  ...\n})"
+          }
+        ]
+      }
+    },
+    "/team/{name}/delegate": {
+      "post": {
+        "operationId": "team.delegate",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "directory",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "workspace",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "name",
+            "schema": {
+              "type": "string"
+            },
+            "required": true
+          }
+        ],
+        "summary": "Toggle delegate mode",
+        "description": "Enable or disable delegate mode for a team.",
+        "responses": {
+          "200": {
+            "description": "Delegate mode updated"
+          },
+          "400": {
+            "description": "Bad request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BadRequestError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NotFoundError"
+                }
+              }
+            }
+          }
+        },
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "enabled": {
+                    "type": "boolean"
+                  }
+                },
+                "required": ["enabled"]
+              }
+            }
+          }
+        },
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.team.delegate({\n  ...\n})"
+          }
+        ]
+      }
+    },
+    "/team/{name}/cancel": {
+      "post": {
+        "operationId": "team.cancel",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "directory",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "workspace",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "name",
+            "schema": {
+              "type": "string"
+            },
+            "required": true
+          }
+        ],
+        "summary": "Cancel teammates",
+        "description": "Cancel active teammates' prompt loops. Pass { member: name } to cancel one, or omit to cancel all.",
+        "responses": {
+          "200": {
+            "description": "Number of cancelled members"
+          },
+          "404": {
+            "description": "Not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NotFoundError"
+                }
+              }
+            }
+          }
+        },
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "member": {
+                    "type": "string"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.team.cancel({\n  ...\n})"
+          }
+        ]
+      }
+    },
     "/tui/append-prompt": {
       "post": {
         "operationId": "tui.appendPrompt",
@@ -6632,6 +7742,47 @@
           {
             "lang": "js",
             "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.instance.dispose({\n  ...\n})"
+          }
+        ]
+      }
+    },
+    "/instance/reload": {
+      "post": {
+        "operationId": "instance.reload",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "directory",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "workspace",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "summary": "Reload instance",
+        "description": "Soft reload the current OpenCode instance so runtime config and discovered content are refreshed.",
+        "responses": {
+          "200": {
+            "description": "Instance reloaded",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "boolean"
+                }
+              }
+            }
+          }
+        },
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.instance.reload({\n  ...\n})"
           }
         ]
       }
@@ -8216,6 +9367,483 @@
         },
         "required": ["type", "properties"]
       },
+      "Event.team.created": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": "string",
+            "const": "team.created"
+          },
+          "properties": {
+            "type": "object",
+            "properties": {
+              "team": {
+                "type": "object",
+                "properties": {
+                  "name": {
+                    "type": "string",
+                    "pattern": "^[a-z0-9][a-z0-9-]{0,63}$"
+                  },
+                  "leadSessionID": {
+                    "type": "string"
+                  },
+                  "members": {
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "name": {
+                          "type": "string",
+                          "pattern": "^[a-z0-9][a-z0-9-]{0,63}$"
+                        },
+                        "sessionID": {
+                          "type": "string"
+                        },
+                        "agent": {
+                          "type": "string"
+                        },
+                        "status": {
+                          "type": "string",
+                          "enum": ["ready", "busy", "shutdown_requested", "shutdown", "error"]
+                        },
+                        "execution_status": {
+                          "type": "string",
+                          "enum": [
+                            "idle",
+                            "starting",
+                            "running",
+                            "cancel_requested",
+                            "cancelling",
+                            "cancelled",
+                            "completing",
+                            "completed",
+                            "failed",
+                            "timed_out"
+                          ]
+                        },
+                        "prompt": {
+                          "type": "string"
+                        },
+                        "model": {
+                          "type": "string"
+                        },
+                        "planApproval": {
+                          "type": "string",
+                          "enum": ["none", "pending", "approved", "rejected"]
+                        }
+                      },
+                      "required": ["name", "sessionID", "agent", "status"]
+                    }
+                  },
+                  "created": {
+                    "type": "number"
+                  },
+                  "delegate": {
+                    "type": "boolean"
+                  },
+                  "delegate_permissions": {
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "permission": {
+                          "type": "string"
+                        },
+                        "pattern": {
+                          "type": "string"
+                        },
+                        "action": {
+                          "type": "string",
+                          "enum": ["allow", "deny", "ask"]
+                        }
+                      },
+                      "required": ["permission", "pattern", "action"]
+                    }
+                  }
+                },
+                "required": ["name", "leadSessionID", "members", "created"]
+              }
+            },
+            "required": ["team"]
+          }
+        },
+        "required": ["type", "properties"]
+      },
+      "Event.team.member.spawned": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": "string",
+            "const": "team.member.spawned"
+          },
+          "properties": {
+            "type": "object",
+            "properties": {
+              "teamName": {
+                "type": "string"
+              },
+              "member": {
+                "type": "object",
+                "properties": {
+                  "name": {
+                    "type": "string",
+                    "pattern": "^[a-z0-9][a-z0-9-]{0,63}$"
+                  },
+                  "sessionID": {
+                    "type": "string"
+                  },
+                  "agent": {
+                    "type": "string"
+                  },
+                  "status": {
+                    "type": "string",
+                    "enum": ["ready", "busy", "shutdown_requested", "shutdown", "error"]
+                  },
+                  "execution_status": {
+                    "type": "string",
+                    "enum": [
+                      "idle",
+                      "starting",
+                      "running",
+                      "cancel_requested",
+                      "cancelling",
+                      "cancelled",
+                      "completing",
+                      "completed",
+                      "failed",
+                      "timed_out"
+                    ]
+                  },
+                  "prompt": {
+                    "type": "string"
+                  },
+                  "model": {
+                    "type": "string"
+                  },
+                  "planApproval": {
+                    "type": "string",
+                    "enum": ["none", "pending", "approved", "rejected"]
+                  }
+                },
+                "required": ["name", "sessionID", "agent", "status"]
+              }
+            },
+            "required": ["teamName", "member"]
+          }
+        },
+        "required": ["type", "properties"]
+      },
+      "Event.team.member.status": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": "string",
+            "const": "team.member.status"
+          },
+          "properties": {
+            "type": "object",
+            "properties": {
+              "teamName": {
+                "type": "string"
+              },
+              "memberName": {
+                "type": "string"
+              },
+              "status": {
+                "type": "string",
+                "enum": ["ready", "busy", "shutdown_requested", "shutdown", "error"]
+              }
+            },
+            "required": ["teamName", "memberName", "status"]
+          }
+        },
+        "required": ["type", "properties"]
+      },
+      "Event.team.member.execution": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": "string",
+            "const": "team.member.execution"
+          },
+          "properties": {
+            "type": "object",
+            "properties": {
+              "teamName": {
+                "type": "string"
+              },
+              "memberName": {
+                "type": "string"
+              },
+              "status": {
+                "type": "string",
+                "enum": [
+                  "idle",
+                  "starting",
+                  "running",
+                  "cancel_requested",
+                  "cancelling",
+                  "cancelled",
+                  "completing",
+                  "completed",
+                  "failed",
+                  "timed_out"
+                ]
+              }
+            },
+            "required": ["teamName", "memberName", "status"]
+          }
+        },
+        "required": ["type", "properties"]
+      },
+      "Event.team.message": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": "string",
+            "const": "team.message"
+          },
+          "properties": {
+            "type": "object",
+            "properties": {
+              "teamName": {
+                "type": "string"
+              },
+              "from": {
+                "type": "string"
+              },
+              "to": {
+                "type": "string"
+              },
+              "text": {
+                "type": "string"
+              }
+            },
+            "required": ["teamName", "from", "to", "text"]
+          }
+        },
+        "required": ["type", "properties"]
+      },
+      "Event.team.broadcast": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": "string",
+            "const": "team.broadcast"
+          },
+          "properties": {
+            "type": "object",
+            "properties": {
+              "teamName": {
+                "type": "string"
+              },
+              "from": {
+                "type": "string"
+              },
+              "text": {
+                "type": "string"
+              }
+            },
+            "required": ["teamName", "from", "text"]
+          }
+        },
+        "required": ["type", "properties"]
+      },
+      "Event.team.task.updated": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": "string",
+            "const": "team.task.updated"
+          },
+          "properties": {
+            "type": "object",
+            "properties": {
+              "teamName": {
+                "type": "string"
+              },
+              "tasks": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "string"
+                    },
+                    "content": {
+                      "type": "string"
+                    },
+                    "status": {
+                      "type": "string",
+                      "enum": ["pending", "in_progress", "completed", "cancelled", "blocked"]
+                    },
+                    "priority": {
+                      "type": "string",
+                      "enum": ["high", "medium", "low"]
+                    },
+                    "assignee": {
+                      "type": "string"
+                    },
+                    "depends_on": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    }
+                  },
+                  "required": ["id", "content", "status", "priority"]
+                }
+              }
+            },
+            "required": ["teamName", "tasks"]
+          }
+        },
+        "required": ["type", "properties"]
+      },
+      "Event.team.task.claimed": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": "string",
+            "const": "team.task.claimed"
+          },
+          "properties": {
+            "type": "object",
+            "properties": {
+              "teamName": {
+                "type": "string"
+              },
+              "taskId": {
+                "type": "string"
+              },
+              "memberName": {
+                "type": "string"
+              }
+            },
+            "required": ["teamName", "taskId", "memberName"]
+          }
+        },
+        "required": ["type", "properties"]
+      },
+      "Event.team.shutdown.request": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": "string",
+            "const": "team.shutdown.request"
+          },
+          "properties": {
+            "type": "object",
+            "properties": {
+              "teamName": {
+                "type": "string"
+              },
+              "memberName": {
+                "type": "string"
+              }
+            },
+            "required": ["teamName", "memberName"]
+          }
+        },
+        "required": ["type", "properties"]
+      },
+      "Event.team.plan.approval": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": "string",
+            "const": "team.plan.approval"
+          },
+          "properties": {
+            "type": "object",
+            "properties": {
+              "teamName": {
+                "type": "string"
+              },
+              "memberName": {
+                "type": "string"
+              },
+              "approved": {
+                "type": "boolean"
+              },
+              "feedback": {
+                "type": "string"
+              }
+            },
+            "required": ["teamName", "memberName", "approved"]
+          }
+        },
+        "required": ["type", "properties"]
+      },
+      "Event.team.message.read": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": "string",
+            "const": "team.message.read"
+          },
+          "properties": {
+            "type": "object",
+            "properties": {
+              "teamName": {
+                "type": "string"
+              },
+              "agentName": {
+                "type": "string"
+              },
+              "count": {
+                "type": "number"
+              }
+            },
+            "required": ["teamName", "agentName", "count"]
+          }
+        },
+        "required": ["type", "properties"]
+      },
+      "Event.team.cleaned": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": "string",
+            "const": "team.cleaned"
+          },
+          "properties": {
+            "type": "object",
+            "properties": {
+              "teamName": {
+                "type": "string"
+              },
+              "leadSessionID": {
+                "type": "string"
+              },
+              "delegate": {
+                "type": "boolean"
+              },
+              "delegate_permissions": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "permission": {
+                      "type": "string"
+                    },
+                    "pattern": {
+                      "type": "string"
+                    },
+                    "action": {
+                      "type": "string",
+                      "enum": ["allow", "deny", "ask"]
+                    }
+                  },
+                  "required": ["permission", "pattern", "action"]
+                }
+              }
+            },
+            "required": ["teamName", "leadSessionID", "delegate"]
+          }
+        },
+        "required": ["type", "properties"]
+      },
       "Pty": {
         "type": "object",
         "properties": {
@@ -8366,6 +9994,226 @@
               }
             },
             "required": ["message"]
+          }
+        },
+        "required": ["type", "properties"]
+      },
+      "Event.usage.updated": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": "string",
+            "const": "usage.updated"
+          },
+          "properties": {
+            "type": "object",
+            "properties": {
+              "provider": {
+                "type": "string"
+              },
+              "snapshot": {
+                "type": "object",
+                "properties": {
+                  "primary": {
+                    "anyOf": [
+                      {
+                        "type": "object",
+                        "properties": {
+                          "usedPercent": {
+                            "type": "number"
+                          },
+                          "windowMinutes": {
+                            "anyOf": [
+                              {
+                                "type": "number"
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          },
+                          "resetsAt": {
+                            "anyOf": [
+                              {
+                                "type": "number"
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          }
+                        },
+                        "required": ["usedPercent", "windowMinutes", "resetsAt"]
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "secondary": {
+                    "anyOf": [
+                      {
+                        "type": "object",
+                        "properties": {
+                          "usedPercent": {
+                            "type": "number"
+                          },
+                          "windowMinutes": {
+                            "anyOf": [
+                              {
+                                "type": "number"
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          },
+                          "resetsAt": {
+                            "anyOf": [
+                              {
+                                "type": "number"
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          }
+                        },
+                        "required": ["usedPercent", "windowMinutes", "resetsAt"]
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "tertiary": {
+                    "anyOf": [
+                      {
+                        "type": "object",
+                        "properties": {
+                          "usedPercent": {
+                            "type": "number"
+                          },
+                          "windowMinutes": {
+                            "anyOf": [
+                              {
+                                "type": "number"
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          },
+                          "resetsAt": {
+                            "anyOf": [
+                              {
+                                "type": "number"
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          }
+                        },
+                        "required": ["usedPercent", "windowMinutes", "resetsAt"]
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "credits": {
+                    "anyOf": [
+                      {
+                        "type": "object",
+                        "properties": {
+                          "hasCredits": {
+                            "type": "boolean"
+                          },
+                          "unlimited": {
+                            "type": "boolean"
+                          },
+                          "balance": {
+                            "anyOf": [
+                              {
+                                "type": "string"
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          },
+                          "total": {
+                            "anyOf": [
+                              {
+                                "type": "number"
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          },
+                          "used": {
+                            "anyOf": [
+                              {
+                                "type": "number"
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          },
+                          "remaining": {
+                            "anyOf": [
+                              {
+                                "type": "number"
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          }
+                        },
+                        "required": ["hasCredits", "unlimited", "balance"]
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "planType": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "enum": [
+                          "guest",
+                          "free",
+                          "go",
+                          "plus",
+                          "pro",
+                          "free_workspace",
+                          "team",
+                          "business",
+                          "education",
+                          "quorum",
+                          "k12",
+                          "enterprise",
+                          "edu"
+                        ]
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "updatedAt": {
+                    "type": "number"
+                  }
+                },
+                "required": ["primary", "secondary", "tertiary", "credits", "planType", "updatedAt"]
+              }
+            },
+            "required": ["provider", "snapshot"]
           }
         },
         "required": ["type", "properties"]
@@ -9091,6 +10939,9 @@
             "items": {
               "$ref": "#/components/schemas/FilePart"
             }
+          },
+          "summary": {
+            "type": "string"
           }
         },
         "required": ["status", "input", "output", "title", "metadata", "time"]
@@ -9830,6 +11681,42 @@
             "$ref": "#/components/schemas/Event.workspace.failed"
           },
           {
+            "$ref": "#/components/schemas/Event.team.created"
+          },
+          {
+            "$ref": "#/components/schemas/Event.team.member.spawned"
+          },
+          {
+            "$ref": "#/components/schemas/Event.team.member.status"
+          },
+          {
+            "$ref": "#/components/schemas/Event.team.member.execution"
+          },
+          {
+            "$ref": "#/components/schemas/Event.team.message"
+          },
+          {
+            "$ref": "#/components/schemas/Event.team.broadcast"
+          },
+          {
+            "$ref": "#/components/schemas/Event.team.task.updated"
+          },
+          {
+            "$ref": "#/components/schemas/Event.team.task.claimed"
+          },
+          {
+            "$ref": "#/components/schemas/Event.team.shutdown.request"
+          },
+          {
+            "$ref": "#/components/schemas/Event.team.plan.approval"
+          },
+          {
+            "$ref": "#/components/schemas/Event.team.message.read"
+          },
+          {
+            "$ref": "#/components/schemas/Event.team.cleaned"
+          },
+          {
             "$ref": "#/components/schemas/Event.pty.created"
           },
           {
@@ -9846,6 +11733,9 @@
           },
           {
             "$ref": "#/components/schemas/Event.worktree.failed"
+          },
+          {
+            "$ref": "#/components/schemas/Event.usage.updated"
           },
           {
             "$ref": "#/components/schemas/Event.message.updated"
@@ -10645,8 +12535,7 @@
                     "output": {
                       "type": "number"
                     }
-                  },
-                  "required": ["context", "output"]
+                  }
                 },
                 "modalities": {
                   "type": "object",
@@ -10742,6 +12631,11 @@
               },
               "baseURL": {
                 "type": "string"
+              },
+              "client": {
+                "description": "OAuth app to use for GitHub Copilot auth. Defaults to 'github'.",
+                "type": "string",
+                "enum": ["github", "anomaly"]
               },
               "enterpriseUrl": {
                 "description": "GitHub Enterprise URL for copilot authentication",
@@ -11263,6 +13157,38 @@
                 "type": "integer",
                 "minimum": 0,
                 "maximum": 9007199254740991
+              },
+              "token_threshold": {
+                "description": "Absolute token threshold that triggers compaction",
+                "type": "integer",
+                "exclusiveMinimum": 0,
+                "maximum": 9007199254740991
+              },
+              "context_threshold": {
+                "description": "Fraction of model context window that triggers compaction (0-1+)",
+                "type": "number",
+                "exclusiveMinimum": 0
+              },
+              "models": {
+                "description": "Per-model compaction thresholds keyed by providerID/modelID",
+                "type": "object",
+                "propertyNames": {
+                  "type": "string"
+                },
+                "additionalProperties": {
+                  "type": "object",
+                  "properties": {
+                    "token_threshold": {
+                      "type": "integer",
+                      "exclusiveMinimum": 0,
+                      "maximum": 9007199254740991
+                    },
+                    "context_threshold": {
+                      "type": "number",
+                      "exclusiveMinimum": 0
+                    }
+                  }
+                }
               }
             }
           },
@@ -11334,6 +13260,9 @@
             "type": "string"
           },
           "access": {
+            "type": "string"
+          },
+          "usage": {
             "type": "string"
           },
           "expires": {

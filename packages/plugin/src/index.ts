@@ -132,7 +132,6 @@ export type AuthOuathResult = { url: string; instructions: string } & (
                 usage?: string
                 enterpriseUrl?: string
                 accountId?: string
-                enterpriseUrl?: string
               }
             | { key: string }
           ))
@@ -155,7 +154,6 @@ export type AuthOuathResult = { url: string; instructions: string } & (
                 usage?: string
                 enterpriseUrl?: string
                 accountId?: string
-                enterpriseUrl?: string
               }
             | { key: string }
           ))

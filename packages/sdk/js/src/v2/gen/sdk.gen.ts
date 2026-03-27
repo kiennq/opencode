@@ -13,6 +13,9 @@ import type {
   AuthRemoveResponses,
   AuthSetErrors,
   AuthSetResponses,
+  AuthWellknownListResponses,
+  AuthWellknownRefreshErrors,
+  AuthWellknownRefreshResponses,
   CommandListResponses,
   Config as Config3,
   ConfigGetResponses,
@@ -134,6 +137,8 @@ import type {
   SessionPromptAsyncResponses,
   SessionPromptErrors,
   SessionPromptResponses,
+  SessionResumeErrors,
+  SessionResumeResponses,
   SessionRevertErrors,
   SessionRevertResponses,
   SessionShareErrors,
@@ -144,6 +149,8 @@ import type {
   SessionStatusResponses,
   SessionSummarizeErrors,
   SessionSummarizeResponses,
+  SessionTeamMessageErrors,
+  SessionTeamMessageResponses,
   SessionTodoErrors,
   SessionTodoResponses,
   SessionUnrevertErrors,
@@ -153,6 +160,15 @@ import type {
   SessionUpdateErrors,
   SessionUpdateResponses,
   SubtaskPartInput,
+  TeamBySessionResponses,
+  TeamCancelErrors,
+  TeamCancelResponses,
+  TeamDelegateErrors,
+  TeamDelegateResponses,
+  TeamGetErrors,
+  TeamGetResponses,
+  TeamListResponses,
+  TeamTasksListResponses,
   TextPartInput,
   ToolIdsErrors,
   ToolIdsResponses,
@@ -175,6 +191,7 @@ import type {
   TuiSelectSessionResponses,
   TuiShowToastResponses,
   TuiSubmitPromptResponses,
+  UsageGetResponses,
   VcsGetResponses,
   WorktreeCreateErrors,
   WorktreeCreateInput,
@@ -355,6 +372,48 @@ export class Global extends HeyApiClient {
   }
 }
 
+export class Wellknown extends HeyApiClient {
+  /**
+   * List well-known auth URLs
+   *
+   * Get a list of all well-known authentication URLs stored in credentials.
+   */
+  public list<ThrowOnError extends boolean = false>(options?: Options<never, ThrowOnError>) {
+    return (options?.client ?? this.client).get<AuthWellknownListResponses, unknown, ThrowOnError>({
+      url: "/auth/wellknown",
+      ...options,
+    })
+  }
+
+  /**
+   * Authenticate with well-known URL
+   *
+   * Fetch a well-known config from the given URL, run its auth command, and store the resulting token.
+   */
+  public refresh<ThrowOnError extends boolean = false>(
+    parameters?: {
+      url?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams([parameters], [{ args: [{ in: "body", key: "url" }] }])
+    return (options?.client ?? this.client).post<
+      AuthWellknownRefreshResponses,
+      AuthWellknownRefreshErrors,
+      ThrowOnError
+    >({
+      url: "/auth/wellknown",
+      ...options,
+      ...params,
+      headers: {
+        "Content-Type": "application/json",
+        ...options?.headers,
+        ...params.headers,
+      },
+    })
+  }
+}
+
 export class Auth extends HeyApiClient {
   /**
    * Remove auth credentials
@@ -408,6 +467,11 @@ export class Auth extends HeyApiClient {
         ...params.headers,
       },
     })
+  }
+
+  private _wellknown?: Wellknown
+  get wellknown(): Wellknown {
+    return (this._wellknown ??= new Wellknown({ client: this.client }))
   }
 }
 
@@ -1829,6 +1893,38 @@ export class Session2 extends HeyApiClient {
   }
 
   /**
+   * Resume session
+   *
+   * Resume processing a session that has pending messages without creating a new user message.
+   */
+  public resume<ThrowOnError extends boolean = false>(
+    parameters: {
+      sessionID: string
+      directory?: string
+      workspace?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "path", key: "sessionID" },
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).post<SessionResumeResponses, SessionResumeErrors, ThrowOnError>({
+      url: "/session/{sessionID}/resume",
+      ...options,
+      ...params,
+    })
+  }
+
+  /**
    * Get session messages
    *
    * Retrieve all messages in a session, including user prompts and AI responses.
@@ -1995,6 +2091,49 @@ export class Session2 extends HeyApiClient {
       url: "/session/{sessionID}/message/{messageID}",
       ...options,
       ...params,
+    })
+  }
+
+  /**
+   * Send teammate message
+   *
+   * Send a team message from this session to a teammate or the lead.
+   */
+  public teamMessage<ThrowOnError extends boolean = false>(
+    parameters: {
+      sessionID: string
+      directory?: string
+      workspace?: string
+      to?: string
+      text?: string
+      agent?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "path", key: "sessionID" },
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+            { in: "body", key: "to" },
+            { in: "body", key: "text" },
+            { in: "body", key: "agent" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).post<SessionTeamMessageResponses, SessionTeamMessageErrors, ThrowOnError>({
+      url: "/session/{sessionID}/team-message",
+      ...options,
+      ...params,
+      headers: {
+        "Content-Type": "application/json",
+        ...options?.headers,
+        ...params.headers,
+      },
     })
   }
 
@@ -2693,6 +2832,50 @@ export class Provider extends HeyApiClient {
   }
 }
 
+export class Usage extends HeyApiClient {
+  /**
+   * Get usage
+   *
+   * Fetch usage limits for authenticated providers.
+   */
+  public get<ThrowOnError extends boolean = false>(
+    parameters?: {
+      directory?: string
+      workspace?: string
+      provider?: string
+      refresh?: boolean
+      command?: string
+      modelProviderID?: string
+      showUsageProviderScope?: "current" | "all"
+      showUsageValueMode?: "used" | "remaining"
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+            { in: "query", key: "provider" },
+            { in: "query", key: "refresh" },
+            { in: "query", key: "command" },
+            { in: "query", key: "modelProviderID" },
+            { in: "query", key: "showUsageProviderScope" },
+            { in: "query", key: "showUsageValueMode" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).get<UsageGetResponses, unknown, ThrowOnError>({
+      url: "/usage",
+      ...options,
+      ...params,
+    })
+  }
+}
+
 export class Find extends HeyApiClient {
   /**
    * Find text
@@ -3197,6 +3380,219 @@ export class Mcp extends HeyApiClient {
   private _auth?: Auth2
   get auth(): Auth2 {
     return (this._auth ??= new Auth2({ client: this.client }))
+  }
+}
+
+export class Tasks extends HeyApiClient {
+  /**
+   * List team tasks
+   *
+   * List all tasks for a team.
+   */
+  public list<ThrowOnError extends boolean = false>(
+    parameters: {
+      name: string
+      directory?: string
+      workspace?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "path", key: "name" },
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).get<TeamTasksListResponses, unknown, ThrowOnError>({
+      url: "/team/{name}/tasks",
+      ...options,
+      ...params,
+    })
+  }
+}
+
+export class Team extends HeyApiClient {
+  /**
+   * List teams
+   *
+   * List all teams in this project.
+   */
+  public list<ThrowOnError extends boolean = false>(
+    parameters?: {
+      directory?: string
+      workspace?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).get<TeamListResponses, unknown, ThrowOnError>({
+      url: "/team",
+      ...options,
+      ...params,
+    })
+  }
+
+  /**
+   * Get team
+   *
+   * Retrieve a team by name.
+   */
+  public get<ThrowOnError extends boolean = false>(
+    parameters: {
+      name: string
+      directory?: string
+      workspace?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "path", key: "name" },
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).get<TeamGetResponses, TeamGetErrors, ThrowOnError>({
+      url: "/team/{name}",
+      ...options,
+      ...params,
+    })
+  }
+
+  /**
+   * Find team by session
+   *
+   * Find the team a session belongs to.
+   */
+  public bySession<ThrowOnError extends boolean = false>(
+    parameters: {
+      sessionID: string
+      directory?: string
+      workspace?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "path", key: "sessionID" },
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).get<TeamBySessionResponses, unknown, ThrowOnError>({
+      url: "/team/by-session/{sessionID}",
+      ...options,
+      ...params,
+    })
+  }
+
+  /**
+   * Toggle delegate mode
+   *
+   * Enable or disable delegate mode for a team.
+   */
+  public delegate<ThrowOnError extends boolean = false>(
+    parameters: {
+      name: string
+      directory?: string
+      workspace?: string
+      enabled?: boolean
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "path", key: "name" },
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+            { in: "body", key: "enabled" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).post<TeamDelegateResponses, TeamDelegateErrors, ThrowOnError>({
+      url: "/team/{name}/delegate",
+      ...options,
+      ...params,
+      headers: {
+        "Content-Type": "application/json",
+        ...options?.headers,
+        ...params.headers,
+      },
+    })
+  }
+
+  /**
+   * Cancel teammates
+   *
+   * Cancel active teammates' prompt loops. Pass { member: name } to cancel one, or omit to cancel all.
+   */
+  public cancel<ThrowOnError extends boolean = false>(
+    parameters: {
+      name: string
+      directory?: string
+      workspace?: string
+      member?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "path", key: "name" },
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+            { in: "body", key: "member" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).post<TeamCancelResponses, TeamCancelErrors, ThrowOnError>({
+      url: "/team/{name}/cancel",
+      ...options,
+      ...params,
+      headers: {
+        "Content-Type": "application/json",
+        ...options?.headers,
+        ...params.headers,
+      },
+    })
+  }
+
+  private _tasks?: Tasks
+  get tasks(): Tasks {
+    return (this._tasks ??= new Tasks({ client: this.client }))
   }
 }
 
@@ -4019,6 +4415,11 @@ export class OpencodeClient extends HeyApiClient {
     return (this._provider ??= new Provider({ client: this.client }))
   }
 
+  private _usage?: Usage
+  get usage(): Usage {
+    return (this._usage ??= new Usage({ client: this.client }))
+  }
+
   private _find?: Find
   get find(): Find {
     return (this._find ??= new Find({ client: this.client }))
@@ -4037,6 +4438,11 @@ export class OpencodeClient extends HeyApiClient {
   private _mcp?: Mcp
   get mcp(): Mcp {
     return (this._mcp ??= new Mcp({ client: this.client }))
+  }
+
+  private _team?: Team
+  get team(): Team {
+    return (this._team ??= new Team({ client: this.client }))
   }
 
   private _tui?: Tui

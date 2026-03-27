@@ -461,6 +461,182 @@ export type EventWorkspaceFailed = {
   }
 }
 
+export type EventTeamCreated = {
+  type: "team.created"
+  properties: {
+    team: {
+      name: string
+      leadSessionID: string
+      members: Array<{
+        name: string
+        sessionID: string
+        agent: string
+        status: "ready" | "busy" | "shutdown_requested" | "shutdown" | "error"
+        execution_status?:
+          | "idle"
+          | "starting"
+          | "running"
+          | "cancel_requested"
+          | "cancelling"
+          | "cancelled"
+          | "completing"
+          | "completed"
+          | "failed"
+          | "timed_out"
+        prompt?: string
+        model?: string
+        planApproval?: "none" | "pending" | "approved" | "rejected"
+      }>
+      created: number
+      delegate?: boolean
+      delegate_permissions?: Array<{
+        permission: string
+        pattern: string
+        action: "allow" | "deny" | "ask"
+      }>
+    }
+  }
+}
+
+export type EventTeamMemberSpawned = {
+  type: "team.member.spawned"
+  properties: {
+    teamName: string
+    member: {
+      name: string
+      sessionID: string
+      agent: string
+      status: "ready" | "busy" | "shutdown_requested" | "shutdown" | "error"
+      execution_status?:
+        | "idle"
+        | "starting"
+        | "running"
+        | "cancel_requested"
+        | "cancelling"
+        | "cancelled"
+        | "completing"
+        | "completed"
+        | "failed"
+        | "timed_out"
+      prompt?: string
+      model?: string
+      planApproval?: "none" | "pending" | "approved" | "rejected"
+    }
+  }
+}
+
+export type EventTeamMemberStatus = {
+  type: "team.member.status"
+  properties: {
+    teamName: string
+    memberName: string
+    status: "ready" | "busy" | "shutdown_requested" | "shutdown" | "error"
+  }
+}
+
+export type EventTeamMemberExecution = {
+  type: "team.member.execution"
+  properties: {
+    teamName: string
+    memberName: string
+    status:
+      | "idle"
+      | "starting"
+      | "running"
+      | "cancel_requested"
+      | "cancelling"
+      | "cancelled"
+      | "completing"
+      | "completed"
+      | "failed"
+      | "timed_out"
+  }
+}
+
+export type EventTeamMessage = {
+  type: "team.message"
+  properties: {
+    teamName: string
+    from: string
+    to: string
+    text: string
+  }
+}
+
+export type EventTeamBroadcast = {
+  type: "team.broadcast"
+  properties: {
+    teamName: string
+    from: string
+    text: string
+  }
+}
+
+export type EventTeamTaskUpdated = {
+  type: "team.task.updated"
+  properties: {
+    teamName: string
+    tasks: Array<{
+      id: string
+      content: string
+      status: "pending" | "in_progress" | "completed" | "cancelled" | "blocked"
+      priority: "high" | "medium" | "low"
+      assignee?: string
+      depends_on?: Array<string>
+    }>
+  }
+}
+
+export type EventTeamTaskClaimed = {
+  type: "team.task.claimed"
+  properties: {
+    teamName: string
+    taskId: string
+    memberName: string
+  }
+}
+
+export type EventTeamShutdownRequest = {
+  type: "team.shutdown.request"
+  properties: {
+    teamName: string
+    memberName: string
+  }
+}
+
+export type EventTeamPlanApproval = {
+  type: "team.plan.approval"
+  properties: {
+    teamName: string
+    memberName: string
+    approved: boolean
+    feedback?: string
+  }
+}
+
+export type EventTeamMessageRead = {
+  type: "team.message.read"
+  properties: {
+    teamName: string
+    agentName: string
+    count: number
+  }
+}
+
+export type EventTeamCleaned = {
+  type: "team.cleaned"
+  properties: {
+    teamName: string
+    leadSessionID: string
+    delegate: boolean
+    delegate_permissions?: Array<{
+      permission: string
+      pattern: string
+      action: "allow" | "deny" | "ask"
+    }>
+  }
+}
+
 export type Pty = {
   id: string
   title: string
@@ -512,6 +688,54 @@ export type EventWorktreeFailed = {
   type: "worktree.failed"
   properties: {
     message: string
+  }
+}
+
+export type EventUsageUpdated = {
+  type: "usage.updated"
+  properties: {
+    provider: string
+    snapshot: {
+      primary: {
+        usedPercent: number
+        windowMinutes: number | null
+        resetsAt: number | null
+      } | null
+      secondary: {
+        usedPercent: number
+        windowMinutes: number | null
+        resetsAt: number | null
+      } | null
+      tertiary: {
+        usedPercent: number
+        windowMinutes: number | null
+        resetsAt: number | null
+      } | null
+      credits: {
+        hasCredits: boolean
+        unlimited: boolean
+        balance: string | null
+        total?: number | null
+        used?: number | null
+        remaining?: number | null
+      } | null
+      planType:
+        | "guest"
+        | "free"
+        | "go"
+        | "plus"
+        | "pro"
+        | "free_workspace"
+        | "team"
+        | "business"
+        | "education"
+        | "quorum"
+        | "k12"
+        | "enterprise"
+        | "edu"
+        | null
+      updatedAt: number
+    }
   }
 }
 
@@ -753,6 +977,7 @@ export type ToolStateCompleted = {
     compacted?: number
   }
   attachments?: Array<FilePart>
+  summary?: string
 }
 
 export type ToolStateError = {
@@ -996,12 +1221,25 @@ export type Event =
   | EventVcsBranchUpdated
   | EventWorkspaceReady
   | EventWorkspaceFailed
+  | EventTeamCreated
+  | EventTeamMemberSpawned
+  | EventTeamMemberStatus
+  | EventTeamMemberExecution
+  | EventTeamMessage
+  | EventTeamBroadcast
+  | EventTeamTaskUpdated
+  | EventTeamTaskClaimed
+  | EventTeamShutdownRequest
+  | EventTeamPlanApproval
+  | EventTeamMessageRead
+  | EventTeamCleaned
   | EventPtyCreated
   | EventPtyUpdated
   | EventPtyExited
   | EventPtyDeleted
   | EventWorktreeReady
   | EventWorktreeFailed
+  | EventUsageUpdated
   | EventMessageUpdated
   | EventMessageRemoved
   | EventMessagePartUpdated
@@ -1279,9 +1517,9 @@ export type ProviderConfig = {
         }
       }
       limit?: {
-        context: number
+        context?: number
         input?: number
-        output: number
+        output?: number
       }
       modalities?: {
         input: Array<"text" | "audio" | "image" | "video" | "pdf">
@@ -1319,6 +1557,10 @@ export type ProviderConfig = {
     apiKey?: string
     baseURL?: string
     /**
+     * OAuth app to use for GitHub Copilot auth. Defaults to 'github'.
+     */
+    client?: "github" | "anomaly"
+    /**
      * GitHub Enterprise URL for copilot authentication
      */
     enterpriseUrl?: string
@@ -1334,7 +1576,7 @@ export type ProviderConfig = {
      * Timeout in milliseconds between streamed SSE chunks for this provider. If no chunk arrives within this window, the request is aborted.
      */
     chunkTimeout?: number
-    [key: string]: unknown | string | boolean | number | false | number | undefined
+    [key: string]: unknown | string | "github" | "anomaly" | boolean | number | false | number | undefined
   }
 }
 
@@ -1585,6 +1827,23 @@ export type Config = {
      * Token buffer for compaction. Leaves enough window to avoid overflow during compaction.
      */
     reserved?: number
+    /**
+     * Absolute token threshold that triggers compaction
+     */
+    token_threshold?: number
+    /**
+     * Fraction of model context window that triggers compaction (0-1+)
+     */
+    context_threshold?: number
+    /**
+     * Per-model compaction thresholds keyed by providerID/modelID
+     */
+    models?: {
+      [key: string]: {
+        token_threshold?: number
+        context_threshold?: number
+      }
+    }
   }
   experimental?: {
     disable_paste_summary?: boolean
@@ -1623,6 +1882,7 @@ export type OAuth = {
   type: "oauth"
   refresh: string
   access: string
+  usage?: string
   expires: number
   accountId?: string
   enterpriseUrl?: string
@@ -3412,6 +3672,43 @@ export type SessionSummarizeResponses = {
 
 export type SessionSummarizeResponse = SessionSummarizeResponses[keyof SessionSummarizeResponses]
 
+export type SessionResumeData = {
+  body?: never
+  path: {
+    /**
+     * Session ID
+     */
+    sessionID: string
+  }
+  query?: {
+    directory?: string
+    workspace?: string
+  }
+  url: "/session/{sessionID}/resume"
+}
+
+export type SessionResumeErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+  /**
+   * Not found
+   */
+  404: NotFoundError
+}
+
+export type SessionResumeError = SessionResumeErrors[keyof SessionResumeErrors]
+
+export type SessionResumeResponses = {
+  /**
+   * Resumed session
+   */
+  200: boolean
+}
+
+export type SessionResumeResponse = SessionResumeResponses[keyof SessionResumeResponses]
+
 export type SessionMessagesData = {
   body?: never
   path: {
@@ -3657,6 +3954,46 @@ export type PartUpdateResponses = {
 }
 
 export type PartUpdateResponse = PartUpdateResponses[keyof PartUpdateResponses]
+
+export type SessionTeamMessageData = {
+  body?: {
+    to: string
+    text: string
+    agent?: string
+  }
+  path: {
+    sessionID: string
+  }
+  query?: {
+    directory?: string
+    workspace?: string
+  }
+  url: "/session/{sessionID}/team-message"
+}
+
+export type SessionTeamMessageErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+  /**
+   * Not found
+   */
+  404: NotFoundError
+}
+
+export type SessionTeamMessageError = SessionTeamMessageErrors[keyof SessionTeamMessageErrors]
+
+export type SessionTeamMessageResponses = {
+  /**
+   * Team message sent
+   */
+  200: {
+    ok: boolean
+  }
+}
+
+export type SessionTeamMessageResponse = SessionTeamMessageResponses[keyof SessionTeamMessageResponses]
 
 export type SessionPromptAsyncData = {
   body?: {
@@ -4252,6 +4589,83 @@ export type ProviderOauthCallbackResponses = {
 
 export type ProviderOauthCallbackResponse = ProviderOauthCallbackResponses[keyof ProviderOauthCallbackResponses]
 
+export type UsageGetData = {
+  body?: never
+  path?: never
+  query?: {
+    directory?: string
+    workspace?: string
+    provider?: string
+    refresh?: boolean
+    command?: string
+    modelProviderID?: string
+    showUsageProviderScope?: "current" | "all"
+    showUsageValueMode?: "used" | "remaining"
+  }
+  url: "/usage"
+}
+
+export type UsageGetResponses = {
+  /**
+   * Usage response
+   */
+  200: {
+    entries: Array<{
+      provider: string
+      displayName: string
+      snapshot: {
+        primary: {
+          usedPercent: number
+          windowMinutes: number | null
+          resetsAt: number | null
+        } | null
+        secondary: {
+          usedPercent: number
+          windowMinutes: number | null
+          resetsAt: number | null
+        } | null
+        tertiary: {
+          usedPercent: number
+          windowMinutes: number | null
+          resetsAt: number | null
+        } | null
+        credits: {
+          hasCredits: boolean
+          unlimited: boolean
+          balance: string | null
+          total?: number | null
+          used?: number | null
+          remaining?: number | null
+        } | null
+        planType:
+          | "guest"
+          | "free"
+          | "go"
+          | "plus"
+          | "pro"
+          | "free_workspace"
+          | "team"
+          | "business"
+          | "education"
+          | "quorum"
+          | "k12"
+          | "enterprise"
+          | "edu"
+          | null
+        updatedAt: number
+      }
+    }>
+    error?: string
+    errors?: Array<{
+      provider: string
+      message: string
+    }>
+    mode?: "used" | "remaining"
+  }
+}
+
+export type UsageGetResponse = UsageGetResponses[keyof UsageGetResponses]
+
 export type FindTextData = {
   body?: never
   path?: never
@@ -4648,6 +5062,226 @@ export type McpDisconnectResponses = {
 }
 
 export type McpDisconnectResponse = McpDisconnectResponses[keyof McpDisconnectResponses]
+
+export type TeamListData = {
+  body?: never
+  path?: never
+  query?: {
+    directory?: string
+    workspace?: string
+  }
+  url: "/team"
+}
+
+export type TeamListResponses = {
+  /**
+   * List of teams
+   */
+  200: Array<{
+    name: string
+    leadSessionID: string
+    members: Array<{
+      name: string
+      sessionID: string
+      agent: string
+      status: "ready" | "busy" | "shutdown_requested" | "shutdown" | "error"
+      execution_status?:
+        | "idle"
+        | "starting"
+        | "running"
+        | "cancel_requested"
+        | "cancelling"
+        | "cancelled"
+        | "completing"
+        | "completed"
+        | "failed"
+        | "timed_out"
+      prompt?: string
+      model?: string
+      planApproval?: "none" | "pending" | "approved" | "rejected"
+    }>
+    created: number
+    delegate?: boolean
+    delegate_permissions?: Array<{
+      permission: string
+      pattern: string
+      action: "allow" | "deny" | "ask"
+    }>
+  }>
+}
+
+export type TeamListResponse = TeamListResponses[keyof TeamListResponses]
+
+export type TeamGetData = {
+  body?: never
+  path: {
+    name: string
+  }
+  query?: {
+    directory?: string
+    workspace?: string
+  }
+  url: "/team/{name}"
+}
+
+export type TeamGetErrors = {
+  /**
+   * Not found
+   */
+  404: NotFoundError
+}
+
+export type TeamGetError = TeamGetErrors[keyof TeamGetErrors]
+
+export type TeamGetResponses = {
+  /**
+   * Team info
+   */
+  200: {
+    name: string
+    leadSessionID: string
+    members: Array<{
+      name: string
+      sessionID: string
+      agent: string
+      status: "ready" | "busy" | "shutdown_requested" | "shutdown" | "error"
+      execution_status?:
+        | "idle"
+        | "starting"
+        | "running"
+        | "cancel_requested"
+        | "cancelling"
+        | "cancelled"
+        | "completing"
+        | "completed"
+        | "failed"
+        | "timed_out"
+      prompt?: string
+      model?: string
+      planApproval?: "none" | "pending" | "approved" | "rejected"
+    }>
+    created: number
+    delegate?: boolean
+    delegate_permissions?: Array<{
+      permission: string
+      pattern: string
+      action: "allow" | "deny" | "ask"
+    }>
+  }
+}
+
+export type TeamGetResponse = TeamGetResponses[keyof TeamGetResponses]
+
+export type TeamTasksListData = {
+  body?: never
+  path: {
+    name: string
+  }
+  query?: {
+    directory?: string
+    workspace?: string
+  }
+  url: "/team/{name}/tasks"
+}
+
+export type TeamTasksListResponses = {
+  /**
+   * List of tasks
+   */
+  200: Array<{
+    id: string
+    content: string
+    status: "pending" | "in_progress" | "completed" | "cancelled" | "blocked"
+    priority: "high" | "medium" | "low"
+    assignee?: string
+    depends_on?: Array<string>
+  }>
+}
+
+export type TeamTasksListResponse = TeamTasksListResponses[keyof TeamTasksListResponses]
+
+export type TeamBySessionData = {
+  body?: never
+  path: {
+    sessionID: string
+  }
+  query?: {
+    directory?: string
+    workspace?: string
+  }
+  url: "/team/by-session/{sessionID}"
+}
+
+export type TeamBySessionResponses = {
+  /**
+   * Team info with role and tasks
+   */
+  200: unknown
+}
+
+export type TeamDelegateData = {
+  body?: {
+    enabled: boolean
+  }
+  path: {
+    name: string
+  }
+  query?: {
+    directory?: string
+    workspace?: string
+  }
+  url: "/team/{name}/delegate"
+}
+
+export type TeamDelegateErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+  /**
+   * Not found
+   */
+  404: NotFoundError
+}
+
+export type TeamDelegateError = TeamDelegateErrors[keyof TeamDelegateErrors]
+
+export type TeamDelegateResponses = {
+  /**
+   * Delegate mode updated
+   */
+  200: unknown
+}
+
+export type TeamCancelData = {
+  body?: {
+    member?: string
+  }
+  path: {
+    name: string
+  }
+  query?: {
+    directory?: string
+    workspace?: string
+  }
+  url: "/team/{name}/cancel"
+}
+
+export type TeamCancelErrors = {
+  /**
+   * Not found
+   */
+  404: NotFoundError
+}
+
+export type TeamCancelError = TeamCancelErrors[keyof TeamCancelErrors]
+
+export type TeamCancelResponses = {
+  /**
+   * Number of cancelled members
+   */
+  200: unknown
+}
 
 export type TuiAppendPromptData = {
   body?: {
