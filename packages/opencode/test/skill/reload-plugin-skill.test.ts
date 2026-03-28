@@ -5,6 +5,7 @@ import { pathToFileURL } from "url"
 import { Instance } from "../../src/project/instance"
 import { Plugin } from "../../src/plugin"
 import { Skill } from "../../src/skill"
+import { InstanceBootstrap } from "../../src/project/bootstrap"
 import { tmpdir } from "../fixture/fixture"
 
 const disableDefault = process.env.OPENCODE_DISABLE_DEFAULT_PLUGINS
@@ -65,7 +66,12 @@ description: Survives reload when injected by plugin config.
     fn: async () => {
       expect((await Skill.all()).some((item) => item.name === "reload-skill")).toBe(true)
       expect((await Plugin.list()).length).toBeGreaterThan(0)
-      await Instance.reload({ directory: tmp.path })
+      await Instance.reload({
+        directory: tmp.path,
+        project: Instance.project,
+        worktree: Instance.worktree,
+        init: InstanceBootstrap,
+      })
     },
   })
 
