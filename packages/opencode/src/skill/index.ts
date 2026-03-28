@@ -242,11 +242,15 @@ export namespace Skill {
       }),
     )
 
-  export const defaultLayer: Layer.Layer<Service> = layer.pipe(
-    Layer.provide(Plugin.defaultLayer),
-    Layer.provide(Discovery.defaultLayer),
-    Layer.provide(Config.defaultLayer),
-    Layer.provide(Bus.layer),
+  export const defaultLayer: Layer.Layer<Service> = Layer.unwrap(
+    Effect.sync(() =>
+      layer.pipe(
+        Layer.provide(Plugin.defaultLayer),
+        Layer.provide(Discovery.defaultLayer),
+        Layer.provide(Config.defaultLayer),
+        Layer.provide(Bus.layer),
+      ),
+    ),
   )
 
   export function fmt(list: Info[], opts: { verbose: boolean }) {
