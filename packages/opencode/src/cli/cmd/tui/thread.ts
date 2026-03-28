@@ -150,6 +150,7 @@ export const TuiThreadCommand = cmd({
         env,
       })
       worker.onerror = (e) => {
+        e.preventDefault()
         Log.Default.error("worker error", {
           message: e.message,
           error: e.error instanceof Error ? e.error.stack : String(e.error),
@@ -161,7 +162,9 @@ export const TuiThreadCommand = cmd({
 
       const client = Rpc.client<typeof rpc>(worker)
       const error = (e: unknown) => {
-        Log.Default.error(e)
+        Log.Default.error("tui runtime error", {
+          error: errorMessage(e),
+        })
       }
       const reload = () => {
         client.call("reload", undefined).catch((err) => {

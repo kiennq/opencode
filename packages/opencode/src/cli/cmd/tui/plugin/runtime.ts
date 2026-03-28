@@ -77,14 +77,12 @@ const KV_KEY = "plugin_enabled"
 function fail(message: string, data: Record<string, unknown>) {
   if (!("error" in data)) {
     log.error(message, data)
-    console.error(`[tui.plugin] ${message}`, data)
     return
   }
 
   const text = `${message}: ${errorMessage(data.error)}`
   const next = { ...data, error: errorData(data.error) }
   log.error(text, next)
-  console.error(`[tui.plugin] ${text}`, next)
 }
 
 type CleanupResult = { type: "ok" } | { type: "error"; error: unknown } | { type: "timeout" }

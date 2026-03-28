@@ -8,6 +8,7 @@ import { Keybind } from "@/util/keybind"
 import { TextAttributes } from "@opentui/core"
 import { useSDK } from "@tui/context/sdk"
 import { useToast } from "../ui/toast"
+import { Log } from "@/util/log"
 
 function Status(props: { enabled: boolean; loading: boolean }) {
   const { theme } = useTheme()
@@ -70,10 +71,12 @@ export function DialogMcp() {
           if (result.data) {
             sync.set("mcp", result.data)
           } else {
-            console.error("Failed to refresh MCP status: no data returned")
+            Log.Default.error("mcp toggle returned no data")
           }
         } catch (error) {
-          console.error("Failed to toggle MCP:", error)
+          Log.Default.error("mcp toggle failed", {
+            error: error instanceof Error ? (error.stack ?? error.message) : String(error),
+          })
         } finally {
           unsub()
           setLoading(null)
