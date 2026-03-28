@@ -28,6 +28,7 @@ import { SDKProvider, useSDK } from "@tui/context/sdk"
 import { StartupLoading } from "@tui/component/startup-loading"
 import { SyncProvider, useSync } from "@tui/context/sync"
 import { LocalProvider, useLocal } from "@tui/context/local"
+import { Log } from "@/util/log"
 import { DialogModel, useConnected } from "@tui/component/dialog-model"
 import { DialogMcp } from "@tui/component/dialog-mcp"
 import { DialogStatus } from "@tui/component/dialog-status"
@@ -136,7 +137,9 @@ function rendererConfig(_config: TuiConfig.Info): CliRendererConfig {
       keyBindings: [{ name: "y", ctrl: true, action: "copy-selection" }],
       onCopySelection: (text) => {
         Clipboard.copy(text).catch((error) => {
-          console.error(`Failed to copy console selection to clipboard: ${error}`)
+          Log.Default.error("copy console selection failed", {
+            error: error instanceof Error ? (error.stack ?? error.message) : String(error),
+          })
         })
       },
     },
@@ -292,7 +295,9 @@ function App(props: { onSnapshot?: () => Promise<string[]> }) {
   const [ready, setReady] = createSignal(false)
   TuiPluginRuntime.init(api)
     .catch((error) => {
-      console.error("Failed to load TUI plugins", error)
+      Log.Default.error("failed to load tui plugins", {
+        error: error instanceof Error ? (error.stack ?? error.message) : String(error),
+      })
     })
     .finally(() => {
       setReady(true)

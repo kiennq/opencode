@@ -49,6 +49,7 @@ import type { QuestionTool } from "@/tool/question"
 import type { SkillTool } from "@/tool/skill"
 import { useKeyboard, useRenderer, useTerminalDimensions, type JSX } from "@opentui/solid"
 import { useSDK } from "@tui/context/sdk"
+import { Log } from "@/util/log"
 import { useCommandDialog } from "@tui/component/dialog-command"
 import type { DialogContext } from "@tui/ui/dialog"
 import { useKeybind } from "@tui/context/keybind"
@@ -224,7 +225,9 @@ export function Session() {
         if (scroll) scroll.scrollBy(100_000)
       })
       .catch((e) => {
-        console.error(e)
+        Log.Default.error("session sync failed", {
+          error: e instanceof Error ? (e.stack ?? e.message) : String(e),
+        })
         toast.show({
           message: `Session not found: ${route.sessionID}`,
           variant: "error",
