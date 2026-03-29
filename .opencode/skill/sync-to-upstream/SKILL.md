@@ -46,6 +46,7 @@ Sync upstream carefully, keep intentional fork behavior, and avoid carrying forw
 
 - Configured `copilot-auth` plugins must remain allowed after upstream syncs.
 - Do not reintroduce logic that filters, skips, or blocks user-configured `copilot-auth` plugins during plugin loading.
+- Do not reintroduce the removed `experimental.openTelemetry` config or AI SDK `experimental_telemetry` wiring.
 
 ## Verification
 

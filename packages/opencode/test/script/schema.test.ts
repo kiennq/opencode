@@ -22,6 +22,12 @@ test(
     expect(json.allowTrailingCommas).toBe(true)
     expect(json.properties?.username).toBeDefined()
     expect(json.properties?.provider).toBeDefined()
+    const experimental = json.properties?.experimental as
+      | {
+          properties?: Record<string, unknown>
+        }
+      | undefined
+    expect(experimental?.properties?.openTelemetry).toBeUndefined()
     const provider = json.properties?.provider as
       | {
           additionalProperties?: {

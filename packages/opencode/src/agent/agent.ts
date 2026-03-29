@@ -342,12 +342,6 @@ export namespace Agent {
           const existing = yield* InstanceState.useEffect(state, (s) => s.list())
 
           const params = {
-            experimental_telemetry: {
-              isEnabled: cfg.experimental?.openTelemetry,
-              metadata: {
-                userId: cfg.username ?? "unknown",
-              },
-            },
             temperature: 0.3,
             messages: [
               ...system.map(

@@ -130,6 +130,27 @@ test("loads github copilot client option from config", async () => {
   })
 })
 
+test("does not expose experimental openTelemetry config", async () => {
+  await using tmp = await tmpdir({
+    init: async (dir) => {
+      await writeConfig(dir, {
+        $schema: "https://opencode.ai/config.json",
+        experimental: {
+          openTelemetry: true,
+        },
+      })
+    },
+  })
+
+  await Instance.provide({
+    directory: tmp.path,
+    fn: async () => {
+      const config = await Config.get()
+      expect((config.experimental as Record<string, unknown> | undefined)?.openTelemetry).toBeUndefined()
+    },
+  })
+})
+
 test("loads project config from Git Bash and MSYS2 paths on Windows", async () => {
   // Git Bash and MSYS2 both use /<drive>/... paths on Windows.
   await check((dir) => {

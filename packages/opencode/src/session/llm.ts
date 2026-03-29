@@ -333,13 +333,6 @@ export namespace LLM {
           },
         ],
       }),
-      experimental_telemetry: {
-        isEnabled: cfg.experimental?.openTelemetry,
-        metadata: {
-          userId: cfg.username ?? "unknown",
-          sessionId: input.sessionID,
-        },
-      },
     })
   }
 
