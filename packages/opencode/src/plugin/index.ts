@@ -14,6 +14,7 @@ import { Effect, Layer, ServiceMap, Stream } from "effect"
 import { InstanceState } from "@/effect/instance-state"
 import { makeRuntime } from "@/effect/run-service"
 import { errorMessage } from "@/util/error"
+import { Installation } from "@/installation"
 import { PluginLoader } from "./loader"
 import { parsePluginSpecifier, readPluginId, readV1Plugin, resolvePluginId } from "./shared"
 
@@ -96,8 +97,6 @@ export namespace Plugin {
       hooks.push(await server(input, load.row.options))
     }
   }
-  // Old npm package names for plugins that are now built-in — skip if users still have them in config
-  const DEPRECATED_PLUGIN_PACKAGES = ["opencode-openai-codex-auth"]
 
   export const layer = Layer.effect(
     Service,
